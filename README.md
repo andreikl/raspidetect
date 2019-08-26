@@ -1,6 +1,7 @@
-c application to work with OV5647 camera
+C application to detect and track objects on Raspberry pi.
+It uses userland, tensorflow and opencv libraries as dependencies
 
 to build:
-mkdir build
-cd ./build
-cmake ./..
+```bash
+make -j 4
+```
