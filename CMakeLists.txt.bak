@@ -1,0 +1,88 @@
+# CMake entry point
+cmake_minimum_required (VERSION 2.8)
+
+project (OV5647)
+
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(OV5647 REQUIRED mmal cairo)
+
+SET(PROJECT_VER_MAJOR 1)
+SET(PROJECT_VER_MINOR 0)
+SET(PROJECT_VER_PATCH 0)
+SET(PROJECT_VER "${PROJECT_VER_MAJOR}.${PROJECT_VER_MINOR}.${PROJECT_VER_PATCH}")
+
+set(CMAKE_C_FLAGS "-O0 -std=c11 -Wall -Wno-implicit-function-declaration -pthread")
+#set(CMAKE_C_FLAGS "-O0 -std=c11 -Wall -Wno-implicit-function-declaration -pthread -lstdc++")
+#set(CMAKE_CXX_FLAGS "-O0 -std=c11 -Wall -Wno-implicit-function-declaration -pthread")
+set(CMAKE_EXE_LINKER_FLAGS "-lm")
+
+#set(TF_LIBRARY_DIR "/home/pi/tf/tensorflow/tensorflow/lite/tools/make/gen/rpi_armv6/lib")
+#set(TF_LIBRARIES "-ltensorflow-lite -latomic")
+#set(TF_INCLUDE_DIRS "/home/pi/tf/tensorflow")
+
+if(NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE Release)
+endif()
+
+add_definitions(-D_POSIX_C_SOURCE=199309L)
+#add_compile_definitions()
+
+message( "CMAKE_MODULE_PATH: ${CMAKE_MODULE_PATH}" )
+message( "CMAKE_PREFIX_PATH: ${CMAKE_PREFIX_PATH}" )
+message( "CMAKE_SOURCE_DIR: ${CMAKE_SOURCE_DIR}" )
+message( "CMAKE_BINARY_DIR: ${CMAKE_BINARY_DIR}" )
+message( "OV5647_LIBRARIES: ${OV5647_LIBRARIES}" )
+message( "OV5647_LIBRARY_DIRS: ${OV5647_LIBRARY_DIRS}" )
+message( "OV5647_INCLUDE_DIRS: ${OV5647_INCLUDE_DIRS}" )
+message( "OV5647_CFLAGS_OTHER: ${OV5647_CFLAGS_OTHER}" )
+message( "CMAKE_C_FLAGS: ${CMAKE_C_FLAGS}" )
+#message( "TF_LIBRARY_DIR: ${TF_LIBRARY_DIR}")
+#message( "TF_LIBRARIES: ${TF_LIBRARIES}")
+#message( "TF_INCLUDE_DIRS: ${TF_INCLUDE_DIRS}")
+
+if( CMAKE_BINARY_DIR STREQUAL CMAKE_SOURCE_DIR )
+    message( FATAL_ERROR "Please select another Build Directory." )
+endif()
+if( CMAKE_SOURCE_DIR MATCHES " " )
+    message( "Your Source Directory contains spaces." )
+endif()
+if( CMAKE_BINARY_DIR MATCHES " " )
+    message( "Your Build Directory contains spaces." )
+endif()
+
+# external klib
+set(klib "external/klib")
+
+include_directories(
+    src
+    ${klib}
+)
+
+link_directories(
+    ${OV5647_LIBRARY_DIRS}
+#    ${TF_LIBRARY_DIR}
+)
+
+add_executable(OV5647
+    src/utils.c
+    src/overlay.c
+#    src/tensorflow.c
+    src/ov5647_helpers.c
+    src/ov5647.c
+    src/main.c
+)
+
+target_link_libraries(OV5647
+    ${OV5647_LIBRARIES}
+#    ${TF_LIBRARIES}
+    ${ALL_LIBS}
+)
+
+target_include_directories(OV5647 PUBLIC
+    ${OV5647_INCLUDE_DIRS}
+#    ${TF_INCLUDE_DIRS}
+)
+
+target_compile_options(OV5647 PUBLIC
+    ${OV5647_CFLAGS_OTHER}
+)

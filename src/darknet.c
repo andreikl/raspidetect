@@ -1,0 +1,59 @@
+#include "main.h"
+
+int darknet_process(APP_STATE *state) {
+
+    fprintf(stderr, "DEBUG: darknet start\n");
+
+    image im = make_image(state->worker_width, state->worker_height, 3);
+
+#ifdef ENV32BIT
+    int size = state->worker_width * state->worker_height >> 2; // = size / 4
+    int32_t *buffer = (int32_t *)state->worker_buffer;
+    int32_t x = 0;
+    int i = 0, j = 0;
+
+    while (i < size) {
+        x = buffer[i++];
+        im.data[j++] = (x & 0x000000FF);
+        im.data[j++] = ((x & 0x0000FF00) >> 8);
+        im.data[j++] = ((x & 0x00FF0000) >> 16);
+        im.data[j++] = ((x & 0xFF000000) >> 24);
+    }
+#elif
+    fprintf(stderr, "ERROR: 64bit darknet conversion isn't implemented\n");
+ #endif
+
+    fprintf(stderr, "DEBUG: darknet about to detect\n");
+
+    network_predict(state->dn.dn_net, im.data);
+    fprintf(stderr, "DEBUG: darknet detected\n");
+
+    detection *dets = get_network_boxes(state->dn.dn_net, 1, 1, THRESHOLD, 0, 0, 0, &state->worker_objects);
+    fprintf(stderr, "DEBUG: darknet about to freed\n");
+
+    free_detections(dets, state->worker_objects);
+    free_image(im);
+    return 0;
+}
+
+int darknet_create(APP_STATE *state) {
+    state->dn.dn_net = load_network(state->config_path, state->model_path, 0);
+    if (!state->dn.dn_net) {
+        fprintf(stderr, "ERROR: Failed to load Darknet network (config_path: %s, model_path: %s)\n", state->config_path, state->model_path);
+        return -1;
+    }
+    if (state->verbose) {
+        fprintf(stderr, "INFO: net width: %d, height: %d\n",
+        state->dn.dn_net->w,
+        state->dn.dn_net->h);
+    }
+    set_batch_network(state->dn.dn_net, 1);
+
+    return 0;
+}
+
+void darknet_destroy(APP_STATE *state) {
+    if (state->dn.dn_net) {
+        free_network(state->dn.dn_net);
+    }
+}
