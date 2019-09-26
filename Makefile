@@ -1,6 +1,6 @@
 MMAL = 1
-CAIRO = 1
-OPENCV = 1
+OPENCV = 0
+OPENVG = 1
 TENSORFLOW = 1
 DARKNET = 0
 
@@ -20,27 +20,27 @@ SRCDIR = ./src/
 CC = cc
 LDFLAGS = -lm
 COMMON = -Iexternal/klib -Isrc/
-CFLAGS = -pthread -O3 -Wall -Wno-implicit-function-declaration -Wno-unused-function -DNDEBUG -D_POSIX_C_SOURCE=199309L
-OBJ = utils.o main.o
-
-ifeq ($(CAIRO), 1) 
-    COMMON += -DCAIRO
-    COMMON += `pkg-config --cflags cairo` 
-    LDFLAGS += `pkg-config --libs cairo`
-    OBJ += overlay.o 
-endif
+#CFLAGS = -pthread -O3 -fPIC -Wall -Wno-implicit-function-declaration -Wno-unused-function -DNDEBUG -D_POSIX_C_SOURCE=199309L
+CFLAGS = -pthread -O3 -fPIC -Wall -Wno-implicit-function-declaration -Wno-unused-function -DNDEBUG -std=c11
+OBJ = utils.o control.o main.o
 
 ifeq ($(MMAL), 1) 
     COMMON += -DMMAL
-    COMMON += `pkg-config --cflags mmal` 
+    COMMON += `pkg-config --cflags mmal`
     LDFLAGS += `pkg-config --libs mmal`
-    OBJ += ov5647_helpers.o ov5647.o
+    OBJ += ov5647.o
+endif
+
+ifeq ($(OPENVG), 1) 
+    COMMON += -DOPENVG `pkg-config --cflags freetype2`
+    LDFLAGS +=  `pkg-config --libs freetype2` -lbrcmEGL -lbrcmGLESv2
+    OBJ += openvg.o 
 endif
 
 ifeq ($(OPENCV), 1) 
     COMMON += -DOPENCV
     COMMON += `pkg-config --cflags opencv4` 
-    LDFLAGS += -lopencv_imgproc -lopencv_core -latomic -lstdc++
+    LDFLAGS += -lopencv_imgproc -lopencv_highgui -lopencv_core -latomic -lstdc++
 endif
 
 ifeq ($(TENSORFLOW), 1) 

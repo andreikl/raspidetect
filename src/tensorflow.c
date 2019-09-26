@@ -10,7 +10,7 @@
 #include "main.h"
 
 int tensorflow_process(APP_STATE *state) {
-    TfLiteStatus status = TfLiteTensorCopyFromBuffer(state->tf.tf_input_image, state->worker_buffer, TfLiteTensorByteSize(state->tf.tf_input_image));
+    TfLiteStatus status = TfLiteTensorCopyFromBuffer(state->tf.tf_input_image, state->worker_buffer_rgb, TfLiteTensorByteSize(state->tf.tf_input_image));
     if (status != kTfLiteOk) {
         fprintf(stderr, "ERROR: failed to fill input tensor, status: %x\n", status);
         return -1;
@@ -23,7 +23,7 @@ int tensorflow_process(APP_STATE *state) {
     }
 
     if (state->verbose) {
-        fprintf(stderr, "INFO: the image has been classified\n");
+        //fprintf(stderr, "INFO: the image has been classified\n");
 
         /*for (int i = 0; i < TfLiteInterpreterGetOutputTensorCount(state->tf_interpreter); i++) {
             const TfLiteTensor *tensor = TfLiteInterpreterGetOutputTensor(state->tf_interpreter, i);
@@ -76,13 +76,13 @@ int tensorflow_process(APP_STATE *state) {
         return -1;
     }
 
-    if (state->verbose) {
-        fprintf(stderr, "INFO: scores: ");
-        for (int i = 0; i < state->worker_total_objects; i++) {
-            fprintf(stderr, "%.2f ", state->worker_scores[i]);
-        }
-        fprintf(stderr, "\n");
-    }
+    // if (state->verbose) {
+    //     fprintf(stderr, "INFO: scores: ");
+    //     for (int i = 0; i < state->worker_total_objects; i++) {
+    //         fprintf(stderr, "%.2f ", state->worker_scores[i]);
+    //     }
+    //     fprintf(stderr, "\n");
+    // }
 
     pthread_mutex_unlock(&state->buffer_mutex);
 
@@ -155,8 +155,8 @@ int tensorflow_create(APP_STATE *state) {
     }
 
     if (state->worker_pixel_bytes != 3
-        || state->worker_width > state->width
-        || state->worker_height > state->height
+        || state->worker_width > state->video_width
+        || state->worker_height > state->video_height
         || state->worker_width * state->worker_height * 3 != TfLiteTensorByteSize(state->tf.tf_input_image)) {
         fprintf(stderr, "ERROR: Inavlid input tensor format\n");
         return -1;

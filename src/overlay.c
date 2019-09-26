@@ -50,10 +50,10 @@ void overlay_print(APP_STATE *state, const char *text) {
         if(state->worker_scores[i] > THRESHOLD) {
             n++;
             float *box = &state->worker_boxes[i * 4];
-            int x1 = (int)(box[0] * state->width);
-            int y1 = (int)(box[0] * state->height);
-            int x2 = (int)(box[2] * state->width);
-            int y2 = (int)(box[3] * state->height);
+            int x1 = (int)(box[0] * state->video_width);
+            int y1 = (int)(box[0] * state->video_height);
+            int x2 = (int)(box[2] * state->video_width);
+            int y2 = (int)(box[3] * state->video_height);
             cairo_move_to(state->cairo_context, x1, y1);
             cairo_line_to(state->cairo_context, x2, y1);
             cairo_line_to(state->cairo_context, x2, y2);
@@ -78,3 +78,43 @@ void overlay_destroy(APP_STATE *state) {
         free(state->overlay_buffer);
     }
 }
+
+// void overlay_bitblt() {
+//     int32_t* source_data = (int32_t*)buffer->data;
+//     int32_t* dest_data = (int32_t*)output_buffer->data;
+//     int32_t* overlay_data = (int32_t*)state->overlay_buffer;
+//     int size = state->video_width * state->video_height;
+//     uint32_t data_old, data_new, data_overlay, result = 0;
+//     data_old = data_new = source_data[0];
+//     for (int i = 0, xy_index = 0, res_index = 0, bits = 0; i < size; i++, bits += 24) {
+//         data_old = data_new;
+//         data_new = source_data[xy_index];
+//         data_overlay = overlay_data[i];
+//         int move = bits & 0B11111; //x % 32
+//         switch(move) {
+//             case 0: //0-24
+//                 xy_index++;
+//                 result = (data_new & 0x00FFFFFF) | (data_overlay & 0x00FFFFFF); //rgb
+//                 break;
+
+//             case 24: //24-48
+//                 xy_index++;
+//                 result = (data_old & 0xFF000000) | ((data_overlay & 0x000000FF) << 24) | result; //r
+//                 dest_data[res_index++] = result;
+//                 result = (data_new & 0x0000FFFF) | ((data_overlay & 0x00FFFF00) >> 8); //gb
+//                 break;
+
+//             case 16: //48-72
+//                 xy_index++;
+//                 result = (data_old & 0xFFFF0000) | ((data_overlay & 0x0000FFFF) << 16) | result; //rg
+//                 dest_data[res_index++] = result;
+//                 result = (data_new & 0x000000FF) | ((data_overlay & 0x00FF0000) >> 16); //b
+//                 break;
+
+//             case 8: //72-96
+//                 result = (data_old & 0xFFFFFF00) | ((data_overlay & 0x00FFFFFF) << 8) | result; //rgb
+//                 dest_data[res_index++] = result;
+//                 break;
+//         }
+//     }
+// }
