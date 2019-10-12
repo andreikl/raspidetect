@@ -1,6 +1,6 @@
 #include "main.h"
 
-int darknet_process(APP_STATE *state) {
+int darknet_process(app_state_t *state) {
 
     fprintf(stderr, "DEBUG: darknet start\n");
 
@@ -36,7 +36,7 @@ int darknet_process(APP_STATE *state) {
     return 0;
 }
 
-int darknet_create(APP_STATE *state) {
+int darknet_create(app_state_t *state) {
     state->dn.dn_net = load_network(state->config_path, state->model_path, 0);
     if (!state->dn.dn_net) {
         fprintf(stderr, "ERROR: Failed to load Darknet network (config_path: %s, model_path: %s)\n", state->config_path, state->model_path);
@@ -52,7 +52,7 @@ int darknet_create(APP_STATE *state) {
     return 0;
 }
 
-void darknet_destroy(APP_STATE *state) {
+void darknet_destroy(app_state_t *state) {
     if (state->dn.dn_net) {
         free_network(state->dn.dn_net);
     }

@@ -33,23 +33,22 @@
 #define SET_B5652(rgb565) ( ((rgb565) & 0b11111) << 16 )
 
 
-void parse_args(int argc, char** argv);
-void print_help(void);
+void utils_parse_args(int argc, char** argv);
+void utils_print_help(void);
 
-void default_status(APP_STATE *state);
+void utils_default_status(app_state_t *state);
 
-char *read_str_value(const char name[], char *def_value);
-int read_int_value(const char name[], int def_value);
+char *utils_read_str_value(const char name[], char *def_value);
+int utils_read_int_value(const char name[], int def_value);
 
-int fill_buffer(const char *path, char *buffer, int buffer_size, size_t *read);
-void *read_file(const char *path, size_t *len);
-void write_file(const char *path, unsigned char *data, int width, int height);
+int utils_fill_buffer(const char *path, char *buffer, int buffer_size, size_t *read);
+void *utils_read_file(const char *path, size_t *len);
+void utils_write_file(const char *path, unsigned char *data, int width, int height);
 
-void get_cpu_load(char * buffer, CPU_STATE *state);
-void get_memory_load(char * buffer, MEMORY_STATE *state);
-void get_temperature(char * buffer, TEMPERATURE_STATE *state);
+void utils_get_cpu_load(char * buffer, cpu_state_t *state);
+void utils_get_memory_load(char * buffer, memory_state_t *state);
+void utils_get_temperature(char * buffer, temperature_state_t *state);
 
-int get_worker_buffer(APP_STATE *state);
-int kbhit();
+int utils_get_worker_buffer(app_state_t *state);
 
 #endif //utils_h

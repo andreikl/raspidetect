@@ -1,31 +1,5 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <ctype.h>
-#include <string.h>
-#include <memory.h>
-#include <unistd.h>
-#include <errno.h>
-#include <sysexits.h>
-
-#include <semaphore.h>
-#include <math.h>
-#include <pthread.h>
-#include <time.h>
-
-#include "khash.h"
-
 #include "main.h"
-#include "utils.h"
 #include "ov5647.h"
-
-#ifdef OPENCV
-#include "opencv2/imgproc/imgproc_c.h"
-#endif
-
-KHASH_MAP_INIT_STR(map_str, char *)
-extern khash_t(map_str) *h;
-
-char str_buffer[BUFFER_SIZE];
 
 extern int is_abort;
 
@@ -64,10 +38,10 @@ int get_sensor_defaults(int camera_num, char *camera_name, int *width, int *heig
 
 void control_callback(MMAL_PORT_T *port, MMAL_BUFFER_HEADER_T *buffer) {
     MMAL_STATUS_T status;
-    APP_STATE *state = (APP_STATE *) port->userdata;
+    app_state_t *state = (app_state_t *) port->userdata;
 
     mmal_buffer_header_mem_lock(buffer);
-    memcpy(state->openvg.video_buffer, buffer->data, buffer->length);
+    memcpy(state->openvg.video_buffer.c, buffer->data, buffer->length);
     mmal_buffer_header_mem_unlock(buffer);
     mmal_buffer_header_release(buffer);
 
@@ -87,7 +61,7 @@ void control_callback(MMAL_PORT_T *port, MMAL_BUFFER_HEADER_T *buffer) {
 }
 
 void h264_input_buffer_callback(MMAL_PORT_T *port, MMAL_BUFFER_HEADER_T *buffer) {
-    APP_STATE *state = (APP_STATE *) port->userdata;
+    app_state_t *state = (app_state_t *) port->userdata;
     if (state->verbose) {
     //    fprintf(stderr, "h264_input_buffer_callback: %s\n", __func__);
     }
@@ -96,7 +70,7 @@ void h264_input_buffer_callback(MMAL_PORT_T *port, MMAL_BUFFER_HEADER_T *buffer)
 
 void h264_output_buffer_callback(MMAL_PORT_T *port, MMAL_BUFFER_HEADER_T *buffer) {
     MMAL_BUFFER_HEADER_T *new_buffer;
-    APP_STATE *state = (APP_STATE *) port->userdata;
+    app_state_t *state = (app_state_t *) port->userdata;
     MMAL_POOL_T *pool = state->mmal.h264_output_pool;
 
     mmal_buffer_header_mem_lock(buffer);
@@ -135,7 +109,7 @@ void fill_port_buffer(MMAL_PORT_T *port, MMAL_POOL_T *pool) {
     }
 }
 
-void encode_buffer(APP_STATE *state, char *buffer, int length) {
+void encode_buffer(app_state_t *state, char *buffer, int length) {
     MMAL_BUFFER_HEADER_T *output_buffer = mmal_queue_get(state->mmal.h264_input_pool->queue);
     if (output_buffer) {
         memcpy(output_buffer->data, buffer, length);
@@ -150,7 +124,7 @@ void encode_buffer(APP_STATE *state, char *buffer, int length) {
     }
 }
 
-int create_camera_component(APP_STATE *state) {
+int create_camera_component(app_state_t *state) {
     MMAL_PORT_T *video_port = NULL;
     MMAL_POOL_T *video_port_pool = NULL;
     MMAL_ES_FORMAT_T *format;
@@ -284,7 +258,7 @@ error:
     return 1;
 }
 
-int create_encoder_h264(APP_STATE *state) {
+int create_encoder_h264(app_state_t *state) {
     MMAL_STATUS_T status;
     MMAL_COMPONENT_T *encoder = 0;
 
@@ -383,7 +357,7 @@ error:
 
 
 //  Destroy the camera component
- void destroy_components(APP_STATE *state) {
+ void destroy_components(app_state_t *state) {
     if (state->mmal.encoder_h264) {
         mmal_component_destroy(state->mmal.encoder_h264);
         state->mmal.encoder_h264 = NULL;

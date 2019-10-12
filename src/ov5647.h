@@ -5,9 +5,9 @@
 
 int get_sensor_defaults(int camera_num, char *camera_name, int *width, int *height );
 
-void encode_buffer(APP_STATE *state, char *buffer, int length);
+void encode_buffer(app_state_t *state, char *buffer, int length);
 
-int create_camera_component(APP_STATE *state);
-int create_encoder_h264(APP_STATE *state);
+int create_camera_component(app_state_t *state);
+int create_encoder_h264(app_state_t *state);
 
-void destroy_components(APP_STATE *state);
+void destroy_components(app_state_t *state);

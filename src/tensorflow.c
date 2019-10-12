@@ -1,15 +1,6 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <ctype.h>
-#include <string.h>
-#include <memory.h>
-#include <unistd.h>
-#include <errno.h>
-#include <sysexits.h>
-
 #include "main.h"
 
-int tensorflow_process(APP_STATE *state) {
+int tensorflow_process(app_state_t *state) {
     TfLiteStatus status = TfLiteTensorCopyFromBuffer(state->tf.tf_input_image, state->worker_buffer_rgb, TfLiteTensorByteSize(state->tf.tf_input_image));
     if (status != kTfLiteOk) {
         fprintf(stderr, "ERROR: failed to fill input tensor, status: %x\n", status);
@@ -89,7 +80,7 @@ int tensorflow_process(APP_STATE *state) {
     return 0;
 }
 
-int tensorflow_create(APP_STATE *state) {
+int tensorflow_create(app_state_t *state) {
     if (state->verbose) {
         fprintf(stderr, "INFO: TensorFlow Lite C library version %s\n", TfLiteVersion());
     }
@@ -137,7 +128,7 @@ int tensorflow_create(APP_STATE *state) {
         switch(i) {
             case 1: state->worker_width = TfLiteTensorDim(state->tf.tf_input_image, i); break;
             case 2: state->worker_height = TfLiteTensorDim(state->tf.tf_input_image, i); break;
-            case 3: state->worker_pixel_bytes = TfLiteTensorDim(state->tf.tf_input_image, i); break;
+            case 3: state->worker_bytes_per_pixel = TfLiteTensorDim(state->tf.tf_input_image, i); break;
 
         }
     }
@@ -150,11 +141,11 @@ int tensorflow_create(APP_STATE *state) {
         fprintf(stderr, "INFO: Input tensor width %d, height %d, bytes per pixel %d, size: %d\n",
             state->worker_width,
             state->worker_height,
-            state->worker_pixel_bytes,
+            state->worker_bytes_per_pixel,
             TfLiteTensorByteSize(state->tf.tf_input_image));
     }
 
-    if (state->worker_pixel_bytes != 3
+    if (state->worker_bytes_per_pixel != 3
         || state->worker_width > state->video_width
         || state->worker_height > state->video_height
         || state->worker_width * state->worker_height * 3 != TfLiteTensorByteSize(state->tf.tf_input_image)) {
@@ -196,7 +187,7 @@ int tensorflow_create(APP_STATE *state) {
     return 0;
 }
     
-void tensorflow_destroy(APP_STATE *state) {
+void tensorflow_destroy(app_state_t *state) {
 
     if (state->tf.tf_model) {
         TfLiteModelDelete(state->tf.tf_model);

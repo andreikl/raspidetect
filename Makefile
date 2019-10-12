@@ -3,8 +3,10 @@ OPENCV = 0
 OPENVG = 1
 TENSORFLOW = 1
 DARKNET = 0
+CONTROL = 1
+VNC = 1
 
-EXEC = OV5647
+EXEC = raspidetect
 OBJDIR = ./obj/
 SRCDIR = ./src/
 #                                                          execution time|code size|memory usage|compile time
@@ -20,9 +22,21 @@ SRCDIR = ./src/
 CC = cc
 LDFLAGS = -lm
 COMMON = -Iexternal/klib -Isrc/
-#CFLAGS = -pthread -O3 -fPIC -Wall -Wno-implicit-function-declaration -Wno-unused-function -DNDEBUG -D_POSIX_C_SOURCE=199309L
-CFLAGS = -pthread -O3 -fPIC -Wall -Wno-implicit-function-declaration -Wno-unused-function -DNDEBUG -std=c11
-OBJ = utils.o control.o main.o
+#-D_POSIX_C_SOURCE=199309L fixes CLOCK_REALTIME error on pi zero 
+CFLAGS = -pthread -O3 -fPIC -Wall -Wno-implicit-function-declaration -Wno-unused-function -DNDEBUG -std=c11 -D_POSIX_C_SOURCE=199309L
+OBJ = utils.o main.o
+
+ifeq ($(CONTROL), 1) 
+    COMMON += -DCONTROL
+    OBJ += control.o
+endif
+
+ifeq ($(VNC), 1) 
+    COMMON += -DVNC
+    COMMON += `pkg-config --cflags libvncserver`
+    LDFLAGS += `pkg-config --libs libvncserver`
+    OBJ += vnc.o
+endif
 
 ifeq ($(MMAL), 1) 
     COMMON += -DMMAL

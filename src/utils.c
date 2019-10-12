@@ -1,10 +1,3 @@
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
-#include <time.h>
-#include <signal.h>
-#include <termio.h>
-
 #include "khash.h"
 
 #include "main.h"
@@ -17,7 +10,7 @@
 KHASH_MAP_INIT_STR(map_str, char *)
 extern khash_t(map_str) *h;
 
-void parse_args(int argc, char** argv) {
+void utils_parse_args(int argc, char** argv) {
     int ret;
     unsigned k;
 
@@ -29,7 +22,7 @@ void parse_args(int argc, char** argv) {
     }
 }
 
-void print_help(void) {
+void utils_print_help(void) {
     printf("ov5647 [options]\n");
     printf("options:\n");
     printf("\n");
@@ -43,36 +36,39 @@ void print_help(void) {
     printf("%s: DN config path, default: %s\n", DN_CONFIG_PATH, DN_CONFIG_PATH_DEF);    
     printf("%s: input, default: %s\n", INPUT, INPUT_DEF);
     printf("%s: output, default: %s\n", OUTPUT, OUTPUT_DEF);
-    printf("\t: options: "ARG_STREAM" - output stream, "ARG_NONE"\n");
+    printf("\toptions: "ARG_STREAM" - output stream, "ARG_VNC" - output vnc, "ARG_NONE"\n");
     printf("%s: verbose, verbose: %d\n", VERBOSE, VERBOSE_DEF);
     exit(0);
 }
 
-void default_status(APP_STATE *state) {
-    memset(state, 0, sizeof(APP_STATE));
+void utils_default_status(app_state_t *state) {
+    memset(state, 0, sizeof(app_state_t));
 
-    int width = read_int_value(WIDTH, WIDTH_DEF);
-    int height = read_int_value(HEIGHT, HEIGHT_DEF);
+    int width = utils_read_int_value(WIDTH, WIDTH_DEF);
+    int height = utils_read_int_value(HEIGHT, HEIGHT_DEF);
     state->video_width = (width / 32 * 32) + (width % 32? 32: 0);
     state->video_height = (height / 16 * 16) + (height % 16? 16: 0);
-    state->worker_width = read_int_value(WORKER_WIDTH, WORKER_WIDTH_DEF);
-    state->worker_height = read_int_value(WORKER_HEIGHT, WORKER_HEIGHT_DEF);
-    state->worker_pixel_bytes = 3;
+    state->video_bytes_per_pixel = 2;
+    state->worker_width = utils_read_int_value(WORKER_WIDTH, WORKER_WIDTH_DEF);
+    state->worker_height = utils_read_int_value(WORKER_HEIGHT, WORKER_HEIGHT_DEF);
+    state->worker_bytes_per_pixel = 3;
     state->worker_total_objects = 10;
-    state->verbose = read_int_value(VERBOSE, VERBOSE_DEF);
+    state->verbose = utils_read_int_value(VERBOSE, VERBOSE_DEF);
 #ifdef TENSORFLOW
-    state->model_path = read_str_value(TFL_MODEL_PATH, TFL_MODEL_PATH_DEF);
+    state->model_path = utils_read_str_value(TFL_MODEL_PATH, TFL_MODEL_PATH_DEF);
 #elif DARKNET
-    state->model_path = read_str_value(DN_MODEL_PATH, DN_MODEL_PATH_DEF);
-    state->config_path = read_str_value(DN_CONFIG_PATH, DN_CONFIG_PATH_DEF);
+    state->model_path = utils_read_str_value(DN_MODEL_PATH, DN_MODEL_PATH_DEF);
+    state->config_path = utils_read_str_value(DN_CONFIG_PATH, DN_CONFIG_PATH_DEF);
 #endif
-    char *output = read_str_value(OUTPUT, OUTPUT_DEF);
+    char *output = utils_read_str_value(OUTPUT, OUTPUT_DEF);
     if (strcmp(output, ARG_STREAM) == 0) {
         state->output_type = OUTPUT_STREAM;
+    } else if (strcmp(output, ARG_VNC) == 0) {
+        state->output_type = OUTPUT_VNC;
     }
 }
 
-char *read_str_value(const char *name, char *def_value) {
+char *utils_read_str_value(const char *name, char *def_value) {
     unsigned k = kh_get(map_str, h, name);
     if (k != kh_end(h)) {
         return kh_val(h, k);
@@ -80,7 +76,7 @@ char *read_str_value(const char *name, char *def_value) {
     return def_value;
 }
 
-int read_int_value(const char name[], int def_value) {
+int utils_read_int_value(const char name[], int def_value) {
     unsigned k = kh_get(map_str, h, name);
     if (k != kh_end(h)) {
         const char* value = kh_val(h, k);
@@ -89,7 +85,7 @@ int read_int_value(const char name[], int def_value) {
     return def_value;
 }
 
-int fill_buffer(const char *path, char *buffer, int buffer_size, size_t *read) {
+int utils_fill_buffer(const char *path, char *buffer, int buffer_size, size_t *read) {
     FILE *fstream = fopen(path, "r");
 
     if (fstream == NULL) {
@@ -147,7 +143,7 @@ int fill_buffer(const char *path, char *buffer, int buffer_size, size_t *read) {
     return data;
 }*/
 
-void *read_file(const char *path, size_t *len) {
+void *utils_read_file(const char *path, size_t *len) {
     FILE *fstream = NULL;
 
     if (path[0] == '-') {
@@ -192,7 +188,7 @@ fail_open:
     return NULL;
 }
 
-void write_file(const char *path, unsigned char *data, int width, int height) {
+void utils_write_file(const char *path, unsigned char *data, int width, int height) {
     FILE* fstream;
     size_t written;
     unsigned char buffer[BUFFER_SIZE];
@@ -251,8 +247,8 @@ void write_file(const char *path, unsigned char *data, int width, int height) {
 #endif
 }
 
-void get_cpu_load(char * buffer, CPU_STATE *state) {
-    fill_buffer("/proc/stat", buffer, BUFFER_SIZE, NULL);
+void utils_get_cpu_load(char * buffer, cpu_state_t *state) {
+    utils_fill_buffer("/proc/stat", buffer, BUFFER_SIZE, NULL);
 
     int user, nice, system, idle;
     sscanf(&buffer[4], "%d %d %d %d", &user, &nice, &system, &idle);
@@ -268,7 +264,7 @@ void get_cpu_load(char * buffer, CPU_STATE *state) {
 }
 
 
-void get_memory_load(char * buffer, MEMORY_STATE *state) {
+void utils_get_memory_load(char * buffer, memory_state_t *state) {
 //  VmPeak                      peak virtual memory size
 //  VmSize                      total program size
 //  VmLck                       locked memory size
@@ -280,7 +276,7 @@ void get_memory_load(char * buffer, MEMORY_STATE *state) {
 //  VmLib                       size of shared library code
 //  VmPTE                       size of page table entries
 //  VmSwap                      size of swap usage (the number of referred swapents)    
-    fill_buffer("/proc/self/status", buffer, BUFFER_SIZE, NULL);
+    utils_fill_buffer("/proc/self/status", buffer, BUFFER_SIZE, NULL);
     char * line = buffer;
     while (line) {
         char * next_line = strchr(line, '\n');
@@ -311,8 +307,8 @@ void get_memory_load(char * buffer, MEMORY_STATE *state) {
     }
 }
 
-void get_temperature(char * buffer, TEMPERATURE_STATE *state) {
-    fill_buffer("/sys/class/thermal/thermal_zone0/temp", buffer, BUFFER_SIZE, NULL);
+void utils_get_temperature(char * buffer, temperature_state_t *state) {
+    utils_fill_buffer("/sys/class/thermal/thermal_zone0/temp", buffer, BUFFER_SIZE, NULL);
 
     state->temp = (float)(atoi(buffer)) / 1000;
 }
@@ -487,7 +483,7 @@ static int resize_li_16(int *src, int src_width, int src_height, int *dst, int d
 #endif
 }
 
-int get_worker_buffer(APP_STATE *state) {
+int utils_get_worker_buffer(app_state_t *state) {
 #ifdef OPENCV
     CvMat *img1 = cvCreateMatHeader(state->video_width,
                                     state->video_height,
@@ -504,7 +500,7 @@ int get_worker_buffer(APP_STATE *state) {
     cvRelease(&img1);
     cvRelease(&img2);
 #else
-    int res = resize_li_16((int*)state->openvg.video_buffer,
+    int res = resize_li_16(state->openvg.video_buffer.i,
                 state->video_width,
                 state->video_height,
                 (int*)state->worker_buffer_565,
@@ -566,22 +562,4 @@ int get_worker_buffer(APP_STATE *state) {
     return -1;
 #endif
     return 0;
-}
-
-int kbhit() {
-    struct termios original;
-    tcgetattr(STDIN_FILENO, &original);
-
-    struct termios term;
-    memcpy(&term, &original, sizeof(term));
-
-    term.c_lflag &= ~ICANON;
-    tcsetattr(STDIN_FILENO, TCSANOW, &term);
-
-    int characters_buffered = 0;
-    ioctl(STDIN_FILENO, FIONREAD, &characters_buffered);
-
-    tcsetattr(STDIN_FILENO, TCSANOW, &original);
-
-    return characters_buffered;
 }

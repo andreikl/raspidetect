@@ -1,22 +1,6 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <ctype.h>
-#include <string.h>
-#include <memory.h>
-#include <unistd.h>
-#include <errno.h>
-#include <sysexits.h>
-#include <assert.h>
-#include <signal.h>
-#include <string.h>
-
-#include <semaphore.h>
-#include <math.h>
-#include <pthread.h>
-#include <time.h>
+#include <sysexits.h>// exit codes
 
 #include "bcm_host.h"
-
 #include "khash.h"
 
 #include "main.h"
@@ -28,16 +12,24 @@
 #include "openvg.h"
 #endif //OPENVG
 
+#ifdef CONTROL
+#include "control.h"
+#endif //CONTROL
+
+#ifdef VNC
+#include "vnc.h"
+#endif //VNC
+
 #define TICK_TIME 500000 //500 miliseconds
 
 KHASH_MAP_INIT_STR(map_str, char*)
 khash_t(map_str) *h;
 
 int is_abort = 0;
-static int exit_code = EX_OK;
+static int exit_code = EX_SOFTWARE;
 
 void *worker_function(void *data) {
-    APP_STATE* state = (APP_STATE*) data;
+    app_state_t* state = (app_state_t*) data;
     if (state->verbose) {
         fprintf(stderr, "INFO: Worker thread has been started\n");
     }
@@ -52,9 +44,9 @@ void *worker_function(void *data) {
         clock_gettime(CLOCK_MONOTONIC, &t2);
         float d = (t2.tv_sec + t2.tv_nsec / 1000000000.0) - (t1.tv_sec + t1.tv_nsec / 1000000000.0);
         if (d > 0) {
-            state->fps = frame_count / d;
+            state->worker_fps = frame_count / d;
         } else {
-            state->fps = frame_count;
+            state->worker_fps = frame_count;
         }
         frame_count++;
         // -----
@@ -73,21 +65,27 @@ void *worker_function(void *data) {
 int main_function() {
     int res;
     char buffer[BUFFER_SIZE];
-    APP_STATE state;
+    app_state_t state;
 
     bcm_host_init();
 
-    default_status(&state);
+    utils_default_status(&state);
+
+#ifdef CONTROL
+    if (control_init(&state)) {
+        fprintf(stderr, "ERROR: Can't initialise control gpio\n");
+        goto error;
+    }
+
+#endif // CONTROL
 
 #ifdef OPENVG
     if (dispmanx_init(&state)) {
         fprintf(stderr, "ERROR: Failed to initialise dispmanx window\n");
-        exit_code = EX_SOFTWARE;
         goto error;
     }
     if (openvg_init(&state)) {
         fprintf(stderr, "ERROR: Failed to initialise OpenVG\n");
-        exit_code = EX_SOFTWARE;
         goto error;
     }
 #endif //OPENVG
@@ -95,13 +93,11 @@ int main_function() {
 #ifdef TENSORFLOW
     if (tensorflow_create(&state)) {
         fprintf(stderr, "ERROR: Failed to create tensorflow\n");
-        exit_code = EX_SOFTWARE;
         goto error;
     }
 #elif DARKNET
     if (darknet_create(&state)) {
         fprintf(stderr, "ERROR: Failed to create darknet\n");
-        exit_code = EX_SOFTWARE;
         goto error;
     }
 #endif
@@ -179,30 +175,51 @@ int main_function() {
 
     if (create_camera_component(&state)) {
         fprintf(stderr, "ERROR: Failed to create camera component");
-        exit_code = EX_SOFTWARE;
         goto error;
     }
 
-    if (state.output_type != OUTPUT_NONE && create_encoder_h264(&state)) {
-        fprintf(stderr, "ERROR: Failed to create H264 encoder component");
-        exit_code = EX_SOFTWARE;
-        goto error;
+    if (state.output_type == OUTPUT_STREAM) {
+        if (create_encoder_h264(&state)) {
+            fprintf(stderr, "ERROR: Failed to create H264 encoder component");
+            goto error;
+        }
+    } else if (state.output_type == OUTPUT_VNC) {
+#ifdef VNC
+        if (vnc_init(&state)) {
+            fprintf(stderr, "ERROR: Failed to create VNC server");
+            goto error;
+        }
+#endif //VNC    
     }
+
 
     while (!is_abort) {
         // ----- fps
         static int frame_count = 0;
+        static struct timespec t1;
+        struct timespec t2;
+        if (frame_count == 0) {
+            clock_gettime(CLOCK_MONOTONIC, &t1);
+        }
+        clock_gettime(CLOCK_MONOTONIC, &t2);
+        float d = (t2.tv_sec + t2.tv_nsec / 1000000000.0) - (t1.tv_sec + t1.tv_nsec / 1000000000.0);
+        if (d > 0) {
+            state.video_fps = frame_count / d;
+        } else {
+            state.video_fps = frame_count;
+        }
         frame_count++;
         // -----
 
-        get_cpu_load(buffer, &state.cpu);
-        get_memory_load(buffer, &state.memory);
-        get_temperature(buffer, &state.temperature);
+        utils_get_cpu_load(buffer, &state.cpu);
+        utils_get_memory_load(buffer, &state.memory);
+        utils_get_temperature(buffer, &state.temperature);
 
         // every 8th frame
         if ((frame_count & 0b1111) == 0) {
-            fprintf(stderr, "%.2f FPS, CPU: %.1f%%, Memory: %d kb, Swap: %d kb, T: %.2fC, Objs: %d\n",
-                state.fps,
+            fprintf(stderr, "%2.2f (%2.2f) FPS, CPU: %2.1f%%, Memory: %d (%d) kb, T: %.2fC, Objs: %d\n",
+                state.video_fps,
+                state.worker_fps,
                 state.cpu.cpu,
                 state.memory.total_size,
                 state.memory.swap_size,
@@ -222,7 +239,7 @@ int main_function() {
             is_abort = 1;
         }
         if (!value) {
-            res = get_worker_buffer(&state);
+            res = utils_get_worker_buffer(&state);
             if (res) {
                 fprintf(stderr, "ERROR: cannot get worker buffer, res: %d\n", res);
                 is_abort = 1;
@@ -235,7 +252,7 @@ int main_function() {
             }
         }
 
-        vgWritePixels(  state.openvg.video_buffer,
+        vgWritePixels(  state.openvg.video_buffer.c,
                         state.video_width << 1,
                         VG_sRGB_565,
                         0, 0,
@@ -251,8 +268,9 @@ int main_function() {
         VGfloat vg_colour[4] = {1.0f, 1.0f, 1.0f, 1.0f};
 
         pthread_mutex_lock(&state.buffer_mutex);
-        sprintf(buffer, "%.2f FPS, CPU: %.1f%%, Memory: %d kb, T: %.2fC, Objects: %d",
-            state.fps,
+        sprintf(buffer, "%2.2f (%2.2f) FPS, CPU: %2.1f%%, Memory: %d kb, T: %.2fC, Objects: %d",
+            state.video_fps,
+            state.worker_fps,
             state.cpu.cpu,
             state.memory.total_size,
             state.temperature.temp,
@@ -267,32 +285,46 @@ int main_function() {
             fprintf(stderr, "ERROR: failed to draw boxes\n");
         pthread_mutex_unlock(&state.buffer_mutex);
 
-        if (state.output_type != OUTPUT_NONE) {
-            vgReadPixels(state.openvg.video_buffer,
-                        state.video_width << 1,
-                        VG_sRGB_565,
-                        0, 0,
-                        state.video_width, state.video_height);
+        if (state.output_type == OUTPUT_STREAM) {
+            openvg_read_buffer(&state);
 
             int size = state.video_width * state.video_height;
-            encode_buffer(&state, state.openvg.video_buffer, (size << 1));
+            encode_buffer(&state, state.openvg.video_buffer.c, (size << 1));
             //encode_buffer(&state, state.worker_buffer_rgb, (size << 1) + size);
             //encode_buffer(&state, state.worker_buffer_565, (size << 1));
-        } 
+        } else if (state.output_type == OUTPUT_VNC) {
+#ifdef VNC
+            openvg_read_buffer(&state);
+
+            int size = state.video_width * state.video_height;
+            vnc_process(&state, state.openvg.video_buffer.c, (size << 1));
+#endif //VNC
+        }
 
         EGLBoolean egl_res;
         egl_res = eglSwapBuffers(state.openvg.display, state.openvg.surface);
         if (egl_res == EGL_FALSE) {
              fprintf(stderr, "ERROR: failed to clear screan: 0x%x\n", egl_res);
         }
-#endif
-        control_handle_key(&state);
+#endif //OPENVG
+
+#ifdef CONTROL
+        control_ssh_key(&state);
+#endif // CONTROL
 
         //usleep(TICK_TIME);
     }
+    exit_code = EX_OK;
 
 error:
+#ifdef CONTROL
     control_destroy(&state);
+#endif //CONTROL
+
+#ifdef VNC
+    vnc_destroy(&state);
+#endif //VNC 
+
     destroy_components(&state);
 
     pthread_join(state.worker_thread, NULL);
@@ -348,11 +380,11 @@ int main(int argc, char** argv) {
     signal(SIGINT, signal_handler);
 
     h = kh_init(map_str);
-    parse_args(argc, argv);
+    utils_parse_args(argc, argv);
 
     unsigned k = kh_get(map_str, h, HELP);
     if (k != kh_end(h)) {
-        print_help();
+        utils_print_help();
     }
     else {
         main_function();

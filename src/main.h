@@ -12,6 +12,7 @@
 #define WORKER_HEIGHT "-wh"
 #define WORKER_HEIGHT_DEF 300
 
+#define APP_NAME "raspidetect"
 #define INPUT "-i"
 #define INPUT_DEF "camera"
 #define OUTPUT "-o"
@@ -25,6 +26,7 @@
 #define DN_CONFIG_PATH "-c"
 #define DN_CONFIG_PATH_DEF "./dn_models/yolov3-tiny.cfg"
 #define ARG_STREAM "-"
+#define ARG_VNC "vnc"
 #define ARG_NONE "none"
 
 #define THRESHOLD 0.5
@@ -54,11 +56,11 @@
     #endif
 #endif
 
-#include "semaphore.h"
+#include "semaphore.h" 
 
 typedef struct {
     float cpu;
-} CPU_STATE;
+} cpu_state_t;
 
 typedef struct {
     // memory status
@@ -69,11 +71,11 @@ typedef struct {
     int exe_size;
     int stk_size;
     int data_size;
-} MEMORY_STATE;
+} memory_state_t;
 
 typedef struct {
     float temp;
-} TEMPERATURE_STATE;
+} temperature_state_t;
 
 #ifdef MMAL
 #include "interface/mmal/mmal.h"
@@ -100,7 +102,7 @@ typedef struct {
     MMAL_POOL_T *h264_input_pool;
     MMAL_PORT_T *h264_output_port;
     MMAL_POOL_T *h264_output_pool;
-} MMAL_STATE;
+} mmal_state_t;
 #endif //MMAL
 
 #ifdef TENSORFLOW
@@ -117,13 +119,13 @@ typedef struct {
     const TfLiteTensor *tf_tensor_scores;
     const TfLiteTensor *tf_tensor_num_detections;
 
-} TENSORFLOW_STATE;
+} tensorflow_state_t;
 #elif DARKNET
 #include "include/darknet.h"
 
 typedef struct {
     network *dn_net;
-} DARKNET_STATE;
+} darknet_state_t;
 #endif
 
 #ifdef OPENVG
@@ -138,7 +140,10 @@ typedef struct {
     EGLDisplay display;
     EGLContext context;
     EGLSurface surface;
-    char* video_buffer;
+    union {
+        int* i;
+        char* c;
+    } video_buffer;
     union {
         EGL_DISPMANX_WINDOW_T native_window;
         VGImage pixmap;
@@ -153,24 +158,40 @@ typedef struct {
     FT_Library font_lib;
     void* font_data;
     size_t font_len;
-} OPENVG_STATE;
+} openvg_state_t;
 #endif //OPENVG
+
+#ifdef CONTROL
+typedef struct {
+    volatile unsigned *gpio;
+} control_state_t;
+#endif //CONTROL
+
+#ifdef VNC
+#include <rfb/rfb.h>
+typedef struct {
+    rfbScreenInfoPtr server;
+} vnc_state_t;
+#endif //VNC
 
 typedef enum {
     OUTPUT_NONE,
     OUTPUT_STREAM,
+    OUTPUT_VNC
 } output_enum_t;
 
 typedef struct {
     // common properties
     int video_width;
     int video_height;
+    int video_bytes_per_pixel;
+    float video_fps;
     char *filename;                     // name of output file
     int verbose;                        // debug
     output_enum_t output_type;
-    float fps;
     char* model_path;
     char* config_path;
+    volatile unsigned *gpio;
 
     pthread_mutex_t buffer_mutex;
     sem_t buffer_semaphore;
@@ -179,32 +200,41 @@ typedef struct {
     pthread_t worker_thread;
     int worker_width;
     int worker_height;
-    int worker_pixel_bytes;
+    int worker_bytes_per_pixel;
     char *worker_buffer_565;
     char *worker_buffer_rgb;
     int worker_objects;
+    float worker_fps;
     int worker_total_objects;
     float *worker_boxes;
     float *worker_classes;
     float *worker_scores;
 
+#ifdef CONTROL
+    control_state_t control;
+#endif
+
 #ifdef MMAL
-    MMAL_STATE mmal;
+    mmal_state_t mmal;
 #endif
 
 #ifdef TENSORFLOW
-    TENSORFLOW_STATE tf;
+    tensorflow_state_t tf;
 #elif DARKNET
-    DARKNET_STATE dn;
+    darknet_state_t dn;
 #endif
 
 #ifdef OPENVG
-    OPENVG_STATE openvg;
+    openvg_state_t openvg;
 #endif
 
-    TEMPERATURE_STATE temperature;
-    MEMORY_STATE memory;
-    CPU_STATE cpu;
-} APP_STATE;
+#ifdef VNC
+	vnc_state_t vnc;
+#endif
+
+    temperature_state_t temperature;
+    memory_state_t memory;
+    cpu_state_t cpu;
+} app_state_t;
 
 #endif // main_h

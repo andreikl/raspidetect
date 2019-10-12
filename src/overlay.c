@@ -1,15 +1,6 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <ctype.h>
-#include <string.h>
-#include <memory.h>
-#include <unistd.h>
-#include <errno.h>
-#include <sysexits.h>
-
 #include "main.h"
 
-int overlay_create(APP_STATE *state) {
+int overlay_create(app_state_t *state) {
     state->overlay_stride = cairo_format_stride_for_width(CAIRO_FORMAT_ARGB32, state->overlay_width);
     state->overlay_buffer = malloc(state->overlay_stride * state->overlay_height);
     state->cairo_surface = cairo_image_surface_create_for_data(state->overlay_buffer,
@@ -33,7 +24,7 @@ int overlay_create(APP_STATE *state) {
     return 0;
 }
 
-void overlay_print(APP_STATE *state, const char *text) {
+void overlay_print(app_state_t *state, const char *text) {
     pthread_mutex_lock(&state->buffer_mutex);
     cairo_rectangle(state->cairo_context, 0.0, 0.0, state->overlay_width, state->overlay_height);
     cairo_set_source_rgba(state->cairo_context, 0.0, 0.0, 0.0, 1.0);
@@ -67,7 +58,7 @@ void overlay_print(APP_STATE *state, const char *text) {
     pthread_mutex_unlock(&state->buffer_mutex);
 }
 
-void overlay_destroy(APP_STATE *state) {
+void overlay_destroy(app_state_t *state) {
     if (state->cairo_context != NULL) {
         cairo_destroy(state->cairo_context);
     }
