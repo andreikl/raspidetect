@@ -1,6 +1,7 @@
 #include "main.h"
 
-int tensorflow_process(app_state_t *state) {
+int tensorflow_process(app_state_t *state)
+{
     TfLiteStatus status = TfLiteTensorCopyFromBuffer(state->tf.tf_input_image, state->worker_buffer_rgb, TfLiteTensorByteSize(state->tf.tf_input_image));
     if (status != kTfLiteOk) {
         fprintf(stderr, "ERROR: failed to fill input tensor, status: %x\n", status);
@@ -80,7 +81,8 @@ int tensorflow_process(app_state_t *state) {
     return 0;
 }
 
-int tensorflow_create(app_state_t *state) {
+int tensorflow_create(app_state_t *state)
+{
     if (state->verbose) {
         fprintf(stderr, "INFO: TensorFlow Lite C library version %s\n", TfLiteVersion());
     }
@@ -128,7 +130,7 @@ int tensorflow_create(app_state_t *state) {
         switch(i) {
             case 1: state->worker_width = TfLiteTensorDim(state->tf.tf_input_image, i); break;
             case 2: state->worker_height = TfLiteTensorDim(state->tf.tf_input_image, i); break;
-            case 3: state->worker_bytes_per_pixel = TfLiteTensorDim(state->tf.tf_input_image, i); break;
+            case 3: state->worker_bits_per_pixel = TfLiteTensorDim(state->tf.tf_input_image, i) * 8; break;
 
         }
     }
@@ -138,16 +140,16 @@ int tensorflow_create(app_state_t *state) {
         fprintf(stderr, "INFO: Input tensor name: %s, type %s\n",
             TfLiteTensorName(state->tf.tf_input_image),
             TfLiteTypeGetName(TfLiteTensorType(state->tf.tf_input_image)));
-        fprintf(stderr, "INFO: Input tensor width %d, height %d, bytes per pixel %d, size: %d\n",
+        fprintf(stderr, "INFO: Input tensor width %d, height %d, bits per pixel %d, size: %d\n",
             state->worker_width,
             state->worker_height,
-            state->worker_bytes_per_pixel,
+            state->worker_bits_per_pixel,
             TfLiteTensorByteSize(state->tf.tf_input_image));
     }
 
-    if (state->worker_bytes_per_pixel != 3
-        || state->worker_width > state->video_width
-        || state->worker_height > state->video_height
+    if (state->worker_bits_per_pixel != 24
+        || state->worker_width > state->width
+        || state->worker_height > state->height
         || state->worker_width * state->worker_height * 3 != TfLiteTensorByteSize(state->tf.tf_input_image)) {
         fprintf(stderr, "ERROR: Inavlid input tensor format\n");
         return -1;
@@ -187,8 +189,8 @@ int tensorflow_create(app_state_t *state) {
     return 0;
 }
     
-void tensorflow_destroy(app_state_t *state) {
-
+void tensorflow_destroy(app_state_t *state)
+{
     if (state->tf.tf_model) {
         TfLiteModelDelete(state->tf.tf_model);
     }

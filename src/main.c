@@ -6,7 +6,7 @@
 #include "main.h"
 #include "utils.h"
 #include "overlay.h"
-#include "ov5647.h"
+#include "camera.h"
 
 #ifdef OPENVG
 #include "openvg.h"
@@ -16,9 +16,9 @@
 #include "control.h"
 #endif //CONTROL
 
-#ifdef VNC
-#include "vnc.h"
-#endif //VNC
+#ifdef RFB
+#include "rfb.h"
+#endif //RFB
 
 #define TICK_TIME 500000 //500 miliseconds
 
@@ -28,9 +28,10 @@ khash_t(map_str) *h;
 int is_abort = 0;
 static int exit_code = EX_SOFTWARE;
 
-void *worker_function(void *data) {
-    app_state_t* state = (app_state_t*) data;
-    if (state->verbose) {
+void *worker_function(void *data)
+{
+    app_state_t* app = (app_state_t*) data;
+    if (app->verbose) {
         fprintf(stderr, "INFO: Worker thread has been started\n");
     }
     while (!is_abort) {
@@ -44,154 +45,169 @@ void *worker_function(void *data) {
         clock_gettime(CLOCK_MONOTONIC, &t2);
         float d = (t2.tv_sec + t2.tv_nsec / 1000000000.0) - (t1.tv_sec + t1.tv_nsec / 1000000000.0);
         if (d > 0) {
-            state->worker_fps = frame_count / d;
+            app->worker_fps = frame_count / d;
         } else {
-            state->worker_fps = frame_count;
+            app->worker_fps = frame_count;
         }
         frame_count++;
         // -----
 
-        sem_wait(&state->worker_semaphore);
+        if (sem_wait(&app->worker_semaphore)) {
+            fprintf(stderr, "ERROR: sem_wait failed to wait worker_semaphore with error (%d)\n", errno); 
+        }
 
 #ifdef TENSORFLOW
-        tensorflow_process(state);
+        tensorflow_process(app);
 #elif DARKNET
-        darknet_process(state);
+        darknet_process(app);
 #endif
     }
     return NULL;
 }
 
-int main_function() {
+// Handler for sigint signals
+static void signal_handler(int signal_number)
+{
+    if (signal_number == SIGUSR1) {
+        fprintf(stderr, "INFO: SIGUSR1\n"); 
+    } else {
+        fprintf(stderr, "INFO: Other signal %d\n", signal_number);
+    }
+    is_abort = 1;
+}
+
+static int main_function()
+{
     int res;
     char buffer[BUFFER_SIZE];
-    app_state_t state;
+    app_state_t app;
 
     bcm_host_init();
 
-    utils_default_status(&state);
+    utils_default_status(&app);
 
 #ifdef CONTROL
-    if (control_init(&state)) {
-        fprintf(stderr, "ERROR: Can't initialise control gpio\n");
+    if (control_init(&app)) {
+        fprintf(stderr, "ERROR: Failed to initialise control gpio\n");
         goto error;
     }
 
 #endif // CONTROL
 
 #ifdef OPENVG
-    if (dispmanx_init(&state)) {
+    if (dispmanx_init(&app)) {
         fprintf(stderr, "ERROR: Failed to initialise dispmanx window\n");
         goto error;
     }
-    if (openvg_init(&state)) {
+    if (openvg_init(&app)) {
         fprintf(stderr, "ERROR: Failed to initialise OpenVG\n");
         goto error;
     }
 #endif //OPENVG
 
 #ifdef TENSORFLOW
-    if (tensorflow_create(&state)) {
+    if (tensorflow_create(&app)) {
         fprintf(stderr, "ERROR: Failed to create tensorflow\n");
         goto error;
     }
 #elif DARKNET
-    if (darknet_create(&state)) {
+    if (darknet_create(&app)) {
         fprintf(stderr, "ERROR: Failed to create darknet\n");
         goto error;
     }
 #endif
 
-    int wh = state.worker_width * state.worker_height;
-    state.worker_buffer_rgb = malloc((wh << 1) + wh);
-    if (!state.worker_buffer_rgb) {
+    int wh = app.worker_width * app.worker_height;
+    app.worker_buffer_rgb = malloc((wh << 1) + wh);
+    if (!app.worker_buffer_rgb) {
 	    fprintf(stderr, "ERROR: Failed to allocate memory for worker buffer RGB\n");
         goto error;
     }
 
-    state.worker_buffer_565 = malloc(wh << 1);
-    if (!state.worker_buffer_565) {
+    app.worker_buffer_565 = malloc(wh << 1);
+    if (!app.worker_buffer_565) {
 	    fprintf(stderr, "ERROR: Failed to allocate memory for worker buffer 565\n");
         goto error;
     }
 
-    state.worker_boxes = malloc(state.worker_total_objects * sizeof(float) * 4);
-    if (!state.worker_boxes) {
+    app.worker_boxes = malloc(app.worker_total_objects * sizeof(float) * 4);
+    if (!app.worker_boxes) {
 	    fprintf(stderr, "ERROR: Failed to allocate memory for image boxes\n");
         goto error;
     }
 
-    state.worker_classes = malloc(state.worker_total_objects * sizeof(float));
-    if (!state.worker_classes) {
+    app.worker_classes = malloc(app.worker_total_objects * sizeof(float));
+    if (!app.worker_classes) {
 	    fprintf(stderr, "ERROR: Failed to allocate memory for image classes\n");
         goto error;
     }
 
-    state.worker_scores = malloc(state.worker_total_objects * sizeof(float));
-    if (!state.worker_scores) {
+    app.worker_scores = malloc(app.worker_total_objects * sizeof(float));
+    if (!app.worker_scores) {
 	    fprintf(stderr, "ERROR: Failed to allocate memory for image scores\n");
         goto error;
     }
 
-    res = pthread_mutex_init(&state.buffer_mutex, NULL);
-    if (res != 0) {
-        fprintf(stderr, "ERROR: Failed to create buffer_mutex, return code: %d\n", res);
+    res = pthread_mutex_init(&app.buffer_mutex, NULL);
+    if (res) {
+        fprintf(stderr, "ERROR: pthread_mutex_init failed to init buffer_mutex with code: %d\n", res);
         goto error;
     }
 
-    res = sem_init(&state.buffer_semaphore, 0, 0);
+    res = sem_init(&app.buffer_semaphore, 0, 0);
     if (res) {
 	    fprintf(stderr, "ERROR: Failed to create buffer semaphore, return code: %d\n", res);
         goto error;
     }
 
-    res = sem_init(&state.worker_semaphore, 0, 0);
+    res = sem_init(&app.worker_semaphore, 0, 0);
     if (res) {
 	    fprintf(stderr, "ERROR: Failed to create worker semaphore, return code: %d\n", res);
         goto error;
     }
 
-    res = pthread_create(&state.worker_thread, NULL, worker_function, &state);
-    if (res) {
-	    fprintf(stderr, "ERROR: Failed to create worker thread, return code: %d\n", res);
+    app.worker_thread_res = pthread_create(&app.worker_thread, NULL, worker_function, &app);
+    if (app.worker_thread_res) {
+	    fprintf(stderr,
+            "ERROR: Failed to create worker thread, return code: %d\n", 
+            app.worker_thread_res);
         goto error;
     }
 
     // Setup for sensor specific parameters
-    get_sensor_defaults(state.mmal.camera_num,
-        state.mmal.camera_name,
-        &state.mmal.max_width,
-        &state.mmal.max_height);
+    camera_get_defaults(app.mmal.camera_num,
+        app.mmal.camera_name,
+        &app.mmal.max_width,
+        &app.mmal.max_height);
 
-    if (state.verbose) {
-        fprintf(stderr, "INFO: camera_num: %d\n", state.mmal.camera_num);
-        fprintf(stderr, "INFO: camera_name: %s\n", state.mmal.camera_name);
-        fprintf(stderr, "INFO: camera max size: %d, %d\n", state.mmal.max_width, state.mmal.max_height);
-        fprintf(stderr, "INFO: video size: %d, %d\n", state.video_width, state.video_height);
-        fprintf(stderr, "INFO: display size: %d, %d\n", state.openvg.display_width, state.openvg.display_height);
-        fprintf(stderr, "INFO: worker size: %d, %d\n", state.worker_width, state.worker_height);
-        fprintf(stderr, "INFO: output type: %d\n", state.output_type);
+    if (app.verbose) {
+        fprintf(stderr, "INFO: camera_num: %d\n", app.mmal.camera_num);
+        fprintf(stderr, "INFO: camera_name: %s\n", app.mmal.camera_name);
+        fprintf(stderr, "INFO: camera max size: %d, %d\n", app.mmal.max_width, app.mmal.max_height);
+        fprintf(stderr, "INFO: video size: %d, %d, %d\n", app.width, app.height, app.bits_per_pixel);
+        fprintf(stderr, "INFO: display size: %d, %d\n", app.openvg.display_width, app.openvg.display_height);
+        fprintf(stderr, "INFO: worker size: %d, %d\n", app.worker_width, app.worker_height);
+        fprintf(stderr, "INFO: output type: %d\n", app.output_type);
     }
 
-    if (create_camera_component(&state)) {
-        fprintf(stderr, "ERROR: Failed to create camera component");
+    if (camera_create(&app)) {
+        fprintf(stderr, "ERROR: camera_create failed\n");
         goto error;
     }
 
-    if (state.output_type == OUTPUT_STREAM) {
-        if (create_encoder_h264(&state)) {
-            fprintf(stderr, "ERROR: Failed to create H264 encoder component");
+    if (app.output_type == OUTPUT_STREAM) {
+        if (camera_create_h264_encoder(&app)) {
+            fprintf(stderr, "ERROR: camera_create_h264_encoder failed\n");
             goto error;
         }
-    } else if (state.output_type == OUTPUT_VNC) {
-#ifdef VNC
-        if (vnc_init(&state)) {
-            fprintf(stderr, "ERROR: Failed to create VNC server");
+    } else if (app.output_type == OUTPUT_RFB) {
+#ifdef RFB
+        if (rfb_init(&app)) {
+            fprintf(stderr, "ERROR: Can't init RFB server");
             goto error;
         }
-#endif //VNC    
+#endif //RFB    
     }
-
 
     while (!is_abort) {
         // ----- fps
@@ -204,112 +220,111 @@ int main_function() {
         clock_gettime(CLOCK_MONOTONIC, &t2);
         float d = (t2.tv_sec + t2.tv_nsec / 1000000000.0) - (t1.tv_sec + t1.tv_nsec / 1000000000.0);
         if (d > 0) {
-            state.video_fps = frame_count / d;
+            app.fps = frame_count / d;
         } else {
-            state.video_fps = frame_count;
+            app.fps = frame_count;
         }
         frame_count++;
         // -----
 
-        utils_get_cpu_load(buffer, &state.cpu);
-        utils_get_memory_load(buffer, &state.memory);
-        utils_get_temperature(buffer, &state.temperature);
+        utils_get_cpu_load(buffer, &app.cpu);
+        utils_get_memory_load(buffer, &app.memory);
+        utils_get_temperature(buffer, &app.temperature);
 
         // every 8th frame
         if ((frame_count & 0b1111) == 0) {
-            fprintf(stderr, "%2.2f (%2.2f) FPS, CPU: %2.1f%%, Memory: %d (%d) kb, T: %.2fC, Objs: %d\n",
-                state.video_fps,
-                state.worker_fps,
-                state.cpu.cpu,
-                state.memory.total_size,
-                state.memory.swap_size,
-                state.temperature.temp,
-                state.worker_objects);
+            fprintf(stderr, "camera: %2.2f detect: %2.2f, rfb: %2.2f FPS, CPU: %2.1f%%, Memory: %d (%d) kb, T: %.2fC, Objs: %d\n",
+                app.fps,
+                app.worker_fps,
+                app.rfb_fps,
+                app.cpu.cpu,
+                app.memory.total_size,
+                app.memory.swap_size,
+                app.temperature.temp,
+                app.worker_objects);
         }
 
 #ifdef OPENVG
         //wait frame from camera
-        sem_wait(&state.buffer_semaphore);
+        sem_wait(&app.buffer_semaphore);
 
-        //pthread_mutex_lock(&state.buffer_mutex);
+        //pthread_mutex_lock(&app.buffer_mutex);
         int value, res;
-        res = sem_getvalue(&state.worker_semaphore, &value);
+        res = sem_getvalue(&app.worker_semaphore, &value);
         if (res) {
             fprintf(stderr, "ERROR: Unable to read value from worker semaphore: %d\n", errno);
             is_abort = 1;
         }
         if (!value) {
-            res = utils_get_worker_buffer(&state);
+            res = utils_get_worker_buffer(&app);
             if (res) {
                 fprintf(stderr, "ERROR: cannot get worker buffer, res: %d\n", res);
                 is_abort = 1;
             }
 
-            res = sem_post(&state.worker_semaphore);
+            res = sem_post(&app.worker_semaphore);
             if (res) {
                 fprintf(stderr, "ERROR: Unable to increase worker semaphore\n");
                 is_abort = 1;
             }
         }
 
-        vgWritePixels(  state.openvg.video_buffer.c,
-                        state.video_width << 1,
+        vgWritePixels(  app.openvg.video_buffer.c,
+                        app.width << 1,
                         VG_sRGB_565,
                         0, 0,
-                        state.video_width, state.video_height);
+                        app.width, app.height);
 
         res = vgGetError();
         if (res != 0) {
             fprintf(stderr, "ERROR: Failed to draw image %d\n", res);
         }
-        //pthread_mutex_unlock(&state.buffer_mutex);
+        //pthread_mutex_unlock(&app.buffer_mutex);
         // ------------------------------
 
         VGfloat vg_colour[4] = {1.0f, 1.0f, 1.0f, 1.0f};
 
-        pthread_mutex_lock(&state.buffer_mutex);
-        sprintf(buffer, "%2.2f (%2.2f) FPS, CPU: %2.1f%%, Memory: %d kb, T: %.2fC, Objects: %d",
-            state.video_fps,
-            state.worker_fps,
-            state.cpu.cpu,
-            state.memory.total_size,
-            state.temperature.temp,
-            state.worker_objects);
+        res = pthread_mutex_lock(&app.buffer_mutex);
+        if (res)
+            fprintf(stderr, "ERROR: pthread_mutex_lock failed with code %d\n", res);
 
-        res = openvg_draw_text(&state, 0, 0, buffer, strlen(buffer), 20, vg_colour);
+        sprintf(buffer, "camera: %2.2f detect: %2.2f, rfb: %2.2f FPS, CPU: %2.1f%%, Memory: %d kb, T: %.2fC, Objects: %d",
+            app.fps,
+            app.worker_fps,
+            app.rfb_fps,
+            app.cpu.cpu,
+            app.memory.total_size,
+            app.temperature.temp,
+            app.worker_objects);
+
+        res = openvg_draw_text(&app, 0, 0, buffer, strlen(buffer), 20, vg_colour);
         if (res)
             fprintf(stderr, "ERROR: failed to draw text\n");
 
-        res = openvg_draw_boxes(&state, vg_colour);
+        res = openvg_draw_boxes(&app, vg_colour);
         if (res)
             fprintf(stderr, "ERROR: failed to draw boxes\n");
-        pthread_mutex_unlock(&state.buffer_mutex);
 
-        if (state.output_type == OUTPUT_STREAM) {
-            openvg_read_buffer(&state);
+        res = pthread_mutex_unlock(&app.buffer_mutex);
+        if (res)
+            fprintf(stderr, "ERROR: pthread_mutex_unlock failed with code %d\n", res);
 
-            int size = state.video_width * state.video_height;
-            encode_buffer(&state, state.openvg.video_buffer.c, (size << 1));
-            //encode_buffer(&state, state.worker_buffer_rgb, (size << 1) + size);
-            //encode_buffer(&state, state.worker_buffer_565, (size << 1));
-        } else if (state.output_type == OUTPUT_VNC) {
-#ifdef VNC
-            openvg_read_buffer(&state);
-
-            int size = state.video_width * state.video_height;
-            vnc_process(&state, state.openvg.video_buffer.c, (size << 1));
-#endif //VNC
+        if (app.output_type == OUTPUT_STREAM) {
+            openvg_read_buffer(&app);
+            camera_encode_buffer(&app, app.openvg.video_buffer.c, ((app.width * app.height) << 1));
+        } else if (app.output_type == OUTPUT_RFB) {
+            openvg_read_buffer(&app);
         }
 
         EGLBoolean egl_res;
-        egl_res = eglSwapBuffers(state.openvg.display, state.openvg.surface);
+        egl_res = eglSwapBuffers(app.openvg.display, app.openvg.surface);
         if (egl_res == EGL_FALSE) {
              fprintf(stderr, "ERROR: failed to clear screan: 0x%x\n", egl_res);
         }
 #endif //OPENVG
 
 #ifdef CONTROL
-        control_ssh_key(&state);
+        control_ssh_key(&app);
 #endif // CONTROL
 
         //usleep(TICK_TIME);
@@ -318,65 +333,77 @@ int main_function() {
 
 error:
 #ifdef CONTROL
-    control_destroy(&state);
+    control_destroy(&app);
 #endif //CONTROL
 
-#ifdef VNC
-    vnc_destroy(&state);
-#endif //VNC 
+#ifdef RFB
+    rfb_destroy(&app);
+#endif //RFB 
 
-    destroy_components(&state);
-
-    pthread_join(state.worker_thread, NULL);
-    sem_destroy(&state.worker_semaphore);
-    sem_destroy(&state.buffer_semaphore);
-    pthread_mutex_destroy(&state.buffer_mutex);
-
-    if (state.worker_buffer_rgb) {
-        free(state.worker_buffer_rgb);
+    if (app.output_type == OUTPUT_STREAM) {
+        if (camera_destroy_h264_encoder(&app)) {
+            fprintf(stderr, "ERROR: camera_destroy_h264_encoder failed\n");
+        }
+    }
+    if (camera_destroy(&app)) {
+        fprintf(stderr, "ERROR: camera_destroy failed\n");
     }
 
-    if (state.worker_buffer_565) {
-        free(state.worker_buffer_565);
+    // destroy semaphore and mutex before stop thread to prevent blocking
+    if (sem_destroy(&app.worker_semaphore)) {
+        fprintf(stderr, "ERROR: sem_destroy failed to destroy worker_semaphore with code: %d\n", errno);
+    }
+    if (sem_destroy(&app.buffer_semaphore)) {
+        fprintf(stderr, "ERROR: sem_destroy failed to destroy buffer_semaphore with code: %d\n", errno);
+    }
+    res = pthread_mutex_destroy(&app.buffer_mutex);
+    if (res)
+        fprintf(stderr, "ERROR: pthread_mutex_destroy failed to destroy buffer mutex with code %d\n", res);
+
+
+    if (!app.worker_thread_res) {
+        res = pthread_join(app.worker_thread, NULL);
+        if (res != 0) {
+            fprintf(stderr, "ERROR: Failed to close Worker thread. error: %d\n", res);
+        }
     }
 
-    if (state.worker_boxes) {
-        free(state.worker_boxes);
+    if (app.worker_buffer_rgb) {
+        free(app.worker_buffer_rgb);
     }
 
-    if (state.worker_classes) {
-        free(state.worker_classes);
+    if (app.worker_buffer_565) {
+        free(app.worker_buffer_565);
     }
 
-    if (state.worker_scores) {
-        free(state.worker_scores);
+    if (app.worker_boxes) {
+        free(app.worker_boxes);
+    }
+
+    if (app.worker_classes) {
+        free(app.worker_classes);
+    }
+
+    if (app.worker_scores) {
+        free(app.worker_scores);
     }
 
 #ifdef TENSORFLOW
-    tensorflow_destroy(&state);
+    tensorflow_destroy(&app);
 #elif DARKNET
-    darknet_destroy(&state);
+    darknet_destroy(&app);
 #endif
 
 #ifdef OPENVG
-    openvg_destroy(&state);
-    dispmanx_destroy(&state);
+    openvg_destroy(&app);
+    dispmanx_destroy(&app);
 #endif
 
     return exit_code;
 }
 
-// Handler for sigint signals
-static void signal_handler(int signal_number) {
-    if (signal_number == SIGUSR1) {
-        fprintf(stderr, "INFO: SIGUSR1\n"); 
-    } else {
-        fprintf(stderr, "INFO: Other signal %d\n", signal_number);
-    }
-    is_abort = 1;
-}
-
-int main(int argc, char** argv) {
+int main(int argc, char** argv)
+{
     signal(SIGINT, signal_handler);
 
     h = kh_init(map_str);
@@ -391,5 +418,5 @@ int main(int argc, char** argv) {
     }
 
     kh_destroy(map_str, h);
-    return 0;
+    return exit_code;
 }

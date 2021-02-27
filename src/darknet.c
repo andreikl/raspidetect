@@ -1,7 +1,7 @@
 #include "main.h"
 
-int darknet_process(app_state_t *state) {
-
+int darknet_process(app_state_t *state)
+{
     fprintf(stderr, "DEBUG: darknet start\n");
 
     image im = make_image(state->worker_width, state->worker_height, 3);
@@ -36,7 +36,8 @@ int darknet_process(app_state_t *state) {
     return 0;
 }
 
-int darknet_create(app_state_t *state) {
+int darknet_create(app_state_t *state)
+{
     state->dn.dn_net = load_network(state->config_path, state->model_path, 0);
     if (!state->dn.dn_net) {
         fprintf(stderr, "ERROR: Failed to load Darknet network (config_path: %s, model_path: %s)\n", state->config_path, state->model_path);
@@ -52,7 +53,8 @@ int darknet_create(app_state_t *state) {
     return 0;
 }
 
-void darknet_destroy(app_state_t *state) {
+void darknet_destroy(app_state_t *state)
+{
     if (state->dn.dn_net) {
         free_network(state->dn.dn_net);
     }

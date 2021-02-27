@@ -4,7 +4,7 @@ OPENVG = 1
 TENSORFLOW = 1
 DARKNET = 0
 CONTROL = 1
-VNC = 1
+RFB = 1
 
 EXEC = raspidetect
 OBJDIR = ./obj/
@@ -31,18 +31,16 @@ ifeq ($(CONTROL), 1)
     OBJ += control.o
 endif
 
-ifeq ($(VNC), 1) 
-    COMMON += -DVNC
-    COMMON += `pkg-config --cflags libvncserver`
-    LDFLAGS += `pkg-config --libs libvncserver`
-    OBJ += vnc.o
+ifeq ($(RFB), 1) 
+    COMMON += -DRFB
+    OBJ += rfb.o
 endif
 
 ifeq ($(MMAL), 1) 
     COMMON += -DMMAL
     COMMON += `pkg-config --cflags mmal`
     LDFLAGS += `pkg-config --libs mmal`
-    OBJ += ov5647.o
+    OBJ += camera.o
 endif
 
 ifeq ($(OPENVG), 1) 

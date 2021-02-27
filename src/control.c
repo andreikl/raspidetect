@@ -65,7 +65,8 @@ static int kb_left = 0, kb_up = 0, kb_right = 0, kb_down = 0;
 // 	return c;
 // }
 
-static int utils_kbhit(int *x, int *y, int *z) {
+static int utils_kbhit(int *x, int *y, int *z)
+{
     struct termios original;
     tcgetattr(STDIN_FILENO, &original);
 
@@ -91,7 +92,8 @@ static int utils_kbhit(int *x, int *y, int *z) {
     return characters_buffered;
 }
 
-int control_init(app_state_t *state) {
+int control_init(app_state_t *state)
+{
     //set_mode(1);
 
     int mem_fd = open("/dev/mem", O_RDWR | O_SYNC);
@@ -135,47 +137,56 @@ int control_init(app_state_t *state) {
     return 0;
 }
 
-static void move_forward_start(app_state_t *state) {
+static void move_forward_start(app_state_t *state)
+{
     fprintf(stderr, "INFO: move_forward_start\n");
     GPIO_SET(state->control.gpio) = (1 << GPIO_A1) | (1 << GPIO_B1);
 }
 
-static void move_forward_stop(app_state_t *state) {
+static void move_forward_stop(app_state_t *state)
+{
     fprintf(stderr, "INFO: move_forward_stop\n");
     GPIO_CLR(state->control.gpio) = (1 << GPIO_A1) | (1 << GPIO_B1);
 }
 
-static void move_backwards_start(app_state_t *state) {
+static void move_backwards_start(app_state_t *state)
+{
     fprintf(stderr, "INFO: move_backwards_start\n");
     GPIO_SET(state->control.gpio) = (1 << GPIO_A2) | (1 << GPIO_B2);
 }
 
-static void move_backwards_stop(app_state_t *state) {
+static void move_backwards_stop(app_state_t *state)
+{
     fprintf(stderr, "INFO: move_backwards_stop\n");
     GPIO_CLR(state->control.gpio) = (1 << GPIO_A2) | (1 << GPIO_B2);
 }
 
-static void move_left_start(app_state_t *state) {
+static void move_left_start(app_state_t *state)
+{
     fprintf(stderr, "INFO: move_left_start\n");
     GPIO_SET(state->control.gpio) = (1 << GPIO_A2) | (1 << GPIO_B1);
 }
 
-static void move_left_stop(app_state_t *state) {
+static void move_left_stop(app_state_t *state)
+{
     fprintf(stderr, "INFO: move_left_stop\n");
     GPIO_CLR(state->control.gpio) = (1 << GPIO_A2) | (1 << GPIO_B1);
 }
 
-static void move_right_start(app_state_t *state) {
+static void move_right_start(app_state_t *state)
+{
     fprintf(stderr, "INFO: move_right_start\n");
     GPIO_SET(state->control.gpio) = (1 << GPIO_A1) | (1 << GPIO_B2);
 }
 
-static void move_right_stop(app_state_t *state) {
+static void move_right_stop(app_state_t *state)
+{
     fprintf(stderr, "INFO: move_right_stop\n");
     GPIO_CLR(state->control.gpio) = (1 << GPIO_A1) | (1 << GPIO_B2);
 }
 
-static int control_stop_all(app_state_t *state) {
+static int control_stop_all(app_state_t *state)
+{
     if (kb_left) {
         kb_left = 0;
         move_left_stop(state);
@@ -195,7 +206,8 @@ static int control_stop_all(app_state_t *state) {
     return 0;
 }
 
-int control_ssh_key(app_state_t *state) {
+int control_ssh_key(app_state_t *state)
+{
     int x;
     int y;
     int z;
@@ -259,7 +271,8 @@ int control_ssh_key(app_state_t *state) {
     return 0;
 }
 
-int control_vnc_key(app_state_t *state, int down, int key) {
+int control_vnc_key(app_state_t *state, int down, int key)
+{
     int is_left = 0, is_up = 0, is_right = 0, is_down = 0;
     if (key == 65361) {
         is_left = 1;
@@ -301,6 +314,8 @@ int control_vnc_key(app_state_t *state, int down, int key) {
     return 0;
 }
 
-int control_destroy(app_state_t *state) {
-    return control_stop_all(state);
+int control_destroy(app_state_t *state)
+{
+    int res = control_stop_all(state);
+    return res;
 }

@@ -39,7 +39,8 @@ static VGfloat openvg_adjustments_y[CHAR_COUNT_MAX];
 
 static openvg_font_cache_entry_t *openvg_fonts = NULL;
 
-static void convert_contour(const FT_Vector *points, const char *tags, short points_count) {
+static void convert_contour(const FT_Vector *points, const char *tags, short points_count)
+{
    int first_coords = openvg_coords_count;
 
    int first = 1;
@@ -133,8 +134,8 @@ static void openvg_convert_outline(const FT_Vector *points,
                             const char *tags,
                             const short *contours,
                             short contours_count,
-                            short points_count) {
-
+                            short points_count)
+{
    openvg_segments_count = 0;
    openvg_coords_count = 0;
 
@@ -150,7 +151,8 @@ static void openvg_convert_outline(const FT_Vector *points,
    assert(openvg_coords_count <= COORDS_COUNT_MAX);
 }
 
-static int openvg_font_convert_glyphs(openvg_font_t *font, unsigned int char_height) {
+static int openvg_font_convert_glyphs(openvg_font_t *font, unsigned int char_height)
+{
     int res;
     res = FT_Set_Char_Size(font->ft_face, 0, char_height, 0, 0);
     if (res) {
@@ -203,7 +205,8 @@ static int openvg_font_convert_glyphs(openvg_font_t *font, unsigned int char_hei
 }
 
 // Find a font in cache, or create a new entry in the cache.
-static openvg_font_t *openvg_find_font(app_state_t *state, const char *text, uint32_t text_size) {
+static openvg_font_t *openvg_find_font(app_state_t *state, const char *text, uint32_t text_size)
+{
     int ptsize = text_size << 6; // freetype takes size in points, in 26.6 format.
 
     openvg_font_cache_entry_t *font = openvg_fonts;
@@ -266,7 +269,8 @@ memory:
 }
 
 // Draws the characters from text
-static void openvg_draw_chars(openvg_font_t *font, const char *text, int char_count) {
+static void openvg_draw_chars(openvg_font_t *font, const char *text, int char_count)
+{
     // Put in first character
     openvg_glyph_indices[0] = FT_Get_Char_Index(font->ft_face, text[0]);
     int prev_glyph_index = openvg_glyph_indices[0];
@@ -297,7 +301,8 @@ static void openvg_draw_chars(openvg_font_t *font, const char *text, int char_co
     vgDrawGlyphs(font->vg_font, char_count, openvg_glyph_indices, openvg_adjustments_x, openvg_adjustments_y, VG_FILL_PATH, VG_FALSE);
 }
 
-int dispmanx_init(app_state_t *state) {
+int dispmanx_init(app_state_t *state)
+{
     int res;
     res = graphics_get_display_size(0, &state->openvg.display_width, &state->openvg.display_height);
     if (res < 0) {
@@ -354,7 +359,8 @@ int dispmanx_init(app_state_t *state) {
     return 0;
 }
 
-void dispmanx_destroy(app_state_t *state) {
+void dispmanx_destroy(app_state_t *state)
+{
     DISPMANX_UPDATE_HANDLE_T current_update = vc_dispmanx_update_start(0);
     if (current_update != 0) {
         int res = vc_dispmanx_element_remove(current_update, state->openvg.u.native_window.element);
@@ -368,7 +374,8 @@ void dispmanx_destroy(app_state_t *state) {
     }
 }
 
-int openvg_init(app_state_t *state) {
+int openvg_init(app_state_t *state)
+{
     EGLBoolean egl_res;
 
     state->openvg.display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
@@ -441,7 +448,7 @@ int openvg_init(app_state_t *state) {
         return -1;
     }
 
-    state->openvg.video_buffer.c = malloc((state->video_width * state->video_height) << 1);
+    state->openvg.video_buffer.c = malloc((state->width * state->height) << 1);
     if (!state->openvg.video_buffer.c) {
         fprintf(stderr, "ERROR: Failed to allocate memory for video buffer\n");
         return -1;
@@ -462,7 +469,8 @@ int openvg_init(app_state_t *state) {
     return 0;
 }
 
-void openvg_destroy(app_state_t *state) {
+void openvg_destroy(app_state_t *state)
+{
     if (state->openvg.video_buffer.c) {
         free(state->openvg.video_buffer.c);
     }
@@ -496,14 +504,14 @@ void openvg_destroy(app_state_t *state) {
 }
 
 // Render text.
-int openvg_draw_text(   app_state_t *state,
+int openvg_draw_text(app_state_t *state,
                         float x,
                         float y,
                         const char *text,
                         uint32_t text_length,
                         uint32_t text_size,
-                        VGfloat colour[4]) {
-
+                        VGfloat colour[4])
+{
     openvg_font_t *font = openvg_find_font(state, text, text_size);
     if (!font)
         return -1;
@@ -551,7 +559,8 @@ int openvg_draw_text(   app_state_t *state,
     return 0;
 }
 
-int openvg_draw_boxes(app_state_t *state, VGfloat colour[4]) {
+int openvg_draw_boxes(app_state_t *state, VGfloat colour[4])
+{
     VGPath path = vgCreatePath(VG_PATH_FORMAT_STANDARD,
         VG_PATH_DATATYPE_F,
         1.0f,
@@ -573,10 +582,10 @@ int openvg_draw_boxes(app_state_t *state, VGfloat colour[4]) {
         if(state->worker_scores[i] > THRESHOLD) {
             n++;
             float *box = &state->worker_boxes[i * 4];
-            int x1 = box[0] * state->video_width;
-            int y1 = state->video_height - box[0] * state->video_height;
-            int x2 = box[2] * state->video_width;
-            int y2 = state->video_height - box[3] * state->video_height;
+            int x1 = box[0] * state->width;
+            int y1 = state->height - box[0] * state->height;
+            int x2 = box[2] * state->width;
+            int y2 = state->height - box[3] * state->height;
             vguRect(path, x1, y1, x2 - x1, y1 - y2);
         }
     }
@@ -599,17 +608,18 @@ int openvg_draw_boxes(app_state_t *state, VGfloat colour[4]) {
 #define RB_555_MASK      (0b00000000000111110000000000011111)
 #define G_555_MASK       (0b01111111111000000111111111100000)
 
-int openvg_read_buffer(app_state_t *state) {
+int openvg_read_buffer(app_state_t *state)
+{
     vgReadPixels(state->openvg.video_buffer.c,
-                state->video_width << 1,
+                state->width << 1,
                 VG_sRGB_565,
                 0, 0,
-                state->video_width, state->video_height);
+                state->width, state->height);
 
 #if defined(ENV32BIT)
-    int i = state->video_height >> 1;
-    int w = state->video_width >> 1, wb = state->video_width << 1;
-    int *start_ptr = state->openvg.video_buffer.i, *end_ptr = &state->openvg.video_buffer.i[w * (state->video_height - 1)];
+    int i = state->height >> 1;
+    int w = state->width >> 1, wb = state->width << 1;
+    int *start_ptr = state->openvg.video_buffer.i, *end_ptr = &state->openvg.video_buffer.i[w * (state->height - 1)];
     int* t = malloc(wb);
     while (i) {
         memcpy(t, start_ptr, wb);
@@ -621,13 +631,13 @@ int openvg_read_buffer(app_state_t *state) {
     }
     free(t);
 
-    start_ptr = state->openvg.video_buffer.i; end_ptr = &state->openvg.video_buffer.i[(state->video_height * w) - 1];
+    /*start_ptr = state->openvg.video_buffer.i; end_ptr = &state->openvg.video_buffer.i[(state->height * w) - 1];
     int v;
     while (end_ptr != start_ptr) {
         v = *start_ptr;
         *start_ptr = ((v >> 1) & G_555_MASK) | (v & RB_555_MASK);
         start_ptr++;
-    }
+    }*/
 
     return 0;
 #else

@@ -1,0 +1,23 @@
+{
+    "configurations": [
+        {
+            "name": "Win32",
+            "includePath": [
+                "${workspaceFolder}/src",
+                "${workspaceFolder}/**"
+
+            ],
+            "defines": [
+                "ENABLE_RFB",
+                "ENABLE_D3D",
+                "ENABLE_DXVA",
+                "ENABLE_H264"                
+            ],
+            "compilerPath": "C:\\msys64\\mingw64\bin\\gcc.exe",
+            "cStandard": "c11",
+            "cppStandard": "gnu++14",
+            "intelliSenseMode": "clang-x64"
+        }
+    ],
+    "version": 4
+}

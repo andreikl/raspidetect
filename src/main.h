@@ -5,6 +5,8 @@
 #define WIDTH_DEF 640
 #define HEIGHT "-h"
 #define HEIGHT_DEF 480
+#define PORT "-p"
+#define PORT_DEF 5900
 #define HELP "--help"
 
 #define WORKER_WIDTH "-ww"
@@ -12,7 +14,7 @@
 #define WORKER_HEIGHT "-wh"
 #define WORKER_HEIGHT_DEF 300
 
-#define APP_NAME "raspidetect"
+#define APP_NAME "raspidetect\0"
 #define INPUT "-i"
 #define INPUT_DEF "camera"
 #define OUTPUT "-o"
@@ -26,7 +28,7 @@
 #define DN_CONFIG_PATH "-c"
 #define DN_CONFIG_PATH_DEF "./dn_models/yolov3-tiny.cfg"
 #define ARG_STREAM "-"
-#define ARG_VNC "vnc"
+#define ARG_RFB "rfb"
 #define ARG_NONE "none"
 
 #define THRESHOLD 0.5
@@ -102,6 +104,15 @@ typedef struct {
     MMAL_POOL_T *h264_input_pool;
     MMAL_PORT_T *h264_output_port;
     MMAL_POOL_T *h264_output_pool;
+
+    char *h264_buffer;
+    int32_t h264_buffer_length;
+    pthread_mutex_t h264_mutex;
+    int is_h264_mutex;
+
+    sem_t h264_semaphore;
+    int is_h264_semaphore;
+
 } mmal_state_t;
 #endif //MMAL
 
@@ -167,40 +178,45 @@ typedef struct {
 } control_state_t;
 #endif //CONTROL
 
-#ifdef VNC
-#include <rfb/rfb.h>
+#ifdef RFB
 typedef struct {
-    rfbScreenInfoPtr server;
-} vnc_state_t;
-#endif //VNC
+    pthread_t thread;
+    int thread_res;
+    int serv_socket;
+    int client_socket;
+} rfb_state_t;
+#endif //RFB
 
 typedef enum {
     OUTPUT_NONE,
     OUTPUT_STREAM,
-    OUTPUT_VNC
+    OUTPUT_RFB
 } output_enum_t;
 
 typedef struct {
     // common properties
-    int video_width;
-    int video_height;
-    int video_bytes_per_pixel;
-    float video_fps;
+    int width;
+    int height;
+    int bits_per_pixel;
+    int port;
     char *filename;                     // name of output file
+    float fps;
     int verbose;                        // debug
     output_enum_t output_type;
     char* model_path;
     char* config_path;
     volatile unsigned *gpio;
+    float rfb_fps;
 
     pthread_mutex_t buffer_mutex;
     sem_t buffer_semaphore;
 
     sem_t worker_semaphore;
     pthread_t worker_thread;
+    int worker_thread_res;
     int worker_width;
     int worker_height;
-    int worker_bytes_per_pixel;
+    int worker_bits_per_pixel;
     char *worker_buffer_565;
     char *worker_buffer_rgb;
     int worker_objects;
@@ -228,8 +244,8 @@ typedef struct {
     openvg_state_t openvg;
 #endif
 
-#ifdef VNC
-	vnc_state_t vnc;
+#ifdef RFB
+	rfb_state_t rfb;
 #endif
 
     temperature_state_t temperature;

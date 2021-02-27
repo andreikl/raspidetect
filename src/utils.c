@@ -10,7 +10,8 @@
 KHASH_MAP_INIT_STR(map_str, char *)
 extern khash_t(map_str) *h;
 
-void utils_parse_args(int argc, char** argv) {
+void utils_parse_args(int argc, char** argv)
+{
     int ret;
     unsigned k;
 
@@ -22,13 +23,15 @@ void utils_parse_args(int argc, char** argv) {
     }
 }
 
-void utils_print_help(void) {
+void utils_print_help(void)
+{
     printf("ov5647 [options]\n");
     printf("options:\n");
     printf("\n");
     printf("%s: help\n", HELP);
     printf("%s: width, default: %d\n", WIDTH, WIDTH_DEF);
     printf("%s: height, default: %d\n", HEIGHT, HEIGHT_DEF);
+    printf("%s: port, default: %d\n", PORT, PORT_DEF);
     printf("%s: worke_width, default: %d\n", WORKER_WIDTH, WORKER_WIDTH_DEF);
     printf("%s: worker_height, default: %d\n", WORKER_HEIGHT, WORKER_HEIGHT_DEF);
     printf("%s: TFL model path, default: %s\n", TFL_MODEL_PATH, TFL_MODEL_PATH_DEF);    
@@ -36,24 +39,30 @@ void utils_print_help(void) {
     printf("%s: DN config path, default: %s\n", DN_CONFIG_PATH, DN_CONFIG_PATH_DEF);    
     printf("%s: input, default: %s\n", INPUT, INPUT_DEF);
     printf("%s: output, default: %s\n", OUTPUT, OUTPUT_DEF);
-    printf("\toptions: "ARG_STREAM" - output stream, "ARG_VNC" - output vnc, "ARG_NONE"\n");
+    printf("\toptions: "ARG_STREAM" - output stream, "ARG_RFB" - output rfb, "ARG_NONE"\n");
     printf("%s: verbose, verbose: %d\n", VERBOSE, VERBOSE_DEF);
     exit(0);
 }
 
-void utils_default_status(app_state_t *state) {
+void utils_default_status(app_state_t *state)
+{
     memset(state, 0, sizeof(app_state_t));
 
     int width = utils_read_int_value(WIDTH, WIDTH_DEF);
     int height = utils_read_int_value(HEIGHT, HEIGHT_DEF);
-    state->video_width = (width / 32 * 32) + (width % 32? 32: 0);
-    state->video_height = (height / 16 * 16) + (height % 16? 16: 0);
-    state->video_bytes_per_pixel = 2;
+    state->width = (width / 32 * 32) + (width % 32? 32: 0);
+    state->height = (height / 16 * 16) + (height % 16? 16: 0);
+    state->bits_per_pixel = 16;
+    state->port = utils_read_int_value(PORT, PORT_DEF);
     state->worker_width = utils_read_int_value(WORKER_WIDTH, WORKER_WIDTH_DEF);
     state->worker_height = utils_read_int_value(WORKER_HEIGHT, WORKER_HEIGHT_DEF);
-    state->worker_bytes_per_pixel = 3;
+    state->worker_bits_per_pixel = 24;
     state->worker_total_objects = 10;
+    state->worker_thread_res = -1;
     state->verbose = utils_read_int_value(VERBOSE, VERBOSE_DEF);
+#ifdef RFB
+    state->rfb.thread_res = -1;
+#endif
 #ifdef TENSORFLOW
     state->model_path = utils_read_str_value(TFL_MODEL_PATH, TFL_MODEL_PATH_DEF);
 #elif DARKNET
@@ -63,12 +72,13 @@ void utils_default_status(app_state_t *state) {
     char *output = utils_read_str_value(OUTPUT, OUTPUT_DEF);
     if (strcmp(output, ARG_STREAM) == 0) {
         state->output_type = OUTPUT_STREAM;
-    } else if (strcmp(output, ARG_VNC) == 0) {
-        state->output_type = OUTPUT_VNC;
+    } else if (strcmp(output, ARG_RFB) == 0) {
+        state->output_type = OUTPUT_RFB;
     }
 }
 
-char *utils_read_str_value(const char *name, char *def_value) {
+char *utils_read_str_value(const char *name, char *def_value)
+{
     unsigned k = kh_get(map_str, h, name);
     if (k != kh_end(h)) {
         return kh_val(h, k);
@@ -76,7 +86,8 @@ char *utils_read_str_value(const char *name, char *def_value) {
     return def_value;
 }
 
-int utils_read_int_value(const char name[], int def_value) {
+int utils_read_int_value(const char name[], int def_value)
+{
     unsigned k = kh_get(map_str, h, name);
     if (k != kh_end(h)) {
         const char* value = kh_val(h, k);
@@ -85,7 +96,8 @@ int utils_read_int_value(const char name[], int def_value) {
     return def_value;
 }
 
-int utils_fill_buffer(const char *path, char *buffer, int buffer_size, size_t *read) {
+int utils_fill_buffer(const char *path, char *buffer, int buffer_size, size_t *read)
+{
     FILE *fstream = fopen(path, "r");
 
     if (fstream == NULL) {
@@ -109,7 +121,8 @@ int utils_fill_buffer(const char *path, char *buffer, int buffer_size, size_t *r
     return 0;
 }
 
-/*static unsigned char * read_file(const char *path, int *size) {
+/*static unsigned char * read_file(const char *path, int *size)
+{
     unsigned char buffer[BUFFER_SIZE];
     FILE *fstream;
     size_t read;
@@ -143,7 +156,8 @@ int utils_fill_buffer(const char *path, char *buffer, int buffer_size, size_t *r
     return data;
 }*/
 
-void *utils_read_file(const char *path, size_t *len) {
+void *utils_read_file(const char *path, size_t *len)
+{
     FILE *fstream = NULL;
 
     if (path[0] == '-') {
@@ -188,7 +202,8 @@ fail_open:
     return NULL;
 }
 
-void utils_write_file(const char *path, unsigned char *data, int width, int height) {
+void utils_write_file(const char *path, unsigned char *data, int width, int height)
+{
     FILE* fstream;
     size_t written;
     unsigned char buffer[BUFFER_SIZE];
@@ -247,7 +262,8 @@ void utils_write_file(const char *path, unsigned char *data, int width, int heig
 #endif
 }
 
-void utils_get_cpu_load(char * buffer, cpu_state_t *state) {
+void utils_get_cpu_load(char * buffer, cpu_state_t *state)
+{
     utils_fill_buffer("/proc/stat", buffer, BUFFER_SIZE, NULL);
 
     int user, nice, system, idle;
@@ -264,7 +280,8 @@ void utils_get_cpu_load(char * buffer, cpu_state_t *state) {
 }
 
 
-void utils_get_memory_load(char * buffer, memory_state_t *state) {
+void utils_get_memory_load(char * buffer, memory_state_t *state)
+{
 //  VmPeak                      peak virtual memory size
 //  VmSize                      total program size
 //  VmLck                       locked memory size
@@ -307,25 +324,30 @@ void utils_get_memory_load(char * buffer, memory_state_t *state) {
     }
 }
 
-void utils_get_temperature(char * buffer, temperature_state_t *state) {
+void utils_get_temperature(char * buffer, temperature_state_t *state)
+{
     utils_fill_buffer("/sys/class/thermal/thermal_zone0/temp", buffer, BUFFER_SIZE, NULL);
 
     state->temp = (float)(atoi(buffer)) / 1000;
 }
 
-static float lerpf(float s, float e, float t) {
+static float lerpf(float s, float e, float t)
+{
     return s + (e - s) * t;
 }
 
-static float lerp(int s, int e, float t) {
+static float lerp(int s, int e, float t)
+{
     return s + (e - s) * t;
 }
 
-static float blerp(int c00, int c10, int c01, int c11, float tx, float ty) {
+static float blerp(int c00, int c10, int c01, int c11, float tx, float ty)
+{
     return lerpf(lerp(c00, c10, tx), lerp(c01, c11, tx), ty);
 }
 
-static int resize_li_16(int *src, int src_width, int src_height, int *dst, int dst_width, int dst_height) {
+static int resize_li_16(int *src, int src_width, int src_height, int *dst, int dst_width, int dst_height)
+{
 #if defined(ENV32BIT)
     int dw = dst_width >> 1;
     int sw = src_width >> 1;
@@ -483,12 +505,13 @@ static int resize_li_16(int *src, int src_width, int src_height, int *dst, int d
 #endif
 }
 
-int utils_get_worker_buffer(app_state_t *state) {
+int utils_get_worker_buffer(app_state_t *state)
+{
 #ifdef OPENCV
-    CvMat *img1 = cvCreateMatHeader(state->video_width,
-                                    state->video_height,
+    CvMat *img1 = cvCreateMatHeader(state->width,
+                                    state->height,
                                     CV_8UC2);
-    cvSetData(img1, state->openvg.video_buffer, state->video_width << 1);
+    cvSetData(img1, state->openvg.video_buffer, state->width << 1);
 
     CvMat *img2 = cvCreateMatHeader(state->worker_width,
                                     state->worker_height,
@@ -501,8 +524,8 @@ int utils_get_worker_buffer(app_state_t *state) {
     cvRelease(&img2);
 #else
     int res = resize_li_16(state->openvg.video_buffer.i,
-                state->video_width,
-                state->video_height,
+                state->width,
+                state->height,
                 (int*)state->worker_buffer_565,
                 state->worker_width,
                 state->worker_height);
@@ -514,18 +537,18 @@ int utils_get_worker_buffer(app_state_t *state) {
     // openvg implementation
     // vgImageSubData(state->openvg.video_image,
     //             state->openvg.video_buffer,
-    //             state->video_width << 1,
+    //             state->width << 1,
     //             VG_sRGB_565,
     //             0, 0,
-    //             state->video_width, state->video_height);
+    //             state->width, state->height);
 
     // vgSeti(VG_MATRIX_MODE, VG_MATRIX_IMAGE_USER_TO_SURFACE);
     // vgLoadIdentity();
-    // vgScale(((float)state->worker_width) / state->video_width, ((float)state->worker_height) / state->video_height);
+    // vgScale(((float)state->worker_width) / state->width, ((float)state->worker_height) / state->height);
     // vgDrawImage(state->openvg.video_image);
 
     // vgReadPixels(   state->worker_buffer_565,
-    //                 state->video_width << 1,
+    //                 state->width << 1,
     //                 VG_sRGB_565,
     //                 0, 0,
     //                 state->worker_width, state->worker_height);
@@ -562,4 +585,59 @@ int utils_get_worker_buffer(app_state_t *state) {
     return -1;
 #endif
     return 0;
+}
+
+char* get_mmal_message(int result)
+{
+    if (result == MMAL_SUCCESS) {
+        return "MMAL_SUCCESS";
+    }
+    else if (result == MMAL_ENOMEM) {
+        return "MMAL_ENOMEM: Out of memory";
+    }
+    else if (result == MMAL_ENOSPC) {
+        return "MMAL_ENOSPC: Out of resources (other than memory)";
+    }
+    else if (result == MMAL_EINVAL) {
+        return "MMAL_EINVAL: Argument is invalid";
+    }
+    else if (result == MMAL_ENOSYS) {
+        return "MMAL_ENOSYS: Function not implemented";
+    }
+    else if (result == MMAL_ENOENT) {
+        return "MMAL_ENOENT: No such file or directory";
+    }
+    else if (result == MMAL_ENXIO) {
+        return "MMAL_ENXIO: No such device or address";
+    }
+    else if (result == MMAL_EIO) {
+        return "MMAL_EIO: I/O error";
+    }
+    else if (result == MMAL_ESPIPE) {
+        return "MMAL_ESPIPE: Illegal seek";
+    }
+    else if (result == MMAL_ECORRUPT) {
+        return "MMAL_ECORRUPT: Data is corrupt";
+    }
+    else if (result == MMAL_ENOTREADY) {
+        return "MMAL_ENOTREADY: Component is not ready";
+    }
+    else if (result == MMAL_ECONFIG) {
+        return "MMAL_ECONFIG: Component is not configured";
+    }
+    else if (result == MMAL_EISCONN) {
+        return "MMAL_EISCONN: Port is already connected";
+    }
+    else if (result == MMAL_ENOTCONN) {
+        return "MMAL_ENOTCONN: Port is disconnected";
+    }
+    else if (result == MMAL_EAGAIN) {
+        return "MMAL_EAGAIN: Resource temporarily unavailable. Try again later";
+    }
+    else if (result == MMAL_EFAULT) {
+        return "MMAL_EFAULT: Bad address";
+    }
+    else {
+        return "UNKNOWN";
+    }
 }

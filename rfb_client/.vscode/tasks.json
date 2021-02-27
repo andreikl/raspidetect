@@ -1,0 +1,22 @@
+{
+    // See https://go.microsoft.com/fwlink/?LinkId=733558
+    // for the documentation about the tasks.json format
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "build",
+            "type": "process",
+            "command": "mingw32-make",
+            "args": [
+            ],
+            "group": "build",
+            "presentation": {
+                "reveal": "always"
+            },
+            // Use the standard MS compiler pattern to detect errors, warnings and infos
+            //"problemMatcher": "$msCompile"
+            //"problemMatcher": "$gcc"
+            "problemMatcher": []
+        }
+    ]
+}

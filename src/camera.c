@@ -1,9 +1,11 @@
 #include "main.h"
-#include "ov5647.h"
+#include "utils.h"
+#include "camera.h"
 
 extern int is_abort;
 
-int get_sensor_defaults(int camera_num, char *camera_name, int *width, int *height ) {
+int camera_get_defaults(int camera_num, char *camera_name, int *width, int *height )
+{
     MMAL_COMPONENT_T *camera_info;
     MMAL_STATUS_T status;
 
@@ -36,46 +38,68 @@ int get_sensor_defaults(int camera_num, char *camera_name, int *width, int *heig
     return 0;
 }
 
-void control_callback(MMAL_PORT_T *port, MMAL_BUFFER_HEADER_T *buffer) {
-    MMAL_STATUS_T status;
-    app_state_t *state = (app_state_t *) port->userdata;
+static void control_callback(MMAL_PORT_T *port, MMAL_BUFFER_HEADER_T *buffer)
+{
+    int res;
+    app_state_t *app = (app_state_t *) port->userdata;
 
     mmal_buffer_header_mem_lock(buffer);
-    memcpy(state->openvg.video_buffer.c, buffer->data, buffer->length);
+    memcpy(app->openvg.video_buffer.c, buffer->data, buffer->length);
     mmal_buffer_header_mem_unlock(buffer);
     mmal_buffer_header_release(buffer);
 
-    sem_post(&state->buffer_semaphore);
+    sem_post(&app->buffer_semaphore);
 
     // and send one back to the port (if still open)
     if (port->is_enabled && !is_abort) {
-        MMAL_BUFFER_HEADER_T *new_buffer = mmal_queue_get(state->mmal.video_port_pool->queue);
+        MMAL_BUFFER_HEADER_T *new_buffer = mmal_queue_get(app->mmal.video_port_pool->queue);
         if (new_buffer) {
-            status = mmal_port_send_buffer(port, new_buffer);
-        }
+            res = mmal_port_send_buffer(port, new_buffer);
+            if (res) {
+                fprintf(stderr, "ERROR: mmal_port_send_buffer failed to send buffer to video port with error: %d\n", res);
+            }
 
-        if (!new_buffer || status != MMAL_SUCCESS) {
-            fprintf(stderr, "ERROR: can't return a buffer to the video port\n");
         }
     }
 }
 
-void h264_input_buffer_callback(MMAL_PORT_T *port, MMAL_BUFFER_HEADER_T *buffer) {
-    app_state_t *state = (app_state_t *) port->userdata;
-    if (state->verbose) {
+static void h264_input_buffer_callback(MMAL_PORT_T *port, MMAL_BUFFER_HEADER_T *buffer)
+{
+    app_state_t *app = (app_state_t *) port->userdata;
+    if (app->verbose) {
     //    fprintf(stderr, "h264_input_buffer_callback: %s\n", __func__);
     }
     mmal_buffer_header_release(buffer);
 }
 
-void h264_output_buffer_callback(MMAL_PORT_T *port, MMAL_BUFFER_HEADER_T *buffer) {
+static void h264_output_buffer_callback(MMAL_PORT_T *port, MMAL_BUFFER_HEADER_T *buffer)
+{
+    int res;
     MMAL_BUFFER_HEADER_T *new_buffer;
-    app_state_t *state = (app_state_t *) port->userdata;
-    MMAL_POOL_T *pool = state->mmal.h264_output_pool;
+    app_state_t *app = (app_state_t *) port->userdata;
+    MMAL_POOL_T *pool = app->mmal.h264_output_pool;
+
+    res = pthread_mutex_lock(&app->mmal.h264_mutex);
+    if (res)
+        fprintf(stderr, "ERROR: pthread_mutex_lock failed to lock h264 buffer with code %d\n", res);
 
     mmal_buffer_header_mem_lock(buffer);
-    fwrite(buffer->data, 1, buffer->length, stdout);
+    memcpy(app->mmal.h264_buffer, buffer->data, buffer->length);
+    app->mmal.h264_buffer_length = buffer->length;
     mmal_buffer_header_mem_unlock(buffer);
+
+    if (app->output_type == OUTPUT_STREAM) {
+        fwrite(app->mmal.h264_buffer, 1, app->mmal.h264_buffer_length, stdout);
+    }
+
+    res = pthread_mutex_unlock(&app->mmal.h264_mutex);
+    if (res)
+        fprintf(stderr, "ERROR: pthread_mutex_unlock failed to unlock h264 buffer with code %d\n", res);
+
+    res = sem_post(&app->mmal.h264_semaphore);
+    if (res) {
+        fprintf(stderr, "ERROR: sem_post failed to increase h264 buffer semaphore\n");
+    }
 
     mmal_buffer_header_release(buffer);
     if (port->is_enabled) {
@@ -93,38 +117,45 @@ void h264_output_buffer_callback(MMAL_PORT_T *port, MMAL_BUFFER_HEADER_T *buffer
     }
 }
 
-void fill_port_buffer(MMAL_PORT_T *port, MMAL_POOL_T *pool) {
-    int q;
+static void fill_port_buffer(MMAL_PORT_T *port, MMAL_POOL_T *pool)
+{
     int num = mmal_queue_length(pool->queue);
 
-    for (q = 0; q < num; q++) {
+    for (int q = 0; q < num; q++) {
         MMAL_BUFFER_HEADER_T *buffer = mmal_queue_get(pool->queue);
         if (!buffer) {
             fprintf(stderr, "ERROR: Unable to get a required buffer %d from pool queue\n", q);
-        }
-
-        if (mmal_port_send_buffer(port, buffer) != MMAL_SUCCESS) {
-            fprintf(stderr, "ERROR: Unable to send a buffer to port (%d)\n", q);
+        } else {
+            int res = mmal_port_send_buffer(port, buffer);
+            if (res) {
+                fprintf(stderr, "ERROR: mmal_port_send_buffer failed to send buffer to port with error: %d\n", res);
+            }
         }
     }
 }
 
-void encode_buffer(app_state_t *state, char *buffer, int length) {
-    MMAL_BUFFER_HEADER_T *output_buffer = mmal_queue_get(state->mmal.h264_input_pool->queue);
+int camera_encode_buffer(app_state_t *app, char *buffer, int length)
+{
+    MMAL_BUFFER_HEADER_T *output_buffer = mmal_queue_get(app->mmal.h264_input_pool->queue);
+    int res = -1;
+
     if (output_buffer) {
         memcpy(output_buffer->data, buffer, length);
         output_buffer->length = length;
 
-        if (mmal_port_send_buffer(state->mmal.h264_input_port, output_buffer) != MMAL_SUCCESS) {
-            fprintf(stderr, "ERROR: Unable to send buffer \n");
+        res = mmal_port_send_buffer(app->mmal.h264_input_port, output_buffer);
+        if (res) {
+            fprintf(stderr, "ERROR: mmal_port_send_buffer failed to send buffer to encoder with error(%d, %s)\n", res, get_mmal_message(res));
         }
     }
     else {
         fprintf(stderr, "ERROR: h264 queue returns empty buffer\n");
     }
+    return res;
 }
 
-int create_camera_component(app_state_t *state) {
+int camera_create(app_state_t *app)
+{
     MMAL_PORT_T *video_port = NULL;
     MMAL_POOL_T *video_port_pool = NULL;
     MMAL_ES_FORMAT_T *format;
@@ -142,7 +173,7 @@ int create_camera_component(app_state_t *state) {
     // ----- set camera number
     MMAL_PARAMETER_INT32_T camera_num = {
         { MMAL_PARAMETER_CAMERA_NUM, sizeof(camera_num) },
-        state->mmal.camera_num
+        app->mmal.camera_num
     };
     status = mmal_port_parameter_set(camera->control, &camera_num.hdr);
     if (status != MMAL_SUCCESS) {
@@ -160,20 +191,20 @@ int create_camera_component(app_state_t *state) {
     // -----
 
     // ----- save camera response
-    state->mmal.camera = camera;
-    state->mmal.video_port = video_port = camera->output[MMAL_CAMERA_VIDEO_PORT];
+    app->mmal.camera = camera;
+    app->mmal.video_port = video_port = camera->output[MMAL_CAMERA_VIDEO_PORT];
     // -----
 
     // ----- set up the camera configuration
     {
         MMAL_PARAMETER_CAMERA_CONFIG_T cam_config = {
             { MMAL_PARAMETER_CAMERA_CONFIG, sizeof(cam_config) },
-            .max_stills_w = state->worker_width,
-            .max_stills_h = state->worker_height,
+            .max_stills_w = app->worker_width,
+            .max_stills_h = app->worker_height,
             .stills_yuv422 = 0,
             .one_shot_stills = 0,
-            .max_preview_video_w = state->video_width,
-            .max_preview_video_h = state->video_height,
+            .max_preview_video_w = app->width,
+            .max_preview_video_h = app->height,
             .num_preview_video_frames = 3,
             .stills_capture_circular_buffer_height = 0,
             .fast_preview_resume = 0,
@@ -195,12 +226,12 @@ int create_camera_component(app_state_t *state) {
     format->encoding = MMAL_ENCODING_RGB16;
     //format->encoding = MMAL_ENCODING_RGBA;
     format->encoding_variant = MMAL_ENCODING_RGB16;
-    format->es->video.width = state->video_width;
-    format->es->video.height = state->video_height;
+    format->es->video.width = app->width;
+    format->es->video.height = app->height;
     format->es->video.crop.x = 0;
     format->es->video.crop.y = 0;
-    format->es->video.crop.width = state->video_width;
-    format->es->video.crop.height = state->video_height;
+    format->es->video.crop.width = app->width;
+    format->es->video.crop.height = app->height;
     format->es->video.frame_rate.num = 10;
     format->es->video.frame_rate.den = 1;
     status = mmal_port_format_commit(video_port);
@@ -218,15 +249,15 @@ int create_camera_component(app_state_t *state) {
 
     video_port->buffer_size = video_port->buffer_size_recommended;
     video_port->buffer_num = video_port->buffer_num_recommended;;
-    video_port->userdata = (struct MMAL_PORT_USERDATA_T *)state;
+    video_port->userdata = (struct MMAL_PORT_USERDATA_T *)app;
 
-    // if (state->verbose) {
+    // if (app->verbose) {
     //     fprintf(stderr, "INFO: camera video buffer_size = %d\n", video_port->buffer_size);
     //     fprintf(stderr, "INFO: camera video buffer_num = %d\n", video_port->buffer_num);
     // }
     // ------
 
-    state->mmal.video_port_pool = video_port_pool = (MMAL_POOL_T *) mmal_port_pool_create(video_port,
+    app->mmal.video_port_pool = video_port_pool = (MMAL_POOL_T *) mmal_port_pool_create(video_port,
         video_port->buffer_num,
         video_port->buffer_size);
 
@@ -245,7 +276,7 @@ int create_camera_component(app_state_t *state) {
 
     fill_port_buffer(video_port, video_port_pool);
 
-    if (state->verbose) {
+    if (app->verbose) {
         fprintf(stderr, "INFO: Camera has been created\n");
     }
 
@@ -258,12 +289,49 @@ error:
     return 1;
 }
 
-int create_encoder_h264(app_state_t *state) {
+//  Destroy the camera component
+int camera_destroy(app_state_t *app)
+{
+    int res = 0;
+
+    if (app->mmal.camera) {
+        mmal_component_destroy(app->mmal.camera);
+        app->mmal.camera = NULL;
+    }
+
+    return res;
+}
+
+int camera_create_h264_encoder(app_state_t *app)
+{
+    int res;
     MMAL_STATUS_T status;
     MMAL_COMPONENT_T *encoder = 0;
 
     MMAL_PORT_T *input_port = NULL, *output_port = NULL;
     MMAL_POOL_T *input_port_pool = NULL, *output_port_pool = NULL;
+
+    app->mmal.h264_buffer = malloc((app->width * app->height) << 1);
+    if (app->mmal.h264_buffer == NULL) {
+        fprintf(stderr, "ERROR: malloc failed to allocate memory for h264 buffer.\n");
+        goto error;
+    }
+
+    res = pthread_mutex_init(&app->mmal.h264_mutex, NULL);
+    if (res) {
+        fprintf(stderr, "ERROR: pthread_mutex_init failed to init h264 buffer mutex with code: %d\n", res);
+        goto error;
+    } else {
+        app->mmal.is_h264_mutex = 1;
+    }
+
+    res = sem_init(&app->mmal.h264_semaphore, 0, 0);
+    if (res) {
+	    fprintf(stderr, "ERROR: Failed to create h264 semaphore, return code: %d\n", res);
+        goto error;
+    } else {
+        app->mmal.is_h264_semaphore = 1;
+    }
 
     status = mmal_component_create(MMAL_COMPONENT_DEFAULT_VIDEO_ENCODER, &encoder);
     if (status != MMAL_SUCCESS) {
@@ -271,18 +339,18 @@ int create_encoder_h264(app_state_t *state) {
         goto error;
     }
 
-    state->mmal.h264_input_port = input_port = encoder->input[0];
-    state->mmal.h264_output_port = output_port = encoder->output[0];
+    app->mmal.h264_input_port = input_port = encoder->input[0];
+    app->mmal.h264_output_port = output_port = encoder->output[0];
 
-    mmal_format_copy(input_port->format, state->mmal.video_port->format);
+    mmal_format_copy(input_port->format, app->mmal.video_port->format);
     //input_port->format->encoding = MMAL_ENCODING_RGB24;
     //input_port->format->encoding_variant = MMAL_ENCODING_RGB24;
-    // input_port->format->es->video.width = state->worker_width;
-    // input_port->format->es->video.height = state->worker_height;
+    // input_port->format->es->video.width = app->worker_width;
+    // input_port->format->es->video.height = app->worker_height;
     // input_port->format->es->video.crop.x = 0;
     // input_port->format->es->video.crop.y = 0;
-    // input_port->format->es->video.crop.width = state->worker_width;
-    // input_port->format->es->video.crop.height = state->worker_height;
+    // input_port->format->es->video.crop.width = app->worker_width;
+    // input_port->format->es->video.crop.height = app->worker_height;
     input_port->buffer_size = input_port->buffer_size_recommended;
     input_port->buffer_num = input_port->buffer_num_recommended;
 
@@ -308,7 +376,7 @@ int create_encoder_h264(app_state_t *state) {
         goto error;
     }
 
-    // if (state->verbose) {
+    // if (app->verbose) {
     //     fprintf(stderr, "INFO: encoder h264 input buffer_size = %d\n", input_port->buffer_size);
     //     fprintf(stderr, "INFO: encoder h264 input buffer_num = %d\n", input_port->buffer_num);
 
@@ -316,10 +384,10 @@ int create_encoder_h264(app_state_t *state) {
     //     fprintf(stderr, "INFO: encoder h264 output buffer_num = %d\n", output_port->buffer_num);
     // }
 
-    state->mmal.h264_input_pool = input_port_pool = (MMAL_POOL_T *) mmal_port_pool_create(input_port,
+    app->mmal.h264_input_pool = input_port_pool = (MMAL_POOL_T *) mmal_port_pool_create(input_port,
         input_port->buffer_num,
         input_port->buffer_size);
-    input_port->userdata = (struct MMAL_PORT_USERDATA_T *) state;
+    input_port->userdata = (struct MMAL_PORT_USERDATA_T *) app;
 
     status = mmal_port_enable(input_port, h264_input_buffer_callback);
     if (status != MMAL_SUCCESS) {
@@ -327,10 +395,10 @@ int create_encoder_h264(app_state_t *state) {
         goto error;
     }
 
-    state->mmal.h264_output_pool = output_port_pool = (MMAL_POOL_T *) mmal_port_pool_create(output_port,
+    app->mmal.h264_output_pool = output_port_pool = (MMAL_POOL_T *) mmal_port_pool_create(output_port,
         output_port->buffer_num,
         output_port->buffer_size);
-    output_port->userdata = (struct MMAL_PORT_USERDATA_T *) state;
+    output_port->userdata = (struct MMAL_PORT_USERDATA_T *) app;
 
     status = mmal_port_enable(output_port, h264_output_buffer_callback);
     if (status != MMAL_SUCCESS) {
@@ -339,32 +407,51 @@ int create_encoder_h264(app_state_t *state) {
     }
 
     fill_port_buffer(output_port, output_port_pool);
-    state->mmal.encoder_h264 = encoder;
+    app->mmal.encoder_h264 = encoder;
 
-    if (state->verbose) {
+    if (app->verbose) {
         fprintf(stderr, "INFO: Encoder h264 has been created\n");
     }
-
     return 0;
 
 error:
-    if (encoder)
-        mmal_component_destroy(encoder);
-
+    camera_destroy_h264_encoder(app);
     return 1;
 }
 
-
-
 //  Destroy the camera component
- void destroy_components(app_state_t *state) {
-    if (state->mmal.encoder_h264) {
-        mmal_component_destroy(state->mmal.encoder_h264);
-        state->mmal.encoder_h264 = NULL;
+int camera_destroy_h264_encoder(app_state_t *app)
+{
+    int res = 0;
+
+    if (app->mmal.encoder_h264) {
+        res = mmal_component_destroy(app->mmal.encoder_h264);
+        if (res) {
+            fprintf(stderr, "ERROR: mmal_component_destroy failed to destroy h264 encoder %d\n", res);
+        }
+        app->mmal.encoder_h264 = NULL;
     }
 
-    if (state->mmal.camera) {
-        mmal_component_destroy(state->mmal.camera);
-        state->mmal.camera = NULL;
+    if (app->mmal.h264_buffer != NULL) {
+        free(app->mmal.h264_buffer);
+        app->mmal.h264_buffer = NULL;
     }
+
+    if (app->mmal.is_h264_mutex) {
+        res = pthread_mutex_destroy(&app->mmal.h264_mutex);
+        if (res) {
+            fprintf(stderr, "ERROR: pthread_mutex_destroy failed to destroy h264 buffer mutex with code %d\n", res);
+        }
+        app->mmal.is_h264_mutex = 0;
+    }
+
+    if (app->mmal.is_h264_semaphore) {
+        res = sem_destroy(&app->mmal.h264_semaphore);
+        if (res) {
+            fprintf(stderr, "ERROR: sem_destroy failed to destroy h264 semaphore mutex with code %d\n", res);
+        }
+        app->mmal.is_h264_semaphore = 0;
+    }
+
+    return res;
 }

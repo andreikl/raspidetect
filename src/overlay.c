@@ -1,6 +1,7 @@
 #include "main.h"
 
-int overlay_create(app_state_t *state) {
+int overlay_create(app_state_t *state)
+{
     state->overlay_stride = cairo_format_stride_for_width(CAIRO_FORMAT_ARGB32, state->overlay_width);
     state->overlay_buffer = malloc(state->overlay_stride * state->overlay_height);
     state->cairo_surface = cairo_image_surface_create_for_data(state->overlay_buffer,
@@ -24,7 +25,8 @@ int overlay_create(app_state_t *state) {
     return 0;
 }
 
-void overlay_print(app_state_t *state, const char *text) {
+void overlay_print(app_state_t *state, const char *text)
+{
     pthread_mutex_lock(&state->buffer_mutex);
     cairo_rectangle(state->cairo_context, 0.0, 0.0, state->overlay_width, state->overlay_height);
     cairo_set_source_rgba(state->cairo_context, 0.0, 0.0, 0.0, 1.0);
@@ -41,10 +43,10 @@ void overlay_print(app_state_t *state, const char *text) {
         if(state->worker_scores[i] > THRESHOLD) {
             n++;
             float *box = &state->worker_boxes[i * 4];
-            int x1 = (int)(box[0] * state->video_width);
-            int y1 = (int)(box[0] * state->video_height);
-            int x2 = (int)(box[2] * state->video_width);
-            int y2 = (int)(box[3] * state->video_height);
+            int x1 = (int)(box[0] * state->width);
+            int y1 = (int)(box[0] * state->height);
+            int x2 = (int)(box[2] * state->width);
+            int y2 = (int)(box[3] * state->height);
             cairo_move_to(state->cairo_context, x1, y1);
             cairo_line_to(state->cairo_context, x2, y1);
             cairo_line_to(state->cairo_context, x2, y2);
@@ -58,7 +60,8 @@ void overlay_print(app_state_t *state, const char *text) {
     pthread_mutex_unlock(&state->buffer_mutex);
 }
 
-void overlay_destroy(app_state_t *state) {
+void overlay_destroy(app_state_t *state)
+{
     if (state->cairo_context != NULL) {
         cairo_destroy(state->cairo_context);
     }
@@ -70,11 +73,12 @@ void overlay_destroy(app_state_t *state) {
     }
 }
 
-// void overlay_bitblt() {
+// void overlay_bitblt()
+// {
 //     int32_t* source_data = (int32_t*)buffer->data;
 //     int32_t* dest_data = (int32_t*)output_buffer->data;
 //     int32_t* overlay_data = (int32_t*)state->overlay_buffer;
-//     int size = state->video_width * state->video_height;
+//     int size = state->width * state->height;
 //     uint32_t data_old, data_new, data_overlay, result = 0;
 //     data_old = data_new = source_data[0];
 //     for (int i = 0, xy_index = 0, res_index = 0, bits = 0; i < size; i++, bits += 24) {

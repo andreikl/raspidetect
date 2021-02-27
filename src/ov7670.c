@@ -64,13 +64,15 @@ const char* debug_file;
 // --------------
 
 // Signal handler to quit the program
-void sigint_handler(int signo) {
+void sigint_handler(int signo)
+{
     is_signaled = 1;
 }
 
 
 // Read 16-bits of data from i2c device
-int i2c_read16(int addr, int reg) {
+int i2c_read16(int addr, int reg)
+{
     struct i2c_rdwr_ioctl_data msgset;
     struct i2c_msg iomsgs[2];
     unsigned char wbuf[1], rbuf[2];
@@ -125,7 +127,8 @@ int i2c_read8(int addr, int reg) {
 
 
 // Open I2C bus and check capabilities
-void i2c_open(const char *node) {
+void i2c_open(const char *node)
+{
     int rc;
 
     // Open driver /dev/i2s-1
@@ -142,7 +145,8 @@ void i2c_open(const char *node) {
 }
 
 // Close the I2C driver
-void i2c_close() {
+void i2c_close()
+{
     close(i2c_fd);
     i2c_fd = -1;
 }

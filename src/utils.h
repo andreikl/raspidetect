@@ -51,4 +51,6 @@ void utils_get_temperature(char * buffer, temperature_state_t *state);
 
 int utils_get_worker_buffer(app_state_t *state);
 
+char* get_mmal_message(int result);
+
 #endif //utils_h
