@@ -1,2 +1,0 @@
-test1: ffmpeg.exe ./../rfb_client/t.h264 - work
-test2: ffmpeg.exe 1 ./../rfb_client/t.h264 - doesn't work, expect only slice data
