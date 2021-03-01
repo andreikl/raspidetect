@@ -533,7 +533,11 @@
 #endif //ENABLE_H264
 
 #ifdef ENABLE_FFMPEG
-#include <libavcodec/avcodec.h>
+
+extern "C" {
+    #include <libavcodec/avcodec.h>
+}
+
 #include "ffmpeg.h"
     struct ffmpeg_state_t {
         AVCodec* codec;

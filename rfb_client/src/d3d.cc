@@ -1,6 +1,4 @@
 #include "main.h"
-#include "utils.h"
-#include "d3d.h"
 
 extern int is_terminated;
 
@@ -137,21 +135,26 @@ int d3d_render_frame(struct app_state_t *app)
         ),
         error
     );*/
-    D3D_CALL(IDirect3DDevice9_BeginScene(app->d3d.dev), end_scene);
-    D3D_CALL(
-        IDirect3DDevice9_GetBackBuffer(app->d3d.dev, 0, 0, D3DBACKBUFFER_TYPE_MONO, &backbuffer),
-        end_scene);
+    try {
+        D3D_CALL(IDirect3DDevice9_BeginScene(app->d3d.dev), end_scene);
+        D3D_CALL(
+            IDirect3DDevice9_GetBackBuffer(app->d3d.dev, 0, 0, D3DBACKBUFFER_TYPE_MONO, &backbuffer),
+            end_scene);
 
-    GENERAL_CALL(pthread_mutex_lock(&app->dec_mutex), end_scene);
-    D3D_CALL(
-        IDirect3DDevice9_StretchRect(app->d3d.dev,
-            app->d3d.surfaces[0],
-            NULL,
-            backbuffer,
-            NULL,
-            D3DTEXF_NONE),
-        end_scene);
-    GENERAL_CALL(pthread_mutex_unlock(&app->dec_mutex), end_scene);
+        GENERAL_CALL(pthread_mutex_lock(&app->dec_mutex), end_scene);
+        D3D_CALL(
+            IDirect3DDevice9_StretchRect(app->d3d.dev,
+                app->d3d.surfaces[0],
+                NULL,
+                backbuffer,
+                NULL,
+                D3DTEXF_NONE),
+            end_scene);
+        GENERAL_CALL(pthread_mutex_unlock(&app->dec_mutex), end_scene);
+    }
+    catch (...) {
+        fprintf(stderr, "INFO: exception d3d_render_frame\n");
+    }
 
 end_scene:
     D3D_CALL(IDirect3DDevice9_EndScene(app->d3d.dev), error);
@@ -171,66 +174,64 @@ int d3d_render_image(struct app_state_t *app) {
     int stride_buf = app->server_width;
     int chroma_buf_size = app->server_width * app->server_height;
     int index_d3d = 0, index_buf = 0;
+    int luma_buf_end1, luma_buf_end2;
     D3DLOCKED_RECT d3d_rect;
 
-    fprintf(stderr, "INFO: d3d_render_image: %p(%d)\n", app->dec_buf, app->dec_buf_length);
+    //fprintf(stderr, "INFO: d3d_render_image: %p(%d)\n", app->dec_buf, app->dec_buf_length);
 
-    GENERAL_CALL(pthread_mutex_lock(&app->dec_mutex), exit);
+    try {
+        GENERAL_CALL(pthread_mutex_lock(&app->dec_mutex), exit);
+        D3D_CALL(
+            IDirect3DSurface9_LockRect(app->d3d.surfaces[0], &d3d_rect, NULL, D3DLOCK_DONOTWAIT | D3DLOCK_DISCARD),
+            exit);
+        bytes = (char*)d3d_rect.pBits;
+        stride_d3d = d3d_rect.Pitch;
 
-    fprintf(stderr, "INFO: d3d_render_image: LockRect\n");
+        //fprintf(stderr, "INFO: memcpy: %p(%d)\n", app->dec_buf, app->dec_buf_length);
+        //fprintf(stderr, "INFO:%X%X%X%X\n", app->dec_buf[0], app->dec_buf[1], app->dec_buf[2], app->dec_buf[3]);
+        //fprintf(stderr, "INFO: index_d3d: %d, index_buf: %d, stride_d3d: %d, stride_buf: %d, chroma_buf_size: %d\n",
+        //     index_d3d, index_buf, stride_d3d, stride_buf, chroma_buf_size);
+        for (
+            ;
+            index_buf < chroma_buf_size;
+            index_buf += stride_buf, index_d3d += stride_d3d
+        ) {
+            memcpy(bytes + index_d3d, app->dec_buf + index_buf, stride_buf);
+        }
+        stride_d3d = stride_d3d;
+        stride_buf = stride_buf;
+        luma_buf_end1 = chroma_buf_size + (chroma_buf_size / 2);
+        //fprintf(stderr, "INFO: index_d3d: %d, index_buf: %d, stride_d3d: %d, stride_buf: %d, chroma_buf_size: %d\n",
+        //    index_d3d, index_buf, stride_d3d, stride_buf, luma_buf_end1);
+        for (
+            ;
+            index_buf < luma_buf_end1;
+            index_buf += stride_buf, index_d3d += stride_d3d
+        ) {
+            memcpy(bytes + index_d3d, app->dec_buf + index_buf, stride_buf);
+        }
+        /*index_buf = chroma_buf_size;
+        index_d3d = stride_d3d * app->server_height + stride_d3d * (app->server_height / 4);
+        luma_buf_end2 = chroma_buf_size + (chroma_buf_size / 4);
+        //fprintf(stderr, "INFO: index_d3d: %d, index_buf: %d, stride_d3d: %d, stride_buf: %d, chroma_buf_size: %d\n",
+        //    index_d3d, index_buf, stride_d3d, stride_buf, luma_buf_end1);
+        for (
+            ;
+            index_buf < luma_buf_end2;
+            index_buf += stride_buf, index_d3d += stride_d3d
+        ) {
+            memcpy(bytes + index_d3d, app->dec_buf + index_buf, stride_buf);
+        }*/
 
-    D3D_CALL(
-        IDirect3DSurface9_LockRect(app->d3d.surfaces[0], &d3d_rect, NULL, D3DLOCK_DONOTWAIT),
-        exit);
-    bytes = (char*)d3d_rect.pBits;
-    stride_d3d = d3d_rect.Pitch;
-
-    fprintf(stderr, "INFO: memcpy: %p(%d)\n", app->dec_buf, app->dec_buf_length);
-    //fprintf(stderr, "INFO:%X%X%X%X\n", app->dec_buf[0], app->dec_buf[1], app->dec_buf[2], app->dec_buf[3]);
-    // fprintf(stderr, "INFO: index_d3d: %d, index_buf: %d, stride_d3d: %d, stride_buf: %d, chroma_buf_size: %d\n",
-    //     index_d3d, index_buf, stride_d3d, stride_buf, chroma_buf_size);
-    for (
-        ;
-        index_buf < chroma_buf_size;
-        index_buf += stride_buf, index_d3d += stride_d3d
-    ) {
-        memcpy(bytes + index_d3d, app->dec_buf + index_buf, stride_buf);
+        res = 0;
     }
-    //memcpy(d3d_rect.pBits + index_d3d, app->dec_buf + index_buf, chroma_buf_size / 2);
-    //memcpy(d3d_rect.pBits + index_d3d + chroma_buf_size / 2, app->dec_buf + index_buf, chroma_buf_size / 2);
-    /*stride_d3d = stride_d3d;
-    stride_buf = stride_buf;
-    int luma_buf_end1 = chroma_buf_size + (chroma_buf_size / 2);
-    fprintf(stderr, "INFO: index_d3d: %d, index_buf: %d, stride_d3d: %d, stride_buf: %d, chroma_buf_size: %d\n",
-        index_d3d, index_buf, stride_d3d, stride_buf, luma_buf_end1);
-    for (
-        ;
-        index_buf < luma_buf_end1;
-        index_buf += stride_buf, index_d3d += stride_d3d
-    ) {
-        memcpy(bytes + index_d3d, app->dec_buf + index_buf, stride_buf);
+    catch (...) {
+        fprintf(stderr, "INFO: exception d3d_render_image\n");
     }
-    index_buf = chroma_buf_size;
-    index_d3d = stride_d3d * app->server_height + stride_d3d * (app->server_height / 4);
-    int luma_buf_end2 = chroma_buf_size + (chroma_buf_size / 4);
-    fprintf(stderr, "INFO: index_d3d: %d, index_buf: %d, stride_d3d: %d, stride_buf: %d, chroma_buf_size: %d\n",
-        index_d3d, index_buf, stride_d3d, stride_buf, luma_buf_end1);
-    for (
-        ;
-        index_buf < luma_buf_end2;
-        index_buf += stride_buf, index_d3d += stride_d3d
-    ) {
-        memcpy(bytes + index_d3d, app->dec_buf + index_buf, stride_buf);
-    }*/
-
-    res = 0;
 exit:
 
-    D3D_CALL(IDirect3DSurface9_UnlockRect(app->d3d.surfaces[0]), unlockrect);
-unlockrect:
-
-    GENERAL_CALL(pthread_mutex_unlock(&app->dec_mutex), unlockm);
-unlockm:
+    D3D_CALL(IDirect3DSurface9_UnlockRect(app->d3d.surfaces[0]));
+    GENERAL_CALL(pthread_mutex_unlock(&app->dec_mutex));
 
     return res;
 }

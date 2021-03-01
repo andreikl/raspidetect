@@ -1,7 +1,4 @@
 #include "main.h"
-#include "utils.h"
-#include "dxva.h"
-
 #include "h264.h"
 
 H264_INIT()

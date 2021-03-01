@@ -1,6 +1,4 @@
 #include "main.h"
-#include "utils.h"
-#include "cuda.h"
 
 #include "cuda_helpers.cc"
 
@@ -17,13 +15,14 @@ error:
 
 int cuda_init(app_state_t* app)
 {
-    CUDA_API_CALL(cuInit(0), error);
-
     int gpu_count = 0;
+
+    CUDA_API_CALL(cuInit(0), error);
     CUDA_API_CALL(cuDeviceGetCount(&gpu_count), error);
 
     if (gpu_count <= 0) {
-        fprintf(stderr, "ERROR: Device doesn't have cuda\n%s:%s:%d\n", __FILE__, __FUNCTION__, __LINE__);
+        fprintf(stderr, "ERROR: Device doesn't have cuda\n%s:%s:%d\n",
+            __FILE__, __FUNCTION__, __LINE__);
         goto error;
     }
 
@@ -31,7 +30,8 @@ int cuda_init(app_state_t* app)
     CUDA_API_CALL(cuDeviceGetName(app->cuda.name, sizeof(app->cuda.name), app->cuda.device), error);
 
     if (app->verbose) {
-        fprintf(stderr, "INFO: Cuda device: %s\n%s:%s:%d\n", app->cuda.name, __FILE__, __FUNCTION__, __LINE__);
+        fprintf(stderr, "INFO: Cuda device: %s\n%s:%s:%d\n", app->cuda.name,
+            __FILE__, __FUNCTION__, __LINE__);
     }
    
     CUDA_API_CALL(cuCtxCreate(&app->cuda.context, 0, app->cuda.device), error);
@@ -76,7 +76,7 @@ int cuda_init(app_state_t* app)
     app->cuda.info.display_area.bottom = 480;
     // IN: cudaVideoSurfaceFormat_XXX
     //app->cuda.info.OutputFormat = app->server_chroma;
-    app->cuda.info.OutputFormat = cudaVideoChromaFormat_422;
+    app->cuda.info.OutputFormat = (cudaVideoSurfaceFormat_enum)cudaVideoChromaFormat_422;
     // IN: cudaVideoDeinterlaceMode_XXX
     app->cuda.info.DeinterlaceMode = cudaVideoDeinterlaceMode_Adaptive;
     // IN: Post-processed output width (Should be aligned to 2)

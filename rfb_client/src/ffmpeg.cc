@@ -1,5 +1,9 @@
 #include "main.h"
-#include "utils.h"
+
+extern "C" {
+    #include <libavutil/imgutils.h>
+}
+
 
 void ffmpeg_destroy(struct app_state_t* app)
 {

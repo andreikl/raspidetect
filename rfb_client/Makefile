@@ -1,10 +1,10 @@
 #window rendering
 ENABLE_D3D = 1
-ENABLE_DXVA = 1
+ENABLE_DXVA = 0
 ENABLE_RFB = 1
-ENABLE_H264 = 1
-ENABLE_H264_SLICE = 1
-ENABLE_CUDA = 1
+ENABLE_H264 = 0
+ENABLE_H264_SLICE = 0
+ENABLE_CUDA = 0
 ENABLE_FFMPEG = 1
 
 EXEC = rfb_client
@@ -20,13 +20,15 @@ SRCDIR = ./src/
 
 #CC = arm-linux-gnueabihf-gcc
 #-mcpu=arm6 -mfpu=vfp
-CC = gcc
+#CC = gcc
+CC = g++
 
 LDFLAGS = -Llib/x64 -Llib
 #COBJMACROS - allow c calls
 COMMON = -I../external/klib -DCOBJMACROS
 #-D_POSIX_C_SOURCE=199309L fixes some errors
 #CFLAGS = -pthread -O3 -fPIC -Wall -Wno-implicit-function-declaration -Wno-unused-function -DNDEBUG -std=c17 -D_POSIX_C_SOURCE=199309L
+#-stdlib=libcpp
 CFLAGS = -pthread -O3 -fPIC -Wall -Wno-unused-function -DNDEBUG -std=c++17
 OBJ = main.o utils.o file.o
 
