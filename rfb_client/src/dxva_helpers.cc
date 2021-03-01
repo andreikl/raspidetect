@@ -1,90 +1,90 @@
 static void dxva_print_guid(GUID guid)
 {
-    if (IsEqualGUID(&guid, &DXVA2_ModeH264_A)) {
+    if (IsEqualGUID(guid, DXVA2_ModeH264_A)) {
         fprintf(stderr, "DXVA2_ModeH264_MoComp_NoFGT\n");
     }
-    else if (IsEqualGUID(&guid, &DXVA2_ModeH264_B)) {
+    else if (IsEqualGUID(guid, DXVA2_ModeH264_B)) {
         fprintf(stderr, "DXVA2_ModeH264_MoComp_FGT\n");
     }
-    else if (IsEqualGUID(&guid, &DXVA2_ModeH264_C)) {
+    else if (IsEqualGUID(guid, DXVA2_ModeH264_C)) {
         fprintf(stderr, "DXVA2_ModeH264_IDCT_NoFGT\n");
     }
-    else if (IsEqualGUID(&guid, &DXVA2_ModeH264_D)) {
+    else if (IsEqualGUID(guid, DXVA2_ModeH264_D)) {
         fprintf(stderr, "DXVA2_ModeH264_IDCT_FGT\n");
     }
-    else if (IsEqualGUID(&guid, &DXVA2_ModeH264_E)) {
+    else if (IsEqualGUID(guid, DXVA2_ModeH264_E)) {
         fprintf(stderr, "DXVA2_ModeH264_VLD_NoFGT\n");
     }
-    else if (IsEqualGUID(&guid, &DXVA2_ModeH264_F)) {
+    else if (IsEqualGUID(guid, DXVA2_ModeH264_F)) {
         fprintf(stderr, "DXVA2_ModeH264_VLD_FGT\n");
     }
-    // else if (IsEqualGUID(&guid, &DXVA2_ModeH264_VLD_Stereo_Progressive_NoFGT)) {
+    // else if (IsEqualGUID(guid, DXVA2_ModeH264_VLD_Stereo_Progressive_NoFGT)) {
     //     fprintf(stderr, "DXVA2_ModeH264_VLD_Stereo_Progressive_NoFGT\n");
     // }
-    // else if (IsEqualGUID(&guid, &DXVA2_ModeH264_VLD_Stereo_NoFGT)) {
+    // else if (IsEqualGUID(guid, DXVA2_ModeH264_VLD_Stereo_NoFGT)) {
     //     fprintf(stderr, "DXVA2_ModeH264_VLD_Stereo_NoFGT\n");
     // }
-    // else if (IsEqualGUID(&guid, &DXVA2_ModeHEVC_VLD_Main)) {
+    // else if (IsEqualGUID(guid, DXVA2_ModeHEVC_VLD_Main)) {
     //     fprintf(stderr, "DXVA2_ModeHEVC_VLD_Main\n");
     // }
-    // else if (IsEqualGUID(&guid, &DXVA2_ModeHEVC_VLD_Main10)) {
+    // else if (IsEqualGUID(guid, DXVA2_ModeHEVC_VLD_Main10)) {
     //     fprintf(stderr, "DXVA2_ModeHEVC_VLD_Main10\n");
     // }
-    else if (IsEqualGUID(&guid, &DXVA2_ModeMPEG2_IDCT)) {
+    else if (IsEqualGUID(guid, DXVA2_ModeMPEG2_IDCT)) {
         fprintf(stderr, "DXVA2_ModeMPEG2_IDCT\n");
     }
-    else if (IsEqualGUID(&guid, &DXVA2_ModeMPEG2_MoComp)) {
+    else if (IsEqualGUID(guid, DXVA2_ModeMPEG2_MoComp)) {
         fprintf(stderr, "DXVA2_ModeMPEG2_MoComp\n");
     }
-    else if (IsEqualGUID(&guid, &DXVA2_ModeMPEG2_VLD)) {
+    else if (IsEqualGUID(guid, DXVA2_ModeMPEG2_VLD)) {
         fprintf(stderr, "DXVA2_ModeMPEG2_VLD\n");
     }
-    // else if (IsEqualGUID(&guid, &DXVA2_ModeVC1_PostProc)) {
+    // else if (IsEqualGUID(guid, DXVA2_ModeVC1_PostProc)) {
     //     fprintf(stderr, "DXVA2_ModeVC1_PostProc\n");
     // }
-    // else if (IsEqualGUID(&guid, &DXVA2_ModeVC1_MoComp)) {
+    // else if (IsEqualGUID(guid, DXVA2_ModeVC1_MoComp)) {
     //     fprintf(stderr, "DXVA2_ModeVC1_MoComp\n");
     // }
-    // else if (IsEqualGUID(&guid, &DXVA2_ModeVC1_IDCT)) {
+    // else if (IsEqualGUID(guid, DXVA2_ModeVC1_IDCT)) {
     //     fprintf(stderr, "DXVA2_ModeVC1_IDCT\n");
     // }
-    // else if (IsEqualGUID(&guid, &DXVA2_ModeVC1_VLD)) {
+    // else if (IsEqualGUID(guid, DXVA2_ModeVC1_VLD)) {
     //     fprintf(stderr, "DXVA2_ModeVC1_VLD\n");
     // }
-    // else if (IsEqualGUID(&guid, &DXVA2_ModeWMV8_PostProc)) {
+    // else if (IsEqualGUID(guid, DXVA2_ModeWMV8_PostProc)) {
     //     fprintf(stderr, "DXVA2_ModeWMV8_PostProc\n");
     // }
-    // else if (IsEqualGUID(&guid, &DXVA2_ModeWMV8_MoComp)) {
+    // else if (IsEqualGUID(guid, DXVA2_ModeWMV8_MoComp)) {
     //     fprintf(stderr, "DXVA2_ModeWMV8_MoComp\n");
     // }
-    // else if (IsEqualGUID(&guid, &DXVA2_ModeWMV9_PostProc)) {
+    // else if (IsEqualGUID(guid, DXVA2_ModeWMV9_PostProc)) {
     //     fprintf(stderr, "DXVA2_ModeWMV9_PostProc\n");
     // }
-    // else if (IsEqualGUID(&guid, &DXVA2_ModeWMV9_MoComp)) {
+    // else if (IsEqualGUID(guid, DXVA2_ModeWMV9_MoComp)) {
     //     fprintf(stderr, "DXVA2_ModeWMV9_MoComp\n");
     // }
-    // else if (IsEqualGUID(&guid, &DXVA2_ModeWMV9_IDCT)) {
+    // else if (IsEqualGUID(guid, DXVA2_ModeWMV9_IDCT)) {
     //     fprintf(stderr, "DXVA2_ModeWMV9_IDCT\n");
     // }
-    // else if (IsEqualGUID(&guid, &DXVA2_ModeMPEG2and1_VLD)) {
+    // else if (IsEqualGUID(guid, DXVA2_ModeMPEG2and1_VLD)) {
     //     fprintf(stderr, "DXVA2_ModeMPEG2and1_VLD\n");
     // }
-    // else if (IsEqualGUID(&guid, &DXVA2_ModeMPEG1_VLD)) {
+    // else if (IsEqualGUID(guid, DXVA2_ModeMPEG1_VLD)) {
     //     fprintf(stderr, "DXVA2_ModeMPEG1_VLD\n");
     // }
-    // else if (IsEqualGUID(&guid, &DXVA2_ModeVC1_D2010)) {
+    // else if (IsEqualGUID(guid, DXVA2_ModeVC1_D2010)) {
     //     fprintf(stderr, "DXVA2_ModeVC1_D2010\n");
     // }
-    // else if (IsEqualGUID(&guid, &DXVA2_ModeMPEG4pt2_VLD_Simple)) {
+    // else if (IsEqualGUID(guid, DXVA2_ModeMPEG4pt2_VLD_Simple)) {
     //     fprintf(stderr, "DXVA2_ModeMPEG4pt2_VLD_Simple\n");
     // }
-    // else if (IsEqualGUID(&guid, &DXVA2_ModeMPEG4pt2_VLD_AdvSimple_NoGMC)) {
+    // else if (IsEqualGUID(guid, DXVA2_ModeMPEG4pt2_VLD_AdvSimple_NoGMC)) {
     //     fprintf(stderr, "DXVA2_ModeMPEG4pt2_VLD_AdvSimple_NoGMC\n");
     // }
-    // else if (IsEqualGUID(&guid, &DXVA2_ModeMPEG4pt2_VLD_AdvSimple_GMC)) {
+    // else if (IsEqualGUID(guid, DXVA2_ModeMPEG4pt2_VLD_AdvSimple_GMC)) {
     //     fprintf(stderr, "DXVA2_ModeMPEG4pt2_VLD_AdvSimple_GMC\n");
     // }
-    else if (IsEqualGUID(&guid, &DXVA_NoEncrypt)) {
+    else if (IsEqualGUID(guid, DXVA_NoEncrypt)) {
         fprintf(stderr, "DXVA_NoEncrypt\n");
     }
     else {
@@ -135,7 +135,7 @@ static void dxva_print_format(D3DFORMAT format)
 
 static void dxva_print_config(struct app_state_t *app)
 {
-    for (int i = 0; i < app->dxva.cfg_count; i++) {
+    for (u_int i = 0; i < app->dxva.cfg_count; i++) {
         DXVA2_ConfigPictureDecode *cfg = &app->dxva.cfg_list[i];
         fprintf(stderr, "%d guidConfigBitstreamEncryption: ", i); dxva_print_guid(cfg->guidConfigBitstreamEncryption);
         fprintf(stderr, "%d guidConfigMBcontrolEncryption: ", i); dxva_print_guid(cfg->guidConfigMBcontrolEncryption);
@@ -159,7 +159,7 @@ static void dxva_print_config(struct app_state_t *app)
 
 static int dxva_find_config(struct app_state_t *app)
 {
-    for (int i = 0; i < app->dxva.cfg_count; i++) {
+    for (u_int i = 0; i < app->dxva.cfg_count; i++) {
         DXVA2_ConfigPictureDecode *cfg = &app->dxva.cfg_list[i];
         if (cfg->ConfigBitstreamRaw == 1) {
             app->dxva.cfg = cfg;
@@ -174,29 +174,30 @@ static int dxva_find_config(struct app_state_t *app)
 
 static int dxva_find_decoder(struct app_state_t *app)
 {
-    int res = 1;
+    int res = -1;
     HRESULT h_res;
     D3DFORMAT *formats = NULL;
+    unsigned target_count;
 
-    unsigned guid_count;
     GUID *guids = NULL;
-    h_res = IDirectXVideoDecoderService_GetDecoderDeviceGuids(app->dxva.service, &guid_count, &guids);
-    if (FAILED(h_res)) {
-        fprintf(stderr, "ERROR: Can't get list of decoders\n");
-        return 0;
-    }
+    unsigned guid_count;
+    D3D_CALL(app->dxva.service->GetDecoderDeviceGuids(&guid_count, &guids), close);
 
-    for (int i = 0; i < guid_count; i++) {
+    for (unsigned i = 0; i < guid_count; i++) {
         //dxva_print_guid(guids[i]);
-        if (IsEqualGUID(&guids[i], &H264CODEC)) {
-            unsigned target_count;
-            h_res = IDirectXVideoDecoderService_GetDecoderRenderTargets(app->dxva.service, &guids[i], &target_count, &formats);
+        if (IsEqualGUID(guids[i], H264CODEC)) {
+            //h_res = IDirectXVideoDecoderService_GetDecoderRenderTargets(app->dxva.service,
+            //    &guids[i], &target_count, &formats);
+            D3D_CALL(h_res = app->dxva.service->GetDecoderRenderTargets(
+                guids[i],
+                &target_count,
+                &formats
+            ));
             if (FAILED(h_res)) {
-                fprintf(stderr, "ERROR: Can't get render target for ");
                 dxva_print_guid(guids[i]);
                 break;            
             }
-            for (int j = 0; j < target_count; j++) {
+            for (unsigned j = 0; j < target_count; j++) {
                 //dxva_print_format(formats[j]);
                 if (formats[j] == H264CODEC_FORMAT) {
                     res = 0;

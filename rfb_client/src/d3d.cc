@@ -17,10 +17,11 @@ static void *d3d_function(void* data)
     }
 
     while (!is_terminated) {
-        if (usleep(40000)) {
-            fprintf(stderr, "ERROR: usleep failed with error: %s\n", strerror(errno));
-            goto error;
-        }
+        struct timespec ts;
+        int msec = 100;
+        ts.tv_sec = msec / 1000;
+        ts.tv_nsec = (msec % 1000) * 1000000;
+        STANDARD_CALL(nanosleep(&ts, &ts), error);
 
         d3d_render_frame(app);
     }
@@ -123,6 +124,8 @@ close:
 
 int d3d_render_frame(struct app_state_t *app)
 {
+    IDirect3DSurface9* backbuffer = NULL;
+
     /*D3D_CALL(
         IDirect3DDevice9_Clear(app->d3d.dev,
             0,
@@ -134,9 +137,7 @@ int d3d_render_frame(struct app_state_t *app)
         ),
         error
     );*/
-
     D3D_CALL(IDirect3DDevice9_BeginScene(app->d3d.dev), end_scene);
-    IDirect3DSurface9* backbuffer = NULL;
     D3D_CALL(
         IDirect3DDevice9_GetBackBuffer(app->d3d.dev, 0, 0, D3DBACKBUFFER_TYPE_MONO, &backbuffer),
         end_scene);
@@ -165,23 +166,27 @@ error:
 
 int d3d_render_image(struct app_state_t *app) {
     int res = -1;
-    // RECT rect;
-    // rect.left = 0; rect.top = 0;
-    // rect.right = 640; rect.bottom = 480;
-
-    GENERAL_CALL(pthread_mutex_lock(&app->dec_mutex), exit);
-
-    D3DLOCKED_RECT d3d_rect;
-    D3D_CALL(
-        IDirect3DSurface9_LockRect(app->d3d.surfaces[0], &d3d_rect, NULL, D3DLOCK_DONOTWAIT),
-        exit);
-    char* bytes = d3d_rect.pBits;
-    //fprintf(stderr, "INFO: memcpy: %p(%d)\n", app->dec_buf, app->dec_buf_length);
-    //fprintf(stderr, "INFO:%X%X%X%X\n", app->dec_buf[0], app->dec_buf[1], app->dec_buf[2], app->dec_buf[3]);
-    int stride_d3d = d3d_rect.Pitch;
+    char* bytes = NULL;
+    int stride_d3d = 0;
     int stride_buf = app->server_width;
     int chroma_buf_size = app->server_width * app->server_height;
     int index_d3d = 0, index_buf = 0;
+    D3DLOCKED_RECT d3d_rect;
+
+    fprintf(stderr, "INFO: d3d_render_image: %p(%d)\n", app->dec_buf, app->dec_buf_length);
+
+    GENERAL_CALL(pthread_mutex_lock(&app->dec_mutex), exit);
+
+    fprintf(stderr, "INFO: d3d_render_image: LockRect\n");
+
+    D3D_CALL(
+        IDirect3DSurface9_LockRect(app->d3d.surfaces[0], &d3d_rect, NULL, D3DLOCK_DONOTWAIT),
+        exit);
+    bytes = (char*)d3d_rect.pBits;
+    stride_d3d = d3d_rect.Pitch;
+
+    fprintf(stderr, "INFO: memcpy: %p(%d)\n", app->dec_buf, app->dec_buf_length);
+    //fprintf(stderr, "INFO:%X%X%X%X\n", app->dec_buf[0], app->dec_buf[1], app->dec_buf[2], app->dec_buf[3]);
     // fprintf(stderr, "INFO: index_d3d: %d, index_buf: %d, stride_d3d: %d, stride_buf: %d, chroma_buf_size: %d\n",
     //     index_d3d, index_buf, stride_d3d, stride_buf, chroma_buf_size);
     for (
@@ -193,11 +198,11 @@ int d3d_render_image(struct app_state_t *app) {
     }
     //memcpy(d3d_rect.pBits + index_d3d, app->dec_buf + index_buf, chroma_buf_size / 2);
     //memcpy(d3d_rect.pBits + index_d3d + chroma_buf_size / 2, app->dec_buf + index_buf, chroma_buf_size / 2);
-    stride_d3d = stride_d3d;
+    /*stride_d3d = stride_d3d;
     stride_buf = stride_buf;
     int luma_buf_end1 = chroma_buf_size + (chroma_buf_size / 2);
-    // fprintf(stderr, "INFO: index_d3d: %d, index_buf: %d, stride_d3d: %d, stride_buf: %d, chroma_buf_size: %d\n",
-    //     index_d3d, index_buf, stride_d3d, stride_buf, luma_buf_end1);
+    fprintf(stderr, "INFO: index_d3d: %d, index_buf: %d, stride_d3d: %d, stride_buf: %d, chroma_buf_size: %d\n",
+        index_d3d, index_buf, stride_d3d, stride_buf, luma_buf_end1);
     for (
         ;
         index_buf < luma_buf_end1;
@@ -208,15 +213,15 @@ int d3d_render_image(struct app_state_t *app) {
     index_buf = chroma_buf_size;
     index_d3d = stride_d3d * app->server_height + stride_d3d * (app->server_height / 4);
     int luma_buf_end2 = chroma_buf_size + (chroma_buf_size / 4);
-    // fprintf(stderr, "INFO: index_d3d: %d, index_buf: %d, stride_d3d: %d, stride_buf: %d, chroma_buf_size: %d\n",
-    //     index_d3d, index_buf, stride_d3d, stride_buf, luma_buf_end1);
+    fprintf(stderr, "INFO: index_d3d: %d, index_buf: %d, stride_d3d: %d, stride_buf: %d, chroma_buf_size: %d\n",
+        index_d3d, index_buf, stride_d3d, stride_buf, luma_buf_end1);
     for (
         ;
         index_buf < luma_buf_end2;
         index_buf += stride_buf, index_d3d += stride_d3d
     ) {
         memcpy(bytes + index_d3d, app->dec_buf + index_buf, stride_buf);
-    }
+    }*/
 
     res = 0;
 exit:
@@ -230,7 +235,7 @@ unlockm:
     return res;
 }
 
-char* d3d_get_hresult_message(HRESULT result)
+const char* d3d_get_hresult_message(HRESULT result)
 {
     if (result == D3DERR_DEVICELOST) {
         return "D3DERR_DEVICELOST";

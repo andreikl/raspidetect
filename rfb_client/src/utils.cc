@@ -1,7 +1,6 @@
 #include <khash.h>
 
 #include "main.h"
-#include "utils.h"
 
 KHASH_MAP_INIT_STR(map_str, char *)
 extern khash_t(map_str) *h;
@@ -19,7 +18,7 @@ void utils_parse_args(int argc, char** argv)
     }
 }
 
-char *utils_read_str_value(const char *name, char *def_value)
+const char *utils_read_str_value(const char* name, const char* def_value)
 {
     unsigned k = kh_get(map_str, h, name);
     if (k != kh_end(h)) {
@@ -38,7 +37,7 @@ int utils_read_int_value(const char name[], int def_value)
     return def_value;
 }
 
-int utils_fill_buffer(const char *path, char *buffer, int buffer_size, size_t *read)
+/*int utils_fill_buffer(const char *path, char *buffer, int buffer_size, size_t *read)
 {
     FILE *fstream = fopen(path, "r");
 
@@ -61,7 +60,7 @@ int utils_fill_buffer(const char *path, char *buffer, int buffer_size, size_t *r
     fclose(fstream);
 
     return 0;
-}
+}*/
 
 int find_nal(uint8_t *buf, int buf_size, int *nal_start, int *nal_end)
 {
@@ -84,7 +83,7 @@ int find_nal(uint8_t *buf, int buf_size, int *nal_start, int *nal_end)
     return 0;
 }
 
-char* convert_general_error(int error) {
+const char* convert_general_error(int error) {
     switch (error) {
         case EDEADLK:
             return "EDEADLK";

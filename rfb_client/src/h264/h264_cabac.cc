@@ -6,11 +6,13 @@
 //The process in clause 9.3.1.2 is also invoked after decoding any
 static int h264_cabac_init_context(struct app_state_t* app)
 {
+    struct h264_slice_header_t* header = LINKED_HASH_GET_HEAD(app->h264.headers);
+
     int QpBdOffsety = 6 * app->h264.sps.bit_depth_luma_minus8; // (7-4)
     int SliceQPy = 26 + app->h264.pps.pic_init_qp_minus26 + 
-        h264_clip(-QpBdOffsety, 51, app->h264.header.slice_qp_delta); // (7-30)
+        h264_clip(-QpBdOffsety, 51, header->slice_qp_delta); // (7-30)
 
-    UNCOVERED_CASE(app->h264.header.slice_type, !=, SliceTypeI);
+    UNCOVERED_CASE(header->slice_type, !=, SliceTypeI);
 
     for (int i = 0; i < 1024; i++) {
         int preCtxState = h264_clip(1, 126, (cabac_context_init_I[i][0] * 
@@ -140,7 +142,8 @@ unsigned h264_DecodeBin(struct app_state_t* app, unsigned ctxIdx, unsigned bypas
 // 6.4.12.1 Specification for neighbouring locations in fields and non-MBAFF frames
 int h264_get_MbAddr_type(struct app_state_t* app, int* MbAddrN, int xN, int yN, int maxW, int maxH)
 {
-    UNCOVERED_CASE(app->h264.header.MbaffFrameFlag, !=, 0);
+    struct h264_slice_header_t* header = LINKED_HASH_GET_HEAD(app->h264.headers);
+    UNCOVERED_CASE(header->MbaffFrameFlag, !=, 0);
     //Table 6-3 – Specification of mbAddrN
     if (xN < 0 && yN < 0) {
         *MbAddrN = h264_MbAddrD(app);
@@ -181,12 +184,14 @@ int h264_get_neighbouring_macroblocks(
     // 6.4.12 Derivation process for neighbouring locations
     int SubWidthC = -1;
     int SubHeightC = -1;
+    int maxW;
+    int maxH;
     GENERAL_CALL(
         h264_get_chroma_variables(app, &SubWidthC, &SubHeightC),
         error
     );
-    int maxW = SubWidthC; // (6-32)
-    int maxH = SubHeightC; // (6-33)
+    maxW = SubWidthC; // (6-32)
+    maxH = SubHeightC; // (6-33)
     GENERAL_CALL(
         h264_get_MbAddr_type(app, MbAddrN, xN, yN, maxW, maxH),
         error
@@ -236,19 +241,20 @@ int h264_get_neighbouring_4x4chroma(
     // 6.4.12 Derivation process for neighbouring locations
     int SubWidthC = -1;
     int SubHeightC = -1;
+    int maxW, maxH, xW, yW;
     GENERAL_CALL(
         h264_get_chroma_variables(app, &SubWidthC, &SubHeightC),
         error
     );
-    int maxW = SubWidthC; // (6-32)
-    int maxH = SubHeightC; // (6-33)
+    maxW = SubWidthC; // (6-32)
+    maxH = SubHeightC; // (6-33)
     GENERAL_CALL(
         h264_get_MbAddr_type(app, MbAddrN, xN, yN, maxW, maxH),
         error
     );
     if (h264_is_MbAddr_available(app, *MbAddrN)) {
-        int xW = (xN + maxW) % maxW; // (6-34)
-        int yW = (yN + maxH) % maxH; // (6-35)
+        xW = (xN + maxW) % maxW; // (6-34)
+        yW = (yN + maxH) % maxH; // (6-35)
         // 6.4.13.2 Derivation process for 4x4 chroma block indices
         *chroma4x4BlkIdxN = 2 * (yW / 4) + (xW / 4); //(6-39)
     }
@@ -266,12 +272,13 @@ int h264_cabac_derive_mb_type(
 {
     //6.4.11.1 Derivation process for neighbouring macroblocks
     int MbAddrN = -1;
+    struct h264_macroblock_t *mb_addr_n = NULL;
     GENERAL_CALL(
         h264_get_neighbouring_macroblocks(app, xD, yD, &MbAddrN),
         error
     );
 
-    struct h264_macroblock_t *mb_addr_n = h264_is_MbAddr_available(app, MbAddrN)?
+    mb_addr_n = h264_is_MbAddr_available(app, MbAddrN)?
         &app->h264.data.macroblocks[MbAddrN]:
         NULL;
 
@@ -297,10 +304,13 @@ error:
 
 int h264_cabac_read_mb_type(struct app_state_t* app)
 {
+    struct h264_slice_header_t* header = LINKED_HASH_GET_HEAD(app->h264.headers);
+
     //Table 9-34 – Syntax elements and associated types of binarization, maxBinIdxCtx
     //and ctxIdxOffset
-    UNCOVERED_CASE(app->h264.header.slice_type, !=, SliceTypeI);
+    UNCOVERED_CASE(header->slice_type, !=, SliceTypeI);
     int ctxIdxOffset = 3;
+    int ctxIdxInc, bin, bin3;
 
     // 9.3.3.1.1.3 Derivation process of ctxIdxInc for the syntax element mb_type
     int condTermFlagA, condTermFlagB;
@@ -312,18 +322,18 @@ int h264_cabac_read_mb_type(struct app_state_t* app)
         h264_cabac_derive_mb_type(app, 0, -1, ctxIdxOffset, &condTermFlagB),
         error
     );
-    int ctxIdxInc = condTermFlagA + condTermFlagB;
+    ctxIdxInc = condTermFlagA + condTermFlagB;
     //fprintf(stderr, "INFO: h264_cabac_read_mb_type ctxIdxInc(%d)\n", ctxIdxInc);
 
     //Table 9-36 – Binarization for macroblock types in I slices
-    int bin = h264_DecodeDecision(app, ctxIdxOffset + ctxIdxInc); //ctxIdxOffset(3): 0 - 0, 1, 2
+    bin = h264_DecodeDecision(app, ctxIdxOffset + ctxIdxInc); //ctxIdxOffset(3): 0 - 0, 1, 2
     if (bin == 0) {
         //fprintf(stderr, "INFO: h264_cabac_read_mb_type H264_I_NxN\n");
         app->h264.data.curr_mb->mb_type_origin = H264_I_NxN;
         return 0;
     }
     else { // 16x16 Intra
-        int bin = h264_DecodeTerminate(app); //ctxIdxOffset(3): 1 - 276
+        bin = h264_DecodeTerminate(app); //ctxIdxOffset(3): 1 - 276
         if(bin == 1) {
             //fprintf(stderr, "INFO: h264_cabac_read_mb_type H264_I_PCM\n");
             app->h264.data.curr_mb->mb_type_origin = H264_I_PCM;
@@ -333,7 +343,7 @@ int h264_cabac_read_mb_type(struct app_state_t* app)
             app->h264.data.curr_mb->mb_type_origin = 1; // H264_I_16x16_1_0_0
             app->h264.data.curr_mb->mb_type_origin +=
                 12 * h264_DecodeDecision(app, ctxIdxOffset + 3); //ctxIdxOffset(3): 2 - 3
-            int bin3 = h264_DecodeDecision(app, ctxIdxOffset + 4); //ctxIdxOffset(3): 3 - 4
+            bin3 = h264_DecodeDecision(app, ctxIdxOffset + 4); //ctxIdxOffset(3): 3 - 4
             app->h264.data.curr_mb->mb_type_origin += 4 * bin3;
             if (bin3) {
                 //ctxIdxOffset(3): 4 - bin3? 5: 6 (9.3.3.1.2)
@@ -368,12 +378,14 @@ int h264_cabac_derive_size_8x8_flag(
 {
     //6.4.11.1 Derivation process for neighbouring macroblocks
     int MbAddrN = -1;
+    struct h264_macroblock_t *mb_addr_n = NULL;
+
     GENERAL_CALL(
         h264_get_neighbouring_macroblocks(app, xD, yD, &MbAddrN),
         error
     );
 
-    struct h264_macroblock_t *mb_addr_n = h264_is_MbAddr_available(app, MbAddrN)?
+    mb_addr_n = h264_is_MbAddr_available(app, MbAddrN)?
         &app->h264.data.macroblocks[MbAddrN]:
         NULL;
 
@@ -397,6 +409,7 @@ int h264_cabac_read_transform_size_8x8_flag(struct app_state_t* app)
     //Table 9-34 – Syntax elements and associated types of binarization, maxBinIdxCtx
     //and ctxIdxOffset
     int ctxIdxOffset = 399;
+    int ctxIdxInc;
 
     // 9.3.3.1.1.10 Derivation process of ctxIdxInc for the syntax element transform_size_8x8_flag
     int condTermFlagA, condTermFlagB;
@@ -408,7 +421,7 @@ int h264_cabac_read_transform_size_8x8_flag(struct app_state_t* app)
         h264_cabac_derive_size_8x8_flag(app, 0, -1, &condTermFlagB),
         error
     );
-    int ctxIdxInc = condTermFlagA + condTermFlagB;
+    ctxIdxInc = condTermFlagA + condTermFlagB;
     //fprintf(stderr, "INFO: h264_cabac_read_transform_size_8x8_flag ctxIdxInc(%d)\n", ctxIdxInc);    
 
     app->h264.data.curr_mb->transform_size_8x8_flag =
@@ -447,12 +460,13 @@ int h264_cabac_derive_intra_chroma_pred_mode(
 {
     //6.4.11.1 Derivation process for neighbouring macroblocks
     int MbAddrN = -1;
+    struct h264_macroblock_t *mb_addr_n = NULL;
     GENERAL_CALL(
         h264_get_neighbouring_macroblocks(app, xD, yD, &MbAddrN),
         error
     );
 
-    struct h264_macroblock_t *mb_addr_n = h264_is_MbAddr_available(app, MbAddrN)?
+    mb_addr_n = h264_is_MbAddr_available(app, MbAddrN)?
         &app->h264.data.macroblocks[MbAddrN]:
         NULL;
 
@@ -482,6 +496,7 @@ int h264_cabac_read_intra_chroma_pred_mode(struct app_state_t* app)
 
     // Table 9-39 Assignment of ctxIdxInc to binIdx for all ctxIdxOffset
     int ctxIdxOffset = 64;
+    int ctxIdxInc;
     // 9.3.3.1.1.8 Derivation process of ctxIdxInc for the syntax element intra_chroma_pred_mode
     int condTermFlagA, condTermFlagB;
     GENERAL_CALL(
@@ -492,7 +507,7 @@ int h264_cabac_read_intra_chroma_pred_mode(struct app_state_t* app)
         h264_cabac_derive_size_8x8_flag(app, 0, -1, &condTermFlagB),
         error
     );
-    int ctxIdxInc = condTermFlagA + condTermFlagB;
+    ctxIdxInc = condTermFlagA + condTermFlagB;
     // fprintf(stderr, "INFO: h264_cabac_read_intra_chroma_pred_mode ctxIdxInc(%d)\n", ctxIdxInc);    
 
     // 64: 0 - 0,1,2 (clause 9.3.3.1.1.8)
@@ -523,12 +538,13 @@ int h264_cabac_derive_coded_block_pattern_luma(struct app_state_t* app,
 {
     int MbAddrN = -1;
     int luma8x8BlkIdxN = -1;
+    struct h264_macroblock_t *mb_addr_n = NULL;
     GENERAL_CALL(
         h264_get_neighbouring_8x8luma(app, binIdx, xD, yD, &MbAddrN, &luma8x8BlkIdxN),
         error
     );
 
-    struct h264_macroblock_t *mb_addr_n = h264_is_MbAddr_available(app, MbAddrN)?
+    mb_addr_n = h264_is_MbAddr_available(app, MbAddrN)?
         &app->h264.data.macroblocks[MbAddrN]:
         NULL;
 
@@ -563,15 +579,17 @@ error:
 //(fixedLength = Ceil(Log2(cMax + 1)) -> fixedLength = 4)
 int h264_cabac_read_coded_block_pattern_luma(struct app_state_t* app)
 {
-    UNCOVERED_CASE(app->h264.header.slice_type, !=, SliceTypeI);
+    struct h264_slice_header_t* header = LINKED_HASH_GET_HEAD(app->h264.headers);
+    UNCOVERED_CASE(header->slice_type, !=, SliceTypeI);
 
     //Table 9-11 – Association of ctxIdx and syntax elements for each slice type in
     //the initialization process coded_block_pattern (luma) 73..76
     int ctxIdxOffset = 73;
-
     int fixedLength = 4;
+    unsigned condTermFlagA, condTermFlagB, bin;
+    int ctxIdxInc;
+
     for (int binIdx = 0; binIdx < fixedLength; binIdx++) {
-        unsigned condTermFlagA;
         GENERAL_CALL(
             h264_cabac_derive_coded_block_pattern_luma(app,
                 -1, 0,
@@ -580,7 +598,6 @@ int h264_cabac_read_coded_block_pattern_luma(struct app_state_t* app)
             error
         );
 
-        unsigned condTermFlagB;
         GENERAL_CALL(
             h264_cabac_derive_coded_block_pattern_luma(app,
                 0, -1,
@@ -589,13 +606,13 @@ int h264_cabac_read_coded_block_pattern_luma(struct app_state_t* app)
             error
         );
 
-        int ctxIdxInc = condTermFlagA + 2 * condTermFlagB;
+        ctxIdxInc = condTermFlagA + 2 * condTermFlagB;
         // fprintf(stderr,
         //     "INFO: h264_cabac_read_coded_block_pattern_luma: binIdx(%d) ctxIdxInc(%d)\n",
         //     binIdx,
         //     ctxIdxInc);
    
-        unsigned bin = h264_DecodeDecision(app, ctxIdxOffset + ctxIdxInc);
+        bin = h264_DecodeDecision(app, ctxIdxOffset + ctxIdxInc);
         app->h264.data.curr_mb->CodedBlockPatternLuma |= bin << binIdx;
     }
     return 0;
@@ -614,10 +631,11 @@ int h264_cabac_derive_coded_block_pattern_chroma(
 {
     int MbAddrN = -1;
     int luma8x8BlkIdxN = -1;
+    struct h264_macroblock_t *mb_addr_n = NULL;
     GENERAL_CALL(h264_get_neighbouring_8x8luma(app, binIdx, xD, yD, &MbAddrN, &luma8x8BlkIdxN),
         error);
 
-    struct h264_macroblock_t *mb_addr_n = h264_is_MbAddr_available(app, MbAddrN)?
+    mb_addr_n = h264_is_MbAddr_available(app, MbAddrN)?
         &app->h264.data.macroblocks[MbAddrN]:
         NULL;
 
@@ -650,16 +668,16 @@ error:
 // 9.3.2.6: TU binarization of CodedBlockPatternChroma with cMax = 2
 int h264_cabac_read_coded_block_pattern_chroma(struct app_state_t* app)
 {
-    UNCOVERED_CASE(app->h264.header.slice_type, !=, SliceTypeI);
+    struct h264_slice_header_t* header = LINKED_HASH_GET_HEAD(app->h264.headers);
+    UNCOVERED_CASE(header->slice_type, !=, SliceTypeI);
 
     //Table 9-11 – Association of ctxIdx and syntax elements for each slice type in
     //the initialization process coded_block_pattern (chroma) 77..84
     int ctxIdxOffset = 77;
-
     int binIdx = 0;
+    unsigned condTermFlagA, condTermFlagB;
+    int ctxIdxInc, bin;
     while (app->h264.data.curr_mb->CodedBlockPatternChroma < 2) {
-        
-        unsigned condTermFlagA;
         GENERAL_CALL(
             h264_cabac_derive_coded_block_pattern_chroma(app,
                 -1, 0,
@@ -667,8 +685,6 @@ int h264_cabac_read_coded_block_pattern_chroma(struct app_state_t* app)
                 &condTermFlagA),
             error
         );
-
-        unsigned condTermFlagB;
         GENERAL_CALL(
             h264_cabac_derive_coded_block_pattern_chroma(app,
                 0, -1,
@@ -677,13 +693,13 @@ int h264_cabac_read_coded_block_pattern_chroma(struct app_state_t* app)
             error
         );
 
-        int ctxIdxInc = condTermFlagA + 2 * condTermFlagB + (binIdx == 1? 4: 0);
+        ctxIdxInc = condTermFlagA + 2 * condTermFlagB + (binIdx == 1? 4: 0);
         // fprintf(stderr,
         //     "INFO: h264_cabac_read_coded_block_pattern_chroma: binIdx(%d) ctxIdxInc(%d)\n",
         //     binIdx,
         //     ctxIdxInc);
 
-        int bin = h264_DecodeDecision(app, ctxIdxOffset + ctxIdxInc);
+        bin = h264_DecodeDecision(app, ctxIdxOffset + ctxIdxInc);
         app->h264.data.curr_mb->CodedBlockPatternChroma |= bin << binIdx;
         if (bin == 0) {
             break;
@@ -862,18 +878,20 @@ int h264_cabac_derive_coded_block_flag_chroma_dc(
     struct h264_coeff_level_t* chroma_blocks,
     int* condTermFlagN)
 {
+    struct h264_coeff_level_t* transBlockN = NULL;
+
     //6.4.11.1 Derivation process for neighbouring macroblocks
-    int MbAddrN = -1;
+    int MbAddrN = -1, offset;
+    struct h264_macroblock_t *mb_addr_n = NULL;
     GENERAL_CALL(
         h264_get_neighbouring_macroblocks(app, xD, yD, &MbAddrN),
         error
     );
 
-    struct h264_macroblock_t *mb_addr_n = h264_is_MbAddr_available(app, MbAddrN)?
+    mb_addr_n = h264_is_MbAddr_available(app, MbAddrN)?
         &app->h264.data.macroblocks[MbAddrN]:
         NULL;
 
-    struct h264_coeff_level_t* transBlockN = NULL;
     if (
         mb_addr_n != NULL &&
         mb_addr_n->mb_type != H264_U_I_PCM &&
@@ -881,7 +899,7 @@ int h264_cabac_derive_coded_block_flag_chroma_dc(
         mb_addr_n->mb_type != H264_U_B_Skip &&
         mb_addr_n->CodedBlockPatternChroma != 0
     ) {
-        int offset = (char*)chroma_blocks - (char*)app->h264.data.curr_mb;
+        offset = (char*)chroma_blocks - (char*)app->h264.data.curr_mb;
         transBlockN = (struct h264_coeff_level_t*)((char*)mb_addr_n + offset);
     }
 
@@ -930,19 +948,19 @@ int h264_cabac_derive_coded_block_flag_chroma_ac(
     int* condTermFlagN)
 {
     //6.4.11.1 Derivation process for neighbouring macroblocks
-    int MbAddrN = -1;
-    int chroma4x4BlkIdxN = -1;
+    int MbAddrN = -1, chroma4x4BlkIdxN = -1, offset;
+    struct h264_coeff_level_t* transBlockN = NULL;
+    struct h264_macroblock_t *mb_addr_n = NULL;
     GENERAL_CALL(
         h264_get_neighbouring_4x4chroma(app, chroma4x4BlkIdx, xD, yD, &MbAddrN, &chroma4x4BlkIdxN),
         error
     );
     UNCOVERED_CASE(chroma4x4BlkIdxN, >=, 4);
 
-    struct h264_macroblock_t *mb_addr_n = h264_is_MbAddr_available(app, MbAddrN)?
+    mb_addr_n = h264_is_MbAddr_available(app, MbAddrN)?
         &app->h264.data.macroblocks[MbAddrN]:
         NULL;
 
-    struct h264_coeff_level_t* transBlockN = NULL;
     if (
         mb_addr_n != NULL &&
         mb_addr_n->mb_type != H264_U_I_PCM &&
@@ -950,7 +968,7 @@ int h264_cabac_derive_coded_block_flag_chroma_ac(
         mb_addr_n->mb_type != H264_U_B_Skip &&
         mb_addr_n->CodedBlockPatternChroma == 2
     ) {
-        int offset = (char*)chroma_blocks - (char*)app->h264.data.curr_mb;
+        offset = (char*)chroma_blocks - (char*)app->h264.data.curr_mb;
         transBlockN = (struct h264_coeff_level_t*)((char*)mb_addr_n + offset) + chroma4x4BlkIdxN;
     }
 
@@ -995,10 +1013,14 @@ int h264_cabac_read_coded_block_flag(struct app_state_t* app,
     struct h264_coeff_level_t* blocks,
     int blkIdx)
 {
-    UNCOVERED_CASE(app->h264.header.slice_type, !=, SliceTypeI);
+    struct h264_slice_header_t* header = LINKED_HASH_GET_HEAD(app->h264.headers);
+    UNCOVERED_CASE(header->slice_type, !=, SliceTypeI);
 
     int maxNumCoeff = -1;
     int ctxBlockCat = -1;
+    int ctxIdxInc = -1;
+    int condTermFlagA = -1, condTermFlagB = -1;
+    int ctxIdxOffset = -1;
     GENERAL_CALL(
         h264_cabac_coded_block_flag_ctxBlockCat(app, type, &maxNumCoeff, &ctxBlockCat),
         error
@@ -1011,7 +1033,7 @@ int h264_cabac_read_coded_block_flag(struct app_state_t* app,
     // Type of binarization - FL, cMax=1, maxBinIdxCtx = 0
     UNCOVERED_CASE(ctxBlockCat, <, 0);
     UNCOVERED_CASE(ctxBlockCat, >, 13);
-    int ctxIdxOffset = -1;
+    
     if (ctxBlockCat < 5) {
         ctxIdxOffset = 85;
     }
@@ -1026,8 +1048,6 @@ int h264_cabac_read_coded_block_flag(struct app_state_t* app,
     }
     UNCOVERED_CASE(ctxIdxOffset, <, 0);
 
-    int ctxIdxInc = -1;
-    int condTermFlagA = -1, condTermFlagB = -1;
     //9.3.3.1.1.9 Derivation process of ctxIdxInc for the syntax element coded_block_flag
     if (ctxBlockCat == 3) { //CHROMA_DC - ChromaDCLevel as described in clause 7.4.5.3
         //6.4.11.1 Derivation process for neighbouring macroblocks
@@ -1076,12 +1096,12 @@ error:
 int h264_cabac_read_significant_coeff_flag(struct app_state_t* app,
     int type,
     struct h264_coeff_level_t* coeffLevel,
-    int levelListIdx)
+    unsigned levelListIdx)
 {
     UNCOVERED_CASE(coeffLevel->maxNumCoeff, <=,  levelListIdx);
 
-    int maxNumCoeff = -1;
-    int ctxBlockCat = -1;
+    int maxNumCoeff = -1, ctxBlockCat = -1, ctxIdxOffset = -1, ctxIdxInc = -1;
+    int SubWidthC, SubHeightC = -1, NumC8x8;
     GENERAL_CALL(
         h264_cabac_coded_block_flag_ctxBlockCat(app, type, &maxNumCoeff, &ctxBlockCat),
         error
@@ -1095,7 +1115,6 @@ int h264_cabac_read_significant_coeff_flag(struct app_state_t* app,
     // Type of binarization - FL, cMax=1
     UNCOVERED_CASE(ctxBlockCat, <, 0);
     UNCOVERED_CASE(ctxBlockCat, >, 13);
-    int ctxIdxOffset = -1;
     if (ctxBlockCat < 5) {
         ctxIdxOffset = 105; //277
     }
@@ -1118,18 +1137,15 @@ int h264_cabac_read_significant_coeff_flag(struct app_state_t* app,
 
     // 9.3.3.1.3 Assignment  process  of  ctxIdxInc  for  syntax elements  significant_coeff_flag,
     // last_significant_coeff_flag, and coeff_abs_level_minus1
-    int ctxIdxInc = -1;
     if (ctxBlockCat == 5 || ctxBlockCat == 9 || ctxBlockCat == 13) {
         ctxIdxInc = significant_coeff_flag_ctxIdxInc[levelListIdx];
     }
     else if (ctxBlockCat == 3) {
-        int SubWidthC = -1;
-        int SubHeightC = -1;
         GENERAL_CALL(
             h264_get_chroma_variables(app, &SubWidthC, &SubHeightC),
             error
         );
-        int NumC8x8 = 4 / (SubWidthC * SubHeightC);
+        NumC8x8 = 4 / (SubWidthC * SubHeightC);
 
         ctxIdxInc = h264_min(levelListIdx / NumC8x8, 2);
     }
@@ -1149,12 +1165,12 @@ error:
 int h264_cabac_read_last_significant_coeff_flag(struct app_state_t* app,
     int type,
     struct h264_coeff_level_t* coeffLevel,
-    int levelListIdx)
+    unsigned levelListIdx)
 {
     UNCOVERED_CASE(coeffLevel->maxNumCoeff, <=,  levelListIdx);
 
-    int maxNumCoeff = -1;
-    int ctxBlockCat = -1;
+    int maxNumCoeff = -1, ctxBlockCat = -1, ctxIdxOffset = -1, ctxIdxInc = -1;
+    int SubWidthC = -1, SubHeightC = -1, NumC8x8;
     GENERAL_CALL(
         h264_cabac_coded_block_flag_ctxBlockCat(app, type, &maxNumCoeff, &ctxBlockCat),
         error
@@ -1168,7 +1184,6 @@ int h264_cabac_read_last_significant_coeff_flag(struct app_state_t* app,
     // Type of binarization - FL, cMax=1
     UNCOVERED_CASE(ctxBlockCat, <, 0);
     UNCOVERED_CASE(ctxBlockCat, >, 13);
-    int ctxIdxOffset = -1;
     if (ctxBlockCat < 5) {
         ctxIdxOffset = 166; //338
     }
@@ -1191,18 +1206,15 @@ int h264_cabac_read_last_significant_coeff_flag(struct app_state_t* app,
 
     // 9.3.3.1.3 Assignment  process  of  ctxIdxInc  for  syntax elements  significant_coeff_flag,
     // last_significant_coeff_flag, and coeff_abs_level_minus1
-    int ctxIdxInc = -1;
     if (ctxBlockCat == 5 || ctxBlockCat == 9 || ctxBlockCat == 13) {
         ctxIdxInc = last_significant_coeff_flag_ctxIdxInc[levelListIdx];
     }
     else if (ctxBlockCat == 3) {
-        int SubWidthC = -1;
-        int SubHeightC = -1;
         GENERAL_CALL(
             h264_get_chroma_variables(app, &SubWidthC, &SubHeightC),
             error
         );
-        int NumC8x8 = 4 / (SubWidthC * SubHeightC);
+        NumC8x8 = 4 / (SubWidthC * SubHeightC);
 
         ctxIdxInc = h264_min(levelListIdx / NumC8x8, 2);
     }
@@ -1222,12 +1234,11 @@ error:
 int h264_cabac_read_coeff_abs_level_minus1(struct app_state_t* app,
     int type,
     struct h264_coeff_level_t* coeffLevel,
-    int levelListIdx)
+    unsigned levelListIdx)
 {
     UNCOVERED_CASE(coeffLevel->maxNumCoeff, <=,  levelListIdx);
 
-    int maxNumCoeff = -1;
-    int ctxBlockCat = -1;
+    int maxNumCoeff = -1, ctxBlockCat = -1, ctxIdxOffset = -1, prefix = 0, ctxIdxInc;
     GENERAL_CALL(
         h264_cabac_coded_block_flag_ctxBlockCat(app, type, &maxNumCoeff, &ctxBlockCat),
         error
@@ -1242,7 +1253,6 @@ int h264_cabac_read_coeff_abs_level_minus1(struct app_state_t* app,
     // prefix: TU with cMax = uCoff
     UNCOVERED_CASE(ctxBlockCat, <, 0);
     UNCOVERED_CASE(ctxBlockCat, >, 13);
-    int ctxIdxOffset = -1;
     if (ctxBlockCat < 5) {
         ctxIdxOffset = 227;
     }
@@ -1264,11 +1274,9 @@ int h264_cabac_read_coeff_abs_level_minus1(struct app_state_t* app,
     UNCOVERED_CASE(ctxIdxOffset, <, 0);
 
     //9.3.2.3 Concatenated unary/ k-th order Exp-Golomb (UEGk) binarization process
-    int prefix = 0;
     while (prefix <= 14) {
         // 9.3.3.1.3 Assignment  process  of  ctxIdxInc  for  syntax elements
         // significant_coeff_flag, last_significant_coeff_flag, and coeff_abs_level_minus1
-        int ctxIdxInc;
         if (prefix == 0) {
             ctxIdxInc = ((coeffLevel->numDecodAbsLevelGt1 != 0)?
                 0:
@@ -1300,7 +1308,7 @@ error:
 
 int h264_cabac_read_coeff_sign_flag(struct app_state_t* app,
     struct h264_coeff_level_t* coeffLevel,
-    int levelListIdx)
+    unsigned levelListIdx)
 {
     UNCOVERED_CASE(coeffLevel->maxNumCoeff, <=,  levelListIdx);
     // Table 9-11 Association of ctxIdx and syntax elements for each slice

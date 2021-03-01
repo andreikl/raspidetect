@@ -5,7 +5,7 @@
 
 #include "dxva.h"
 
-#include "dxva_helpers.c"
+#include "dxva_helpers.cc"
 
 static const uint8_t default_scaling4[2][16] = {
     {  6, 13, 20, 28, 13, 20, 28, 32,
@@ -35,8 +35,6 @@ static const uint8_t default_scaling8[2][64] = {
 
 void dxva_destroy(struct app_state_t *app)
 {
-    HRESULT res;
-
     if (app->dxva.device != NULL) {
         CoTaskMemFree(app->dxva.cfg_list);
         app->dxva.cfg_count = 0;
@@ -44,72 +42,25 @@ void dxva_destroy(struct app_state_t *app)
     }
 
     if (app->dxva.decoder != NULL) {
-        IDirectXVideoDecoderService_Release(app->dxva.decoder);
+        app->dxva.decoder->Release();
+        app->dxva.decoder = NULL;
     }
     if (app->dxva.service != NULL) {
-        IDirectXVideoDecoderService_Release(app->dxva.service);
+        app->dxva.service->Release();
+        app->dxva.service = NULL;
     }
     if (app->dxva.device != NULL) {
-        res = IDirect3DDeviceManager9_CloseDeviceHandle(app->dxva.device_manager, app->dxva.device);
-        if (FAILED(res)) {
-            fprintf(stderr, "ERROR: Can't close Direct3DDevice device\n");
-        }
+        D3D_CALL(app->dxva.device_manager->CloseDeviceHandle(app->dxva.device));
     }
     if (app->dxva.device_manager != NULL) {
-        IDirect3DDeviceManager9_Release(app->dxva.device_manager);
+        app->dxva.device_manager->Release();
+        app->dxva.device_manager = NULL;
     }
 }
 
 int dxva_init(struct app_state_t *app)
 {
-    HRESULT h_res;
-    int res;
-
-    unsigned reset_token;
-    h_res = DXVA2CreateDirect3DDeviceManager9(
-        &reset_token,
-        &app->dxva.device_manager
-    );
-    if (FAILED(h_res)) {
-        fprintf(stderr, "ERROR: Can't create device manager\n");
-        goto close;
-    }
-
-    h_res = IDirect3DDeviceManager9_ResetDevice(app->dxva.device_manager, app->d3d.dev, reset_token);
-    if (FAILED(h_res)) {
-        if (h_res == E_INVALIDARG) {
-            fprintf(stderr, "ERROR: Can't reset Direct3D device, res: E_INVALIDARG\n");
-        } else if (h_res == D3DERR_INVALIDCALL) {
-            fprintf(stderr, "ERROR: Can't reset Direct3D device, res: D3DERR_INVALIDCALL\n");
-        }
-    }
-
-    h_res = IDirect3DDeviceManager9_OpenDeviceHandle(app->dxva.device_manager, &app->dxva.device);
-    if (FAILED(h_res)) {
-        if (h_res == DXVA2_E_NOT_INITIALIZED) {
-            fprintf(stderr, "ERROR: Can't open Direct3D device, res: DXVA2_E_NOT_INITIALIZED\n");
-        } else {
-            fprintf(stderr, "ERROR: Can't open Direct3D device, res: %ld\n", h_res);
-        }
-        goto close;
-    }
-
-    h_res = IDirect3DDeviceManager9_GetVideoService(
-        app->dxva.device_manager,
-        app->dxva.device,
-        &IID_IDirectXVideoDecoderService,
-        (void **)&app->dxva.service);
-    if (FAILED(h_res)) {
-        fprintf(stderr, "ERROR: Can't get Direct3D decoder service\n");
-        goto close;
-    }
-
-    res = dxva_find_decoder(app);
-    if (res) {
-        fprintf(stderr, "ERROR: Can't find NV12 decoder");
-        dxva_print_guid(H264CODEC);
-        goto close;
-    }
+    int rslt;
 
     DXVA2_VideoDesc desc;
     desc.SampleWidth = app->server_width;
@@ -128,28 +79,40 @@ int dxva_init(struct app_state_t *app)
     desc.OutputFrameFreq.Denominator = 0;
     desc.UABProtectionLevel = FALSE;
 
-    h_res = IDirectXVideoDecoderService_GetDecoderConfigurations(
-        app->dxva.service,
-        &H264CODEC,
+    unsigned reset_token;
+    D3D_CALL(DXVA2CreateDirect3DDeviceManager9(
+        &reset_token,
+        &app->dxva.device_manager
+    ), close);
+    D3D_CALL(app->dxva.device_manager->ResetDevice(app->d3d.dev, reset_token), close);
+    D3D_CALL(app->dxva.device_manager->OpenDeviceHandle(&app->dxva.device), close);
+    D3D_CALL(app->dxva.device_manager->GetVideoService(
+        app->dxva.device,
+        IID_IDirectXVideoDecoderService,
+        (void **)&app->dxva.service
+    ), close);
+
+    GENERAL_CALL(rslt = dxva_find_decoder(app));
+    if (rslt) {
+        dxva_print_guid(H264CODEC);
+        goto close;
+    }
+
+    D3D_CALL(app->dxva.service->GetDecoderConfigurations(
+        H264CODEC,
         &desc,
         NULL,
         &app->dxva.cfg_count,
         &app->dxva.cfg_list
-    );
-    if (FAILED(h_res)) {
-        fprintf(stderr, "ERROR: Can't get video configuration\n");
-        goto close;
-    }
+    ), close);
 
-    res = dxva_find_config(app);
-    if (res) {
-        fprintf(stderr, "ERROR: Can't find config which support DXVA_Slice_H264_Long format");
+    GENERAL_CALL(rslt = dxva_find_config(app));
+    if (rslt) {
         dxva_print_config(app);
         goto close;
     }
 
-    h_res = IDirectXVideoDecoderService_CreateSurface(
-        app->dxva.service,
+    D3D_CALL(app->dxva.service->CreateSurface(
         app->server_width,
         app->server_height, 
         SCREEN_BUFFERS - 1, 
@@ -158,31 +121,22 @@ int dxva_init(struct app_state_t *app)
         0,
         DXVA2_VideoDecoderRenderTarget,
         app->d3d.surfaces,
-        NULL);
+        NULL
+    ), close);
 
-    if (FAILED(h_res)) {
-        fprintf(stderr, "ERROR: Can't create video render target\n");
-        goto close;
-    }
-
-    h_res = IDirectXVideoDecoderService_CreateVideoDecoder(
-        app->dxva.service,
-        &H264CODEC,
+    D3D_CALL(app->dxva.service->CreateVideoDecoder(
+        H264CODEC,
         &desc,
         app->dxva.cfg,
         app->d3d.surfaces,
         SCREEN_BUFFERS,
-        &app->dxva.decoder);
-
-    if (FAILED(h_res)) {
-        fprintf(stderr, "ERROR: Can't get Direct3D decoder service\n");
-        goto close;
-    }
+        &app->dxva.decoder
+    ), close);
 
     return 0;
 
 close:
-    return 1;
+    return -1;
 }
 
 static void dxva_fill_picture_entry(DXVA_PicEntry_H264 *pic, unsigned index, unsigned flag)
@@ -304,8 +258,8 @@ static int dxva_fill_slice(struct app_state_t *app, uint8_t *buffer)
 
     app->dxva.slice.NumMbsForSlice = header->PicSizeInMbs - header->first_mb_in_slice;
     //TODO: RefPicList, DXVA_PicEntry_H264 RefPicList[2][32]; - DXVA_PicEntry_H264 - char
-    for (int list = 0; list < 2; list++) {
-        for (int ref = 0; ref < ARRAY_SIZE(app->dxva.slice.RefPicList[0]); ref++) {
+    for (unsigned list = 0; list < 2; list++) {
+        for (unsigned ref = 0; ref < ARRAY_SIZE(app->dxva.slice.RefPicList[0]); ref++) {
             if (list < header->list_count && ref < header->ref_count[list]) {
                 fprintf(stderr, "ERROR: TO IMPLEMENT header->list_count %d, "
                     "%s:%d - %s\n",
@@ -368,44 +322,31 @@ static int dxva_commit_buffer(struct app_state_t *app,
     const void *data,
     unsigned size)
 {
-    int ret = 1;
-    HRESULT hr;
+    int res = -1;
 
     void* dxva_data;
     unsigned dxva_size;
-    hr = IDirectXVideoDecoder_GetBuffer(app->dxva.decoder, type, &dxva_data, &dxva_size);
-    if (FAILED(hr)) {
-        fprintf(stderr, "ERROR: dxva_commit_buffer(type: %d) failed to get dxva buffer, error %s(%lx)\n",
-            type,
-            get_hresult_message(hr),
-            hr);
-        
-        goto close;
-    }
 
+    D3D_CALL(app->dxva.decoder->GetBuffer(type, &dxva_data, &dxva_size), close);
     if (size <= dxva_size) {
         memcpy(dxva_data, data, size);
-        ret = 0;
+        res = 0;
     } else {
-        fprintf(stderr, "ERROR: dxva_commit_buffer(type: %d) failed, buffer to commit is too big\n", type);
-        goto release;
+        fprintf(
+            stderr,
+            "ERROR: dxva_commit_buffer(type: %d) failed, buffer to commit is too big\n",
+            type
+        );
     }
 
-release:
-    hr = IDirectXVideoDecoder_ReleaseBuffer(app->dxva.decoder, type);
-    if (FAILED(hr)) {
-        fprintf(stderr, "ERROR: dxva_commit_buffer(type: %d) failed to release dxva buffer, error %s(%lx)\n",
-            type,
-            get_hresult_message(hr),
-            hr);
-    }
+    D3D_CALL(app->dxva.decoder->ReleaseBuffer(type));
 
     memset(buffer, 0, sizeof(*buffer));
     buffer->CompressedBufferType = type;
     buffer->DataSize = size;
 
 close:
-    return ret;
+    return res;
 }
 
 static int dxva_commit_slice(
@@ -414,30 +355,24 @@ static int dxva_commit_slice(
 ) {
     static const uint8_t start_code[] = { 0, 0, 1 };
 
-    int ret = 1;
-    HRESULT hr;
+    int res = -1;
 
     void* dxva_data;
     unsigned dxva_size;
-    hr = IDirectXVideoDecoder_GetBuffer(app->dxva.decoder, DXVA2_BitStreamDateBufferType, &dxva_data, &dxva_size);
-    if (FAILED(hr)) {
-        fprintf(stderr, "ERROR: dxva_commit_slice failed to get dxva buffer(type: %d), error %s(%lx)\n",
-            DXVA2_BitStreamDateBufferType,
-            get_hresult_message(hr),
-            hr);
-        
-        goto close;
-    }
+    D3D_CALL(
+        app->dxva.decoder->GetBuffer(DXVA2_BitStreamDateBufferType, &dxva_data, &dxva_size),
+        close
+    );
 
     if (sizeof(start_code) + app->enc_buf_length - 4 <= dxva_size) {
-        uint8_t* position = dxva_data;
+        uint8_t* position = (uint8_t*)dxva_data;
         memcpy(position, start_code, sizeof(start_code));
         position += sizeof(start_code);
         memcpy(position, app->enc_buf + 4, app->enc_buf_length - 4);
         position += app->enc_buf_length - 4;
 
         app->dxva.slice.SliceBytesInBuffer = sizeof(start_code) + app->enc_buf_length - 4;
-        ret = 0;
+        res = 0;
     } else {
         fprintf(stderr, "ERROR: dxva_commit_slice(type: %d) failed, buffer to commit is too big\n",
             DXVA2_BitStreamDateBufferType);
@@ -449,21 +384,14 @@ static int dxva_commit_slice(
     buffer->NumMBsInBuffer = app->dxva.slice.NumMbsForSlice;
 
 release_stream:
-    hr = IDirectXVideoDecoder_ReleaseBuffer(app->dxva.decoder, DXVA2_BitStreamDateBufferType);
-    if (FAILED(hr)) {
-        fprintf(stderr, "ERROR: dxva_commit_slice(type: %d) failed to release dxva buffer, error %s(%lx)\n",
-            DXVA2_BitStreamDateBufferType,
-            get_hresult_message(hr),
-            hr);
-    }
+    D3D_CALL(app->dxva.decoder->ReleaseBuffer(DXVA2_BitStreamDateBufferType));
 
 close:
-    return ret;
+    return res;
 }
 
 int dxva_decode(struct app_state_t *app) {
-    HRESULT hr;
-    int ret = 1;
+    int res = -1;
 
     // typedef struct _DXVA2_DecodeBufferDesc {
     //     DWORD CompressedBufferType;
@@ -478,16 +406,11 @@ int dxva_decode(struct app_state_t *app) {
     //     UINT ReservedBits;
     //     PVOID pvPVPState;
     // } DXVA2_DecodeBufferDesc;
+    DXVA2_DecodeExecuteParams params;
     DXVA2_DecodeBufferDesc buffers[4];
-    int buffers_size = 0;
+    unsigned buffers_size = 0;
 
-    // 1. IDirectXVideoDecoder_BeginFrame
-    hr = IDirectXVideoDecoder_BeginFrame(app->dxva.decoder, app->d3d.surfaces[0], NULL);
-    if (FAILED(hr)) {
-        fprintf(stderr, "ERROR: IDirectXVideoDecoder_BeginFrame failed with error code %lx\n", hr);
-        goto close;
-    }
-
+    D3D_CALL(app->dxva.decoder->BeginFrame(app->d3d.surfaces[0], NULL), close);
     GENERAL_CALL(dxva_fill_picture_parameters(app), end_frame);
     GENERAL_CALL(dxva_commit_buffer(
         app,
@@ -518,37 +441,21 @@ int dxva_decode(struct app_state_t *app) {
     ), end_frame);
     buffers_size++;
 
-    DXVA2_DecodeExecuteParams params = {
+    params = {
         .NumCompBuffers = buffers_size,
         .pCompressedBuffers = buffers,
         .pExtensionData = NULL
     };
-
-    hr = IDirectXVideoDecoder_Execute(app->dxva.decoder, &params);
-    if (FAILED(hr)) {
-        fprintf(stderr, "ERROR: dxva_decode failed to execute DXVA2, error %s(%lx)\n",
-            get_hresult_message(hr),
-            hr);
-
-        goto end_frame;
-    }
-
-    d3d_render_frame(app);
+    D3D_CALL(app->dxva.decoder->Execute(&params), end_frame);
 
     if (app->verbose) {
         fprintf(stderr, "decoding operation has completed\n");
     }
-
-    ret = 0;
+    res = 0;
 
 end_frame:
-    hr = IDirectXVideoDecoder_EndFrame(app->dxva.decoder, NULL);
-    if (FAILED(hr)) {
-        fprintf(stderr, "ERROR: dxva_decode failed to end DXVA2 frame, error %s(%lx)\n",
-            get_hresult_message(hr),
-            hr);
-    }
+    D3D_CALL(app->dxva.decoder->EndFrame(NULL));
 
 close:
-    return ret;
+    return res;
 }

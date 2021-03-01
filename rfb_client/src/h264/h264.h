@@ -192,8 +192,8 @@ struct h264_nal_t {
             uint8_t nal_unit_type:5;
             uint8_t nal_ref_idc:2;
             uint8_t nal_zero_bit:1;
-        };
-        uint8_t header;
+        } h_bits;
+        uint8_t h;
     } u;
 };
 

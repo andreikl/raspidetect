@@ -1,5 +1,4 @@
 #include "main.h"
-#include "utils.h"
 
 extern int is_terminated;
 
@@ -17,10 +16,11 @@ static void *file_function(void* data)
     }
 
     while (!is_terminated) {
-        if (usleep(400000)) {
-            fprintf(stderr, "ERROR: usleep failed with error: %s\n", strerror(errno));
-            goto error;
-        }
+        struct timespec ts;
+        int msec = 400;
+        ts.tv_sec = msec / 1000;
+        ts.tv_nsec = (msec % 1000) * 1000000;
+        STANDARD_CALL(nanosleep(&ts, &ts), error);
 
         int buf_length = app->server_width * app->server_height;
         long int pos = ftell(app->file.fstream);
@@ -28,7 +28,7 @@ static void *file_function(void* data)
             fprintf(stderr, "ERROR: ftell failed with error: %s\n", strerror(errno));
             goto error;
         }
-        size_t read_length = fread(app->enc_buf, 1, buf_length, app->file.fstream);
+        int read_length = fread(app->enc_buf, 1, buf_length, app->file.fstream);
         if (read_length < buf_length) {
             app->enc_buf[read_length] = 0;
             app->enc_buf_length = read_length;

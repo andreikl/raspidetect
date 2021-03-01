@@ -64,7 +64,7 @@ static int h264_read_sps(struct app_state_t* app, int start, int end)
         app->h264.sps.offset_for_top_to_bottom_field = RBSP_READ_SE(rbsp);
         app->h264.sps.num_ref_frames_in_pic_order_cnt_cycle = RBSP_READ_UE(rbsp);
         UNCOVERED_CASE(app->h264.sps.num_ref_frames_in_pic_order_cnt_cycle, >, H264_MAX_REFS);
-        for(int i = 0; i < app->h264.sps.num_ref_frames_in_pic_order_cnt_cycle; i++) {
+        for(unsigned i = 0; i < app->h264.sps.num_ref_frames_in_pic_order_cnt_cycle; i++) {
             app->h264.sps.offset_for_ref_frame[i] = RBSP_READ_SE(rbsp);
         }
     }

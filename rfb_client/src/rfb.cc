@@ -2,8 +2,6 @@
 #include <ws2tcpip.h>
 
 #include "main.h"
-#include "utils.h"
-#include "rfb.h"
 
 #define RFB_SECURITY_NONE 1
 
@@ -91,15 +89,12 @@ struct rfb_H264_header_response_message_t {
     uint32_t length;
 };
 
-static void *rfb_function(void* data)
+static void* rfb_function(void* data)
 {
     struct app_state_t * app = (struct app_state_t*) data;
     if (app->verbose) {
         fprintf(stderr, "INFO: RFB thread has been started\n");
     }
-
-    //wait frame from network
-    STANDARD_CALL(sem_wait(&app->rfb.semaphore), error);
 
     struct rfb_buffer_update_request_message_t update_request = {
         .type = RFBFramebufferUpdateRequest,
@@ -112,6 +107,9 @@ static void *rfb_function(void* data)
 
     struct rfb_buffer_update_response_message_t update_response;
     struct rfb_H264_header_response_message_t encoding_response;
+
+    //wait frame from network
+    STANDARD_CALL(sem_wait(&app->rfb.semaphore), error);
 
     while (!is_terminated) {
         NETWORK_IO_CALL(
@@ -147,7 +145,7 @@ static void *rfb_function(void* data)
             error);
 
         // validate
-        if (ntohl(encoding_response.length) >= app->server_width * app->server_height) {
+        if ((int)ntohl(encoding_response.length) >= app->server_width * app->server_height) {
             fprintf(stderr,
                 "ERROR: H264 buffer is too big: length: %ld\n",
                 ntohl(encoding_response.length));
@@ -156,7 +154,6 @@ static void *rfb_function(void* data)
         }
 
         app->enc_buf_length = ntohl(encoding_response.length);
-
 
         NETWORK_IO_CALL(
             recv(app->rfb.socket, (char *)app->enc_buf, app->enc_buf_length, MSG_WAITALL),
@@ -173,7 +170,6 @@ static void *rfb_function(void* data)
 
     fprintf(stderr, "INFO: rfb_function is_terminated: %d\n", is_terminated);
     return NULL;
-
 error:
     is_terminated = 1;
     return NULL;
@@ -181,18 +177,18 @@ error:
 
 void rfb_destroy(struct app_state_t* app)
 {
-    int res = 0;
+    int rslt = 0;
     char buffer[MAX_BUFFER];
 
     if (app->rfb.socket > 0) {
         // shutdown the connection since no more data will be sent
         NETWORK_CALL(shutdown(app->rfb.socket, SD_SEND), close);
         do {
-            NETWORK_IO_CALL(res = recv(app->rfb.socket, buffer, MAX_BUFFER, 0), close);
-            if (res == 0 && app->verbose) {
+            NETWORK_IO_CALL(rslt = recv(app->rfb.socket, buffer, MAX_BUFFER, 0), close);
+            if (rslt == 0 && app->verbose) {
                 fprintf(stderr, "INFO: Connection closed\n");
             }
-        } while (res > 0);
+        } while (rslt > 0);
 
 close:
         NETWORK_CALL(closesocket(app->rfb.socket))
@@ -228,40 +224,35 @@ error:
 int rfb_handshake(struct app_state_t* app)
 {
     char server_rfb_version[12];
-    NETWORK_IO_CALL(recv(app->rfb.socket, server_rfb_version, sizeof(server_rfb_version), 0), error);
-
-    char* rfb_version = "RFB 003.008\n\0";
+    const char* rfb_version = "RFB 003.008\n\0";
     size_t rfb_version_length = strlen(rfb_version);
-    NETWORK_IO_CALL(send(app->rfb.socket, rfb_version, rfb_version_length, 0), error);
-    if (app->verbose) {
-        fprintf(stderr, "INFO: Server rfb version. %s\n", server_rfb_version);
-    }
-
     struct rfb_security_message_t security = {
         .types_count = 1,
         .types = RFB_SECURITY_NONE
     };
-    NETWORK_IO_CALL(recv(app->rfb.socket, (char *)&security , sizeof(security), 0), error);
-
     uint8_t client_security_type = RFB_SECURITY_NONE;
+    uint32_t success = 0;
+    uint8_t shared_flag = 0;
+    struct rfb_server_init_message_t init_message;
+
+    NETWORK_IO_CALL(recv(app->rfb.socket, server_rfb_version, sizeof(server_rfb_version), 0), error);
+    NETWORK_IO_CALL(send(app->rfb.socket, rfb_version, rfb_version_length, 0), error);
+    if (app->verbose) {
+        fprintf(stderr, "INFO: Server rfb version. %s\n", server_rfb_version);
+    }
+    NETWORK_IO_CALL(recv(app->rfb.socket, (char *)&security , sizeof(security), 0), error);
     NETWORK_IO_CALL(
         send(app->rfb.socket, (char *)&client_security_type, sizeof(client_security_type), 0),
         error);
     if (app->verbose) {
         fprintf(stderr, "INFO: Server rfb security types(%d) 0:%d\n", security.types_count, security.types);
     }
-
-    uint32_t success = 0;
     NETWORK_IO_CALL(recv(app->rfb.socket, (char *)&success, sizeof(success), 0), error);
     if (success) {
         fprintf(stderr, "ERROR: RFB handshake isn't successful\n");
         return -1;
     }
-
-    uint8_t shared_flag = 0;
     NETWORK_IO_CALL(send(app->rfb.socket, (char *)&shared_flag, sizeof(shared_flag), 0), error);
-
-    struct rfb_server_init_message_t init_message;
     NETWORK_IO_CALL(recv(app->rfb.socket, (char *)&init_message, sizeof(init_message), 0), error);
     strncpy(app->server_name, init_message.name, MAX_NAME_SIZE);
     app->server_width = ntohs(init_message.framebuffer_width);
@@ -278,7 +269,7 @@ error:
 
 int rfb_connect(struct app_state_t* app)
 {
-    int client_socket = 0, res = 0, ret = -1;
+    int client_socket = 0, rslt = 0, ret = -1;
     struct addrinfo *addr_info = NULL, *ptr = NULL, hints = {
         .ai_family = AF_UNSPEC,
         .ai_socktype = SOCK_STREAM,
@@ -296,8 +287,8 @@ int rfb_connect(struct app_state_t* app)
             cleanup
         );
 
-        NETWORK_CALL(res = connect(client_socket, ptr->ai_addr, (int)ptr->ai_addrlen));
-        if (res == -1) {
+        NETWORK_CALL(rslt = connect(client_socket, ptr->ai_addr, (int)ptr->ai_addrlen));
+        if (rslt == -1) {
             NETWORK_CALL(closesocket(client_socket), cleanup);
             client_socket = 0;
             continue;

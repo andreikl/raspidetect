@@ -6,11 +6,6 @@
 #include <khash.h>
 
 #include "main.h"
-#include "utils.h"
-#include "d3d.h"
-#include "dxva.h"
-#include "rfb.h"
-#include "cuda.h"
 
 KHASH_MAP_INIT_STR(map_str, char*)
 khash_t(map_str) *h;
@@ -61,7 +56,7 @@ static void main_function()
 
     struct app_state_t app;
     memset(&app, 0, sizeof(struct app_state_t));
-    char* input_type = utils_read_str_value(INPUT_TYPE, INPUT_TYPE_DEF);
+    const char* input_type = utils_read_str_value(INPUT_TYPE, INPUT_TYPE_DEF);
     fprintf(stderr, "INFO: input_type %s\n", input_type);
     if (!strcmp(input_type, INPUT_TYPE_FILE_STR)) {
         app.input_type = INPUT_TYPE_FILE;
@@ -78,7 +73,7 @@ static void main_function()
     app.verbose = utils_read_int_value(VERBOSE, VERBOSE_DEF);
 
     app.enc_buf_length = app.server_width * app.server_height + 1;
-    app.enc_buf = malloc(app.enc_buf_length);
+    app.enc_buf = (uint8_t*)malloc(app.enc_buf_length);
     if (app.enc_buf == NULL) {
         fprintf(
             stderr,
@@ -88,7 +83,7 @@ static void main_function()
     }
 
     app.dec_buf_length = app.server_width * app.server_height * 4 + 1;
-    app.dec_buf = malloc(app.dec_buf_length);
+    app.dec_buf = (uint8_t*)malloc(app.dec_buf_length);
     if (app.dec_buf == NULL) {
         fprintf(
             stderr,

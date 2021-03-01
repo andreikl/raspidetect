@@ -18,7 +18,7 @@
     &hash.head->data;
 
 #define LINKED_HASH_INIT(hash, size) \
-    hash.head = malloc(sizeof(*hash.head)); \
+    hash.head = (hash_item_header*)malloc(sizeof(*hash.head)); \
     memset(hash.head, 0, (int)sizeof(*hash.head)); \
     if (hash.head == NULL) { \
         fprintf(stderr, "ERROR: malloc returned error\n%s:%d - %s\n", \

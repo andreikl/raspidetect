@@ -3,5 +3,9 @@
     "editor.rulers": [100,120],
     "workbench.colorCustomizations": {
         "editorRuler.foreground": "#ff4081"
-    }
+    },
+    "cSpell.words": [
+        "HRESULT",
+        "pvoid"
+    ]
 }

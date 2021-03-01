@@ -2,7 +2,7 @@
 #include "utils.h"
 #include "cuda.h"
 
-#include "cuda_helpers.c"
+#include "cuda_helpers.cc"
 
 int cuda_destroy(app_state_t* app)
 {

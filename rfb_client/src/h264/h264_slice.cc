@@ -1,35 +1,36 @@
-#include "h264_fmo.c"
+#include "h264_fmo.cc"
 
 static int h264_init_slice_data(struct app_state_t* app)
 {
-    fprintf(stderr, "INFO: app->h264.data.PicSizeInMbs(%d)\n", app->h264.header.PicSizeInMbs);
+    struct h264_slice_header_t* header = LINKED_HASH_GET_HEAD(app->h264.headers);
+    fprintf(stderr, "INFO: app->h264.data.PicSizeInMbs(%d)\n", header->PicSizeInMbs);
 
-    int SubWidthC = -1;
-    int SubHeightC = -1;
+    int SubWidthC = -1, SubHeightC = -1, NumC8x8;
+    struct h264_macroblock_t* mb = NULL;
     GENERAL_CALL(
         h264_get_chroma_variables(app, &SubWidthC, &SubHeightC),
         error
     );
-    int NumC8x8 = 4 / (SubWidthC * SubHeightC);
+    NumC8x8 = 4 / (SubWidthC * SubHeightC);
 
     if (app->h264.data.macroblocks) {
-        for (int i = 0; i < app->h264.header.PicSizeInMbs; i++) {
-            struct h264_macroblock_t* mb = app->h264.data.macroblocks + i;
+        for (unsigned i = 0; i < header->PicSizeInMbs; i++) {
+            mb = app->h264.data.macroblocks + i;
             free(mb->Intra16x16DCLevel.coeff);
-            for (int j = 0; j < ARRAY_SIZE(mb->Intra16x16ACLevel); j++) {
+            for (unsigned j = 0; j < ARRAY_SIZE(mb->Intra16x16ACLevel); j++) {
                 free(mb->Intra16x16ACLevel[j].coeff);
             }
-            for (int j = 0; j < ARRAY_SIZE(mb->LumaLevel4x4); j++) {
+            for (unsigned j = 0; j < ARRAY_SIZE(mb->LumaLevel4x4); j++) {
                 free(mb->LumaLevel4x4[j].coeff);
             }
-            for (int j = 0; j < ARRAY_SIZE(mb->LumaLevel8x8); j++) {
+            for (unsigned j = 0; j < ARRAY_SIZE(mb->LumaLevel8x8); j++) {
                 free(mb->LumaLevel8x8[j].coeff);
             }
-            for (int j = 0; j < ARRAY_SIZE(mb->ChromaDCLevel); j++) {
+            for (unsigned j = 0; j < ARRAY_SIZE(mb->ChromaDCLevel); j++) {
                 free(mb->ChromaDCLevel[j].coeff);
             } 
-            for (int j = 0; j < ARRAY_SIZE(mb->ChromaACLevel); j++) {
-                for (int k = 0; k < ARRAY_SIZE(*mb->ChromaACLevel); k++) {
+            for (unsigned j = 0; j < ARRAY_SIZE(mb->ChromaACLevel); j++) {
+                for (unsigned k = 0; k < ARRAY_SIZE(*mb->ChromaACLevel); k++) {
                     free(mb->ChromaACLevel[j][k].coeff);                    
                 }
             }                                                   
@@ -38,42 +39,49 @@ static int h264_init_slice_data(struct app_state_t* app)
         app->h264.data.macroblocks = NULL;
     }
 
-    app->h264.data.macroblocks = malloc(app->h264.header.PicSizeInMbs * 
-        sizeof(struct h264_macroblock_t));
-    for (int i = 0; i < app->h264.header.PicSizeInMbs; i++) {
+    app->h264.data.macroblocks = (struct h264_macroblock_t*)malloc(
+        header->PicSizeInMbs * sizeof(struct h264_macroblock_t)
+    );
+    for (unsigned i = 0; i < header->PicSizeInMbs; i++) {
         struct h264_macroblock_t* mb = app->h264.data.macroblocks + i;
-        mb->Intra16x16DCLevel.coeff = malloc(sizeof(struct h264_coeff_t) * 16);
-        for (int j = 0; j < ARRAY_SIZE(mb->Intra16x16ACLevel); j++) {
-            mb->Intra16x16ACLevel[j].coeff = malloc(sizeof(struct h264_coeff_t) * 15);
+        mb->Intra16x16DCLevel.coeff = (struct h264_coeff_t*)malloc(
+            sizeof(struct h264_coeff_t) * 16);
+        for (unsigned j = 0; j < ARRAY_SIZE(mb->Intra16x16ACLevel); j++) {
+            mb->Intra16x16ACLevel[j].coeff = (struct h264_coeff_t*)malloc(
+                sizeof(struct h264_coeff_t) * 15);
             mb->Intra16x16ACLevel[j].maxNumCoeff = 15;
             mb->Intra16x16ACLevel[j].coded_block_flag = 1;
             mb->Intra16x16ACLevel[j].numDecodAbsLevelEq1 = 0;
             mb->Intra16x16ACLevel[j].numDecodAbsLevelGt1 = 0;
         }
-        for (int j = 0; j < ARRAY_SIZE(mb->LumaLevel4x4); j++) {
-            mb->LumaLevel4x4[j].coeff = malloc(sizeof(struct h264_coeff_t) * 16);
+        for (unsigned j = 0; j < ARRAY_SIZE(mb->LumaLevel4x4); j++) {
+            mb->LumaLevel4x4[j].coeff = (struct h264_coeff_t*)malloc(
+                sizeof(struct h264_coeff_t) * 16);
             mb->LumaLevel4x4[j].maxNumCoeff = 16;
             mb->LumaLevel4x4[j].coded_block_flag = 1;
             mb->LumaLevel4x4[j].numDecodAbsLevelEq1 = 0;
             mb->LumaLevel4x4[j].numDecodAbsLevelGt1 = 0;
         }
-        for (int j = 0; j < ARRAY_SIZE(mb->LumaLevel8x8); j++) {
-            mb->LumaLevel8x8[j].coeff = malloc(sizeof(struct h264_coeff_t) * 64);
+        for (unsigned j = 0; j < ARRAY_SIZE(mb->LumaLevel8x8); j++) {
+            mb->LumaLevel8x8[j].coeff = (struct h264_coeff_t*)malloc(
+                sizeof(struct h264_coeff_t) * 64);
             mb->LumaLevel8x8[j].maxNumCoeff = 64;
             mb->LumaLevel8x8[j].coded_block_flag = 1;
             mb->LumaLevel8x8[j].numDecodAbsLevelEq1 = 0;
             mb->LumaLevel8x8[j].numDecodAbsLevelGt1 = 0;
         }
-        for (int j = 0; j < ARRAY_SIZE(mb->ChromaDCLevel); j++) {
-            mb->ChromaDCLevel[j].coeff = malloc(sizeof(struct h264_coeff_t) * NumC8x8 * 4);
+        for (unsigned j = 0; j < ARRAY_SIZE(mb->ChromaDCLevel); j++) {
+            mb->ChromaDCLevel[j].coeff = (struct h264_coeff_t*)malloc(
+                sizeof(struct h264_coeff_t) * NumC8x8 * 4);
             mb->ChromaDCLevel[j].maxNumCoeff = NumC8x8 * 4;
             mb->ChromaDCLevel[j].coded_block_flag = 1;
             mb->ChromaDCLevel[j].numDecodAbsLevelEq1 = 0;
             mb->ChromaDCLevel[j].numDecodAbsLevelGt1 = 0;
         }
-        for (int j = 0; j < ARRAY_SIZE(mb->ChromaACLevel); j++) {
-            for (int k = 0; k < ARRAY_SIZE(*mb->ChromaACLevel); k++) {
-                mb->ChromaACLevel[j][k].coeff = malloc(sizeof(struct h264_coeff_t) * 15);
+        for (unsigned j = 0; j < ARRAY_SIZE(mb->ChromaACLevel); j++) {
+            for (unsigned k = 0; k < ARRAY_SIZE(*mb->ChromaACLevel); k++) {
+                mb->ChromaACLevel[j][k].coeff = (struct h264_coeff_t*)malloc(
+                    sizeof(struct h264_coeff_t) * 15);
                 mb->ChromaACLevel[j][k].maxNumCoeff = 15;
                 mb->ChromaACLevel[j][k].coded_block_flag = 1;
                 mb->ChromaACLevel[j][k].numDecodAbsLevelEq1 = 0;
@@ -92,10 +100,11 @@ error:
 
 static int h264_read_mb_type(struct app_state_t* app)
 {
+    struct h264_slice_header_t* header = LINKED_HASH_GET_HEAD(app->h264.headers);
     struct h264_rbsp_t* rbsp = &app->h264.rbsp;
 
     if (app->h264.pps.entropy_coding_mode_flag) {
-        UNCOVERED_CASE(app->h264.header.slice_type, !=, SliceTypeI);
+        UNCOVERED_CASE(header->slice_type, !=, SliceTypeI);
         GENERAL_CALL(h264_cabac_read_mb_type(app), error);
 	    app->h264.data.curr_mb->mb_type = (H264_U_I | app->h264.data.curr_mb->mb_type_origin);
     } else {
@@ -508,9 +517,10 @@ error:
 
 int h264_NextMbAddress(struct app_state_t* app, int n)
 {
-    int i = n + 1;
+    struct h264_slice_header_t* header = LINKED_HASH_GET_HEAD(app->h264.headers);
+    unsigned i = n + 1;
     while (
-        i < app->h264.header.PicSizeInMbs &&
+        i < header->PicSizeInMbs &&
         app->h264.MbToSliceGroupMap[i] != app->h264.MbToSliceGroupMap[n]
     ) {
         i++;
@@ -521,7 +531,10 @@ int h264_NextMbAddress(struct app_state_t* app, int n)
 // Slice data 7.3.4
 static int h264_read_slice_data(struct app_state_t* app)
 {
+    struct h264_slice_header_t* header = LINKED_HASH_GET_HEAD(app->h264.headers);
     struct h264_rbsp_t* rbsp = &app->h264.rbsp;
+    int moreDataFlag = 1;
+    int prevMbSkipped = 1;
 
     GENERAL_CALL(h264_init_slice_data(app), error);
 
@@ -534,15 +547,13 @@ static int h264_read_slice_data(struct app_state_t* app)
     }
 
     app->h264.data.PrevMbAddr = -1;
-    app->h264.data.CurrMbAddr = app->h264.header.first_mb_in_slice *
-        (1 + app->h264.header.MbaffFrameFlag);
+    app->h264.data.CurrMbAddr = header->first_mb_in_slice *
+        (1 + header->MbaffFrameFlag);
     app->h264.data.curr_mb = app->h264.data.macroblocks + app->h264.data.CurrMbAddr;
-    int moreDataFlag = 1;
-    int prevMbSkipped = 1;
     do {
         if (
-            app->h264.header.slice_type != SliceTypeI &&
-            app->h264.header.slice_type != SliceTypeSI
+            header->slice_type != SliceTypeI &&
+            header->slice_type != SliceTypeSI
         ) {
             UNCOVERED_CASE(app->h264.pps.entropy_coding_mode_flag, ==, 0);
 
@@ -557,7 +568,7 @@ static int h264_read_slice_data(struct app_state_t* app)
         }
         if (moreDataFlag) {
             if (
-                app->h264.header.MbaffFrameFlag &&
+                header->MbaffFrameFlag &&
                 (
                     app->h264.data.CurrMbAddr % 2 == 0 ||
                     (app->h264.data.CurrMbAddr % 2 == 1 && prevMbSkipped
@@ -577,12 +588,12 @@ static int h264_read_slice_data(struct app_state_t* app)
             moreDataFlag = !RBSP_EOF(rbsp);
         } else {
             if (
-                app->h264.header.slice_type != SliceTypeI &&
-                app->h264.header.slice_type != SliceTypeSI
+                header->slice_type != SliceTypeI &&
+                header->slice_type != SliceTypeSI
             ) {
                 prevMbSkipped = app->h264.data.curr_mb->mb_skip_flag;
             }
-            if (app->h264.header.MbaffFrameFlag && app->h264.data.CurrMbAddr % 2 == 0) {
+            if (header->MbaffFrameFlag && app->h264.data.CurrMbAddr % 2 == 0) {
                 moreDataFlag = 1;
             } else {
                 GENERAL_CALL(h264_cabac_end_of_slice_flag(app), error);

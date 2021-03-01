@@ -60,6 +60,9 @@
 #include <semaphore.h>
 #include <windows.h>
 #include <fcntl.h> // O_BINARY
+#include <time.h> // nanosleep
+
+#include "utils.h"
 
 #define GET_3RD_ARG(arg1, arg2, arg3, ...) arg3
 
@@ -117,7 +120,7 @@
 #define STANDARD_CALL_X(...) GET_3RD_ARG(__VA_ARGS__, STANDARD_CALL_2, STANDARD_CALL_1, )
 #define STANDARD_CALL(...) STANDARD_CALL_X(__VA_ARGS__)(__VA_ARGS__)
 
-#define ARRAY_SIZE(a) (sizeof(a) / sizeof(a[0]))
+#define ARRAY_SIZE(a) ((unsigned)(sizeof(a) / sizeof(a[0])))
 
 #define GENERAL_DEBUG_INT(text, value) \
 { \
@@ -168,6 +171,8 @@
 #include "linked_hash.h"
 
 #ifdef ENABLE_RFB
+    #include "rfb.h"
+
     struct rfb_state_t
     {
         int socket;
@@ -179,6 +184,7 @@
 
 #ifdef ENABLE_D3D
     #include <d3d9.h> //Direct3d9 API
+    #include "d3d.h"
 
     struct d3d_state_t {
         IDirect3D9* d3d;
@@ -195,6 +201,7 @@
     //#include <initguid.h> //DEFINE_GUID macros
     #include <dxva2api.h> //dxva2 API
     #include <dxva.h> //DXVA_Slice_H264_Long
+    #include "dxva.h"
 
     //#define H264CODEC DXVA2_ModeH264_A
     //#define H264CODEC DXVA2_ModeH264_B
@@ -230,6 +237,8 @@
 #endif //ENABLE_DXVA
 
 #ifdef ENABLE_H264
+    #include "h264.h"
+
     #define H264_PICT_TOP_FIELD     1
     #define H264_PICT_BOTTOM_FIELD  2
     #define H264_PICT_FRAME         3
@@ -431,11 +440,6 @@
         int bits_left;
     };
 
-    typedef struct {
-        unsigned codIOffset;
-        unsigned codIRange;
-    } h264_cabac_t;
-
 #ifdef ENABLE_H264_SLICE
     // 7.3.5.3.3 Residual block CABAC syntax
     struct h264_coeff_t {
@@ -483,7 +487,8 @@
         struct h264_coeff_level_t ChromaACLevel[2][4];
     };
 
-    struct h264_slice_data_t {
+    struct h264_slice_data_t
+    {
         // Macroblock variables
         signed CurrMbAddr;
         signed PrevMbAddr;
@@ -529,6 +534,7 @@
 
 #ifdef ENABLE_FFMPEG
 #include <libavcodec/avcodec.h>
+#include "ffmpeg.h"
     struct ffmpeg_state_t {
         AVCodec* codec;
         AVCodecContext* ctx;
@@ -539,6 +545,7 @@
 
 #ifdef ENABLE_CUDA
     #include <cuviddec.h>
+    #include "cuda.h"
 
     struct cuda_state_t {
         char name[MAX_NAME_SIZE + 1];
@@ -549,8 +556,10 @@
     };
 #endif //ENABLE_CUDA
 
+#include "file.h"
+
 struct file_state_t {
-    char* file_name;
+    const char* file_name;
     FILE* fstream;
     sem_t semaphore;
 
@@ -562,8 +571,8 @@ struct app_state_t {
     HWND wnd;
     HINSTANCE instance;
     unsigned input_type;
-    char* server_host;
-    char* server_port;
+    const char* server_host;
+    const char* server_port;
     int server_width;
     int server_height;
     int server_chroma;

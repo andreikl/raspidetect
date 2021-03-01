@@ -3,14 +3,14 @@ static int h264_read_ref_pic_list_modification(struct app_state_t* app)
     struct h264_slice_header_t* header = LINKED_HASH_GET_HEAD(app->h264.headers);
     struct h264_rbsp_t* rbsp = &app->h264.rbsp;
 
-    for (int list = 0; list < header->list_count; list++) {
+    for (unsigned list = 0; list < header->list_count; list++) {
         int ref_pic_list_reordering_flag = RBSP_READ_U1(rbsp);
         //H264_RBSP_DEBUG(ref_pic_list_reordering_flag);
         if (!ref_pic_list_reordering_flag) {
             continue;
         }
 
-        for (int i = 0; ; i++) {
+        for (unsigned i = 0; ; i++) {
             int reordering_of_pic_nums_idc = RBSP_READ_UE(rbsp);
             //H264_RBSP_DEBUG(reordering_of_pic_nums_idc);
 
@@ -76,8 +76,8 @@ static int h264_read_pred_weight_table(struct app_state_t* app)
         chroma_def = 1 << header->chroma_log2_weight_denom;
     }
 
-    for (int list = 0; list < header->list_count; list++) {
-        for (int i = 0; i < header->ref_count[0]; i++) {
+    for (unsigned list = 0; list < header->list_count; list++) {
+        for (unsigned i = 0; i < header->ref_count[0]; i++) {
             //ffmpeg: pwt->luma_weight_flag[list];
             header->weights[list][i].luma_weight_flag = RBSP_READ_U1(rbsp);
             if (header->weights[list][i].luma_weight_flag) {
@@ -465,7 +465,7 @@ static int h264_read_slice_header(struct app_state_t *app)
 
     if (header->list_count > 0) {
         GENERAL_DEBUG_INT("list_count", header->list_count);
-        for (int i = 0; i < header->list_count; i++) {
+        for (unsigned i = 0; i < header->list_count; i++) {
             GENERAL_DEBUG_INT("ref_count[i]", header->ref_count[i]);
         }
 

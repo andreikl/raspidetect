@@ -28,14 +28,14 @@ error:
     return -1;
 }
 
-#include "h264_helpers.c"
-#include "h264_sps.c"
-#include "h264_pps.c"
-#include "h264_header.c"
+#include "h264_helpers.cc"
+#include "h264_sps.cc"
+#include "h264_pps.cc"
+#include "h264_header.cc"
 
 #ifdef ENABLE_H264_SLICE 
-#include "h264_cabac.c"
-#include "h264_slice.c"
+#include "h264_cabac.cc"
+#include "h264_slice.cc"
 #endif // ENABLE_H264_SLICE
 
 //h264_slice.c:2090
@@ -73,12 +73,12 @@ static int h264_slice_layer_without_partitioning_rbsp(struct app_state_t *app, i
         app->h264.setup_finished = 1;
     }
 
-    for (int i = 0; i < header->mmco_size; i++) {
+    for (unsigned i = 0; i < header->mmco_size; i++) {
         if (
             header->mmco[i].mmco == MMCO_SHORT2UNUSED ||
             header->mmco[i].mmco == MMCO_SHORT2LONG
         ) {
-            int pic_num = header->mmco[i].short_picNumX;
+            unsigned pic_num = header->mmco[i].short_picNumX;
             if (header->picture_structure != H264_PICT_FRAME) {
                 pic_num >>= 1;
             }
@@ -109,8 +109,8 @@ int h264_decode(struct app_state_t *app)
     while(!find_nal(app->enc_buf, app->enc_buf_length, &start, &end)) {
         struct h264_nal_t* header = (struct h264_nal_t*)&app->enc_buf[start++];
 
-        app->h264.nal_unit_type = header->u.nal_unit_type;
-        app->h264.nal_ref_idc = header->u.nal_ref_idc;
+        app->h264.nal_unit_type = header->u.h_bits.nal_unit_type;
+        app->h264.nal_ref_idc = header->u.h_bits.nal_ref_idc;
 
         UNCOVERED_CASE(app->h264.nal_unit_type, ==, 14);
         UNCOVERED_CASE(app->h264.nal_unit_type, ==, 20);

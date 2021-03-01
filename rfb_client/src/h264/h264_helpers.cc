@@ -1,4 +1,4 @@
-static char* h264_get_nal_unit_type(int nal_unit_type)
+static const char* h264_get_nal_unit_type(int nal_unit_type)
 {
     switch (nal_unit_type) {
         case NAL_UNIT_TYPE_CODED_SLICE_NON_IDR:
@@ -18,7 +18,7 @@ static char* h264_get_nal_unit_type(int nal_unit_type)
     };
 }
 
-static char* h264_get_nal_ref_idc(int nal_ref_idc)
+static const char* h264_get_nal_ref_idc(int nal_ref_idc)
 {
     switch (nal_ref_idc) {
         case NAL_REF_IDC_PRIORITY_LOW:
@@ -29,7 +29,7 @@ static char* h264_get_nal_ref_idc(int nal_ref_idc)
     };
 }
 
-static char* h264_get_slice_type(int slice_type)
+static const char* h264_get_slice_type(int slice_type)
 {
     if (slice_type == SliceTypeP) {
         return "P (0)";
@@ -199,11 +199,12 @@ unsigned h264_is_MbAddr_available(struct app_state_t* app, int mbAddr)
 // 6.4.9 Derivation process for neighbouring macroblock addresses and their availability
 int h264_MbAddrA(struct app_state_t* app)
 {
-    UNCOVERED_CASE(app->h264.header.MbaffFrameFlag, !=, 0);
+    struct h264_slice_header_t* header = LINKED_HASH_GET_HEAD(app->h264.headers);
+    UNCOVERED_CASE(header->MbaffFrameFlag, !=, 0);
 
     int mbAddrA = app->h264.data.CurrMbAddr - 1;
     if (h264_is_MbAddr_available(app, mbAddrA)) {
-        return (app->h264.data.CurrMbAddr % app->h264.header.PicWidthInMbs != 0)? mbAddrA: -1;
+        return (app->h264.data.CurrMbAddr % header->PicWidthInMbs != 0)? mbAddrA: -1;
     }
     else {
         return -1;
@@ -213,9 +214,10 @@ int h264_MbAddrA(struct app_state_t* app)
 // 6.4.9 Derivation process for neighbouring macroblock addresses and their availability
 int h264_MbAddrB(struct app_state_t* app)
 {
-    UNCOVERED_CASE(app->h264.header.MbaffFrameFlag, !=, 0);
+    struct h264_slice_header_t* header = LINKED_HASH_GET_HEAD(app->h264.headers);
+    UNCOVERED_CASE(header->MbaffFrameFlag, !=, 0);
 
-    int mbAddrB = app->h264.data.CurrMbAddr - app->h264.header.PicWidthInMbs;
+    int mbAddrB = app->h264.data.CurrMbAddr - header->PicWidthInMbs;
     if (h264_is_MbAddr_available(app, mbAddrB)) {
         return mbAddrB;
     }
@@ -227,11 +229,12 @@ int h264_MbAddrB(struct app_state_t* app)
 // 6.4.9 Derivation process for neighbouring macroblock addresses and their availability
 int h264_MbAddrC(struct app_state_t* app)
 {
-    UNCOVERED_CASE(app->h264.header.MbaffFrameFlag, !=, 0);
+    struct h264_slice_header_t* header = LINKED_HASH_GET_HEAD(app->h264.headers);
+    UNCOVERED_CASE(header->MbaffFrameFlag, !=, 0);
 
-    int mbAddrC = app->h264.data.CurrMbAddr - app->h264.header.PicWidthInMbs + 1;
+    int mbAddrC = app->h264.data.CurrMbAddr - header->PicWidthInMbs + 1;
     if (h264_is_MbAddr_available(app, mbAddrC)) {
-        return ((app->h264.data.CurrMbAddr + 1) % app->h264.header.PicWidthInMbs != 0)?
+        return ((app->h264.data.CurrMbAddr + 1) % header->PicWidthInMbs != 0)?
             mbAddrC: -1;;
     }
     else {
@@ -242,11 +245,12 @@ int h264_MbAddrC(struct app_state_t* app)
 // 6.4.9 Derivation process for neighbouring macroblock addresses and their availability
 int h264_MbAddrD(struct app_state_t* app)
 {
-    UNCOVERED_CASE(app->h264.header.MbaffFrameFlag, !=, 0);
+    struct h264_slice_header_t* header = LINKED_HASH_GET_HEAD(app->h264.headers);
+    UNCOVERED_CASE(header->MbaffFrameFlag, !=, 0);
 
-    int mbAddrD = app->h264.data.CurrMbAddr - app->h264.header.PicWidthInMbs - 1;
+    int mbAddrD = app->h264.data.CurrMbAddr - header->PicWidthInMbs - 1;
     if (h264_is_MbAddr_available(app, mbAddrD)) {
-        return (app->h264.data.CurrMbAddr % app->h264.header.PicWidthInMbs != 0)? mbAddrD: -1;
+        return (app->h264.data.CurrMbAddr % header->PicWidthInMbs != 0)? mbAddrD: -1;
     }
     else {
         return -1;
