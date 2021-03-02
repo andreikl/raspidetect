@@ -52,7 +52,7 @@ pacman -S mingw-w64-x86_64-make
 ./configure --prefix=/usr/local --disable-x86asm    --disable-avdevice  --disable-postproc --disable-avfilter
 
 minimum: some code fix required
-./configure --prefix=/usr/local --disable-x86asm --disable-all --enable-avcodec --enable-decoder=h264
+./configure --prefix=/usr/local --disable-x86asm --disable-all --enable-avcodec --enable-decoder=h264 --enable-hwaccel=h264_dxva2
 # options emitted with CONFIG_ prefix but not available on the command line
 CONFIG_EXTRA="
     frame_thread_encoder
@@ -67,6 +67,7 @@ CONFIG_EXTRA="
     startcode
     me_cmp
     idctdsp
+    atsc_a53
 "
 ------------
 easy to understand

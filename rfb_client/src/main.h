@@ -13,7 +13,7 @@
 #define INPUT_TYPE "-i\0"
 #define INPUT_TYPE_FILE_STR "file\0"
 #define INPUT_TYPE_RFB_STR "rfb\0"
-#define INPUT_TYPE_DEF "rfb\0"
+#define INPUT_TYPE_DEF "file\0"
 #define INPUT_TYPE_RFB 1
 #define INPUT_TYPE_FILE 0
 
