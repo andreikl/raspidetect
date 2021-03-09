@@ -542,6 +542,7 @@ extern "C" {
     struct ffmpeg_state_t {
         AVCodec* codec;
         AVCodecContext* ctx;
+        AVBufferRef *hw_ctx;
         AVFrame* fr;
         AVPacket pkt;
     };

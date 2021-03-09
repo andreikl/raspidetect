@@ -12,6 +12,9 @@ void ffmpeg_destroy(struct app_state_t* app)
         av_frame_free(&app->ffmpeg.fr);
         app->ffmpeg.fr = NULL;
     }
+    if (app->ffmpeg.hw_ctx != NULL) {
+        av_buffer_unref(&app->ffmpeg.hw_ctx);
+    }
     if (app->ffmpeg.ctx) {
         avcodec_close(app->ffmpeg.ctx);
     }
@@ -36,13 +39,37 @@ int ffmpeg_init(struct app_state_t* app)
         goto error;
     }
 
+    for (int i = 0;; i++) {
+        const AVCodecHWConfig *config = avcodec_get_hw_config(app->ffmpeg.codec, i);
+        if (!config) {
+            fprintf(stderr, "Decoder %s does not support device type %s.\n",
+                app->ffmpeg.codec->name, av_hwdevice_get_type_name(AV_HWDEVICE_TYPE_DXVA2));
+            return -1;
+        }
+        if (config->methods & AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX &&
+            config->device_type == AV_HWDEVICE_TYPE_DXVA2) {
+            //app->ffmpeg.ctx->pix_fmt = config->pix_fmt;
+            break;
+        }
+    }
+
     app->ffmpeg.ctx->width  = app->server_width;
     app->ffmpeg.ctx->height = app->server_height;
     if (app->server_chroma == CHROMA_FORMAT_YUV422) {
-        app->ffmpeg.ctx->pix_fmt = AV_PIX_FMT_YUV422P;
+        app->ffmpeg.ctx->pix_fmt = AV_PIX_FMT_DXVA2_VLD;
+    }
+    else {
+        UNCOVERED_CASE(app->server_chroma, !=, CHROMA_FORMAT_YUV422);
     }
     app->ffmpeg.ctx->flags2 |= AV_CODEC_FLAG2_CHUNKS;
     app->ffmpeg.ctx->debug = 1;
+
+    res = av_hwdevice_ctx_create(&app->ffmpeg.hw_ctx, AV_HWDEVICE_TYPE_DXVA2, NULL, NULL, 0);
+    if (res < 0) {
+        fprintf(stderr, "ERROR: av_hwdevice_ctx_create can't create specified HW device.\n");
+        goto error;
+    }
+    app->ffmpeg.hw_ctx = av_buffer_ref(app->ffmpeg.hw_ctx);
 
     res = avcodec_open2(app->ffmpeg.ctx, app->ffmpeg.codec, NULL);
     if (res < 0) {
