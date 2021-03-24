@@ -68,7 +68,7 @@ endif
 
 ifeq ($(ENABLE_FFMPEG), 1)
 	COMMON += -IC:\msys64\usr\local\include -DENABLE_FFMPEG
-	LDFLAGS += -LC:\msys64\usr\local\lib -lavcodec -lavutil -lbcrypt -liconv
+	LDFLAGS += -LC:\msys64\usr\local\lib -lavcodec -lavutil -lbcrypt -liconv -lole32
 	OBJ += ffmpeg.o
 endif
 

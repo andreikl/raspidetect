@@ -12,11 +12,11 @@ void ffmpeg_destroy(struct app_state_t* app)
         av_frame_free(&app->ffmpeg.fr);
         app->ffmpeg.fr = NULL;
     }
-    if (app->ffmpeg.hw_ctx != NULL) {
-        av_buffer_unref(&app->ffmpeg.hw_ctx);
-    }
     if (app->ffmpeg.ctx) {
         avcodec_close(app->ffmpeg.ctx);
+    }
+    if (app->ffmpeg.ctx->hw_device_ctx != NULL) {
+        av_buffer_unref(&app->ffmpeg.ctx->hw_device_ctx);
     }
     if (app->ffmpeg.ctx) {
         avcodec_free_context(&app->ffmpeg.ctx);
@@ -64,12 +64,13 @@ int ffmpeg_init(struct app_state_t* app)
     app->ffmpeg.ctx->flags2 |= AV_CODEC_FLAG2_CHUNKS;
     app->ffmpeg.ctx->debug = 1;
 
-    res = av_hwdevice_ctx_create(&app->ffmpeg.hw_ctx, AV_HWDEVICE_TYPE_DXVA2, NULL, NULL, 0);
+    AVBufferRef *hw_ctx;
+    res = av_hwdevice_ctx_create(&hw_ctx, AV_HWDEVICE_TYPE_DXVA2, NULL, NULL, 0);
     if (res < 0) {
         fprintf(stderr, "ERROR: av_hwdevice_ctx_create can't create specified HW device.\n");
         goto error;
     }
-    app->ffmpeg.hw_ctx = av_buffer_ref(app->ffmpeg.hw_ctx);
+    app->ffmpeg.ctx->hw_device_ctx = av_buffer_ref(hw_ctx);
 
     res = avcodec_open2(app->ffmpeg.ctx, app->ffmpeg.codec, NULL);
     if (res < 0) {

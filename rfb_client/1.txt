@@ -49,9 +49,11 @@ PicOrderCnt( picX ) = Min( TopFieldOrderCnt, BottomFieldOrderCnt ) of the frame 
 msys2 and ffmpeg
 pacman -S mingw-w64-x86_64-gcc
 pacman -S mingw-w64-x86_64-make
-./configure --prefix=/usr/local --disable-x86asm    --disable-avdevice  --disable-postproc --disable-avfilter
-
+----------
 minimum: some code fix required
+ffmpeg\libavcodec\h264dec.c:1018
+(h->mb_height && h->mb_height)) {
+----------
 ./configure --prefix=/usr/local --disable-x86asm --disable-all --enable-avcodec --enable-decoder=h264 --enable-hwaccel=h264_dxva2
 # options emitted with CONFIG_ prefix but not available on the command line
 CONFIG_EXTRA="
