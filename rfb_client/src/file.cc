@@ -52,13 +52,17 @@ static void *file_function(void* data)
             }
         }
 
+        int ret = 0;
 #ifdef ENABLE_H264
-        GENERAL_CALL(h264_decode(app), error);
+        GENERAL_CALL(ret = h264_decode(app));
 #endif //ENABLE_H264
 
 #ifdef ENABLE_FFMPEG
-        GENERAL_CALL(ffmpeg_decode(app, start, end), error);
+        GENERAL_CALL(ret = ffmpeg_decode(app, start, end));
 #endif //ENABLE_FFMPEG
+        if (ret) {
+            goto error;
+        }
     }
 
     fprintf(stderr, "INFO: file_function is_terminated: %d\n", is_terminated);

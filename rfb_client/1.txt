@@ -56,6 +56,8 @@ ffmpeg\libavcodec\h264dec.c:1018
 ----------
 ./configure --prefix=/usr/local --disable-x86asm --disable-all --enable-avcodec --enable-decoder=h264 --enable-hwaccel=h264_dxva2
 # options emitted with CONFIG_ prefix but not available on the command line
+ffmpeg_debug_version.patch
+
 CONFIG_EXTRA="
     frame_thread_encoder
     cabac

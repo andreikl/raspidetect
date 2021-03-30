@@ -238,22 +238,52 @@ static int dxva_fill_slice(struct app_state_t *app, uint8_t *buffer)
 {
     struct h264_slice_header_t* header = LINKED_HASH_GET_HEAD(app->h264.headers);
 
-    app->dxva.slice.slice_type = header->slice_type_origin;
-    app->dxva.slice.num_ref_idx_l0_active_minus1 = header->ref_count[0] - 1;
-    app->dxva.slice.num_ref_idx_l1_active_minus1 = header->ref_count[1] - 1;
-    app->dxva.slice.slice_alpha_c0_offset_div2 = header->slice_alpha_c0_offset_div2;
-    app->dxva.slice.slice_beta_offset_div2 = header->slice_beta_offset_div2;
-    app->dxva.slice.luma_log2_weight_denom = header->luma_log2_weight_denom;
-    app->dxva.slice.chroma_log2_weight_denom = header->chroma_log2_weight_denom;
+    app->dxva.slice.BSNALunitDataLocation = buffer - app->enc_buf;
+    GENERAL_DEBUG(app->dxva.slice.BSNALunitDataLocation);
+    //TODO: calculate length without 000x
+    app->dxva.slice.SliceBytesInBuffer = app->enc_buf_length - 4;
+    GENERAL_DEBUG(app->dxva.slice.SliceBytesInBuffer);
+    app->dxva.slice.wBadSliceChopping = 0;
+    GENERAL_DEBUG(app->dxva.slice.wBadSliceChopping);
     app->dxva.slice.first_mb_in_slice = header->first_mb_in_slice;
-    app->dxva.slice.slice_qs_delta = header->slice_qs_delta;
-    app->dxva.slice.slice_qp_delta = header->slice_qp_delta;
-    app->dxva.slice.redundant_pic_cnt = header->redundant_pic_cnt;
-    app->dxva.slice.direct_spatial_mv_pred_flag = header->direct_spatial_mv_pred_flag;
-    app->dxva.slice.cabac_init_idc = header->cabac_init_idc;
-    app->dxva.slice.disable_deblocking_filter_idc = header->disable_deblocking_filter_idc;
-
+    GENERAL_DEBUG(app->dxva.slice.first_mb_in_slice);
+    ...
+    //TODO: should be 0 for first slice
     app->dxva.slice.NumMbsForSlice = header->PicSizeInMbs - header->first_mb_in_slice;
+    GENERAL_DEBUG(app->dxva.slice.NumMbsForSlice);
+    //TODO: replace to right calculation
+    app->dxva.slice.BitOffsetToSliceData = 24;
+    GENERAL_DEBUG(app->dxva.slice.BitOffsetToSliceData);
+    app->dxva.slice.slice_type = header->slice_type_origin;
+    GENERAL_DEBUG(app->dxva.slice.slice_type);
+    app->dxva.slice.luma_log2_weight_denom = header->luma_log2_weight_denom;
+    GENERAL_DEBUG(app->dxva.slice.luma_log2_weight_denom);
+    app->dxva.slice.chroma_log2_weight_denom = header->chroma_log2_weight_denom;
+    GENERAL_DEBUG(app->dxva.slice.chroma_log2_weight_denom);
+    app->dxva.slice.num_ref_idx_l0_active_minus1 = header->ref_count[0] - 1;
+    GENERAL_DEBUG(app->dxva.slice.num_ref_idx_l0_active_minus1);
+    app->dxva.slice.num_ref_idx_l1_active_minus1 = header->ref_count[1] - 1;
+    GENERAL_DEBUG(app->dxva.slice.num_ref_idx_l1_active_minus1);
+    app->dxva.slice.slice_alpha_c0_offset_div2 = header->slice_alpha_c0_offset_div2;
+    GENERAL_DEBUG(app->dxva.slice.slice_alpha_c0_offset_div2);
+    app->dxva.slice.slice_beta_offset_div2 = header->slice_beta_offset_div2;
+    GENERAL_DEBUG(app->dxva.slice.slice_beta_offset_div2);
+    GENERAL_DEBUG(app->dxva.slice.Reserved8Bits);
+    app->dxva.slice.slice_qs_delta = header->slice_qs_delta;
+    GENERAL_DEBUG(app->dxva.slice.slice_qs_delta);
+    app->dxva.slice.slice_qp_delta = header->slice_qp_delta;
+    GENERAL_DEBUG(app->dxva.slice.slice_qp_delta);
+    app->dxva.slice.redundant_pic_cnt = header->redundant_pic_cnt;
+    GENERAL_DEBUG(app->dxva.slice.redundant_pic_cnt);
+    app->dxva.slice.direct_spatial_mv_pred_flag = header->direct_spatial_mv_pred_flag;
+    GENERAL_DEBUG(app->dxva.slice.direct_spatial_mv_pred_flag);
+    app->dxva.slice.cabac_init_idc = header->cabac_init_idc;
+    GENERAL_DEBUG(app->dxva.slice.cabac_init_idc);
+    app->dxva.slice.disable_deblocking_filter_idc = header->disable_deblocking_filter_idc;
+    GENERAL_DEBUG(app->dxva.slice.disable_deblocking_filter_idc);
+    app->dxva.slice.slice_id = app->dxva.slice_id++;
+    GENERAL_DEBUG(app->dxva.slice_id);
+
     //TODO: RefPicList, DXVA_PicEntry_H264 RefPicList[2][32]; - DXVA_PicEntry_H264 - char
     for (unsigned list = 0; list < 2; list++) {
         for (unsigned ref = 0; ref < ARRAY_SIZE(app->dxva.slice.RefPicList[0]); ref++) {
@@ -303,13 +333,6 @@ static int dxva_fill_slice(struct app_state_t *app, uint8_t *buffer)
             }
         }
     }
-
-    app->dxva.slice.BSNALunitDataLocation = buffer - app->enc_buf;
-    app->dxva.slice.SliceBytesInBuffer = app->enc_buf_length;
-    app->dxva.slice.wBadSliceChopping = 0;
-    app->dxva.slice.BitOffsetToSliceData = 0;
-    app->dxva.slice.slice_id = app->dxva.slice_id++;
-
     return 0;
 }
 

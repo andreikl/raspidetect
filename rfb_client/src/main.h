@@ -122,6 +122,13 @@
 
 #define ARRAY_SIZE(a) ((unsigned)(sizeof(a) / sizeof(a[0])))
 
+#define GENERAL_DEBUG(value) \
+{ \
+    fprintf(stderr, "INFO: %s, "#value": %d\n", \
+        __FUNCTION__, \
+        value); \
+}
+
 #define GENERAL_DEBUG_INT(text, value) \
 { \
     fprintf(stderr, "INFO: %s, "#text": %d\n", \
