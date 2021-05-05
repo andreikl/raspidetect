@@ -10,6 +10,7 @@ ENABLE_FFMPEG = 1
 EXEC = rfb_client
 OBJDIR = ./obj/
 SRCDIR = ./src/
+LIBDIR = C:/cygwin/usr/local
 #                                                          execution time|code size|memory usage|compile time
 #-O0 		optimization for compilation time (default) 		+ 	+ 	- 	-
 #-O1 or -O 	optimization for code size and execution time 		- 	- 	+ 	+
@@ -25,7 +26,8 @@ CC = g++
 
 LDFLAGS = -Llib/x64 -Llib
 #COBJMACROS - allow c calls
-COMMON = -I../external/klib -DCOBJMACROS
+#D_POSIX_SOURCE - make visible errno in stdio.h
+COMMON = -I../external/klib -DCOBJMACROS -D_POSIX_SOURCE
 #-D_POSIX_C_SOURCE=199309L fixes some errors
 #CFLAGS = -pthread -O3 -fPIC -Wall -Wno-implicit-function-declaration -Wno-unused-function -DNDEBUG -std=c17 -D_POSIX_C_SOURCE=199309L
 #-stdlib=libcpp
@@ -67,8 +69,8 @@ ifeq ($(ENABLE_CUDA), 1)
 endif
 
 ifeq ($(ENABLE_FFMPEG), 1)
-	COMMON += -IC:\msys64\usr\local\include -DENABLE_FFMPEG
-	LDFLAGS += -LC:\msys64\usr\local\lib -lavcodec -lavutil -lbcrypt -liconv -lole32
+	COMMON += -I$(LIBDIR)/include -DENABLE_FFMPEG
+	LDFLAGS += -L$(LIBDIR)/lib -lavcodec -lavutil -lbcrypt -liconv -lole32
 	OBJ += ffmpeg.o
 endif
 
@@ -88,4 +90,6 @@ obj:
 .PHONY: clean
 
 clean:
-	powershell if (Test-Path -Path ./obj) { rm -Recurse ./obj }
+	cmd /c "if exist obj rmdir obj /s /q"
+#	powershell if (Test-Path -Path ./obj) { rm -Recurse ./obj }
+

@@ -247,7 +247,7 @@ static int dxva_fill_slice(struct app_state_t *app, uint8_t *buffer)
     GENERAL_DEBUG(app->dxva.slice.wBadSliceChopping);
     app->dxva.slice.first_mb_in_slice = header->first_mb_in_slice;
     GENERAL_DEBUG(app->dxva.slice.first_mb_in_slice);
-    ...
+    //...
     //TODO: should be 0 for first slice
     app->dxva.slice.NumMbsForSlice = header->PicSizeInMbs - header->first_mb_in_slice;
     GENERAL_DEBUG(app->dxva.slice.NumMbsForSlice);

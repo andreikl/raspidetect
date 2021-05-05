@@ -135,7 +135,7 @@ static void dxva_print_format(D3DFORMAT format)
 
 static void dxva_print_config(struct app_state_t *app)
 {
-    for (u_int i = 0; i < app->dxva.cfg_count; i++) {
+    for (unsigned i = 0; i < app->dxva.cfg_count; i++) {
         DXVA2_ConfigPictureDecode *cfg = &app->dxva.cfg_list[i];
         fprintf(stderr, "%d guidConfigBitstreamEncryption: ", i); dxva_print_guid(cfg->guidConfigBitstreamEncryption);
         fprintf(stderr, "%d guidConfigMBcontrolEncryption: ", i); dxva_print_guid(cfg->guidConfigMBcontrolEncryption);
@@ -159,7 +159,7 @@ static void dxva_print_config(struct app_state_t *app)
 
 static int dxva_find_config(struct app_state_t *app)
 {
-    for (u_int i = 0; i < app->dxva.cfg_count; i++) {
+    for (unsigned i = 0; i < app->dxva.cfg_count; i++) {
         DXVA2_ConfigPictureDecode *cfg = &app->dxva.cfg_list[i];
         if (cfg->ConfigBitstreamRaw == 1) {
             app->dxva.cfg = cfg;

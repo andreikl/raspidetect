@@ -1,5 +1,7 @@
 // standard libraries
 #include <signal.h>
+#include <stdio.h> //fileno
+#include <io.h> //setmode
 // windows
 #include <windowsx.h>
 // 3rd party libraries

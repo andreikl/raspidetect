@@ -58,21 +58,6 @@ ffmpeg\libavcodec\h264dec.c:1018
 # options emitted with CONFIG_ prefix but not available on the command line
 ffmpeg_debug_version.patch
 
-CONFIG_EXTRA="
-    frame_thread_encoder
-    cabac
-    golomb
-    h264chroma
-    h264dsp
-    h264parse
-    h264pred
-    h264qpel
-    videodsp
-    startcode
-    me_cmp
-    idctdsp
-    atsc_a53
-"
 ------------
 easy to understand
 https://github.com/intel/libva-h264/blob/master/src/h264_decoder.cc
