@@ -161,7 +161,12 @@ static int dxva_find_config(struct app_state_t *app)
 {
     for (unsigned i = 0; i < app->dxva.cfg_count; i++) {
         DXVA2_ConfigPictureDecode *cfg = &app->dxva.cfg_list[i];
-        if (cfg->ConfigBitstreamRaw == 1) {
+        //ConfigBitstreamRaw - Indicates whether the host-decoder sends raw bit-stream data. If the
+        // value is 1, the data for the pictures will be sent in bit-stream buffers as raw bit-stream
+        // content. If the value is 0, picture data will be sent using macroblock control command
+        // buffers. If either ConfigResidDiffHost or ConfigResidDiffAccelerator is 1,
+        // the value must be 0.
+        if (cfg->ConfigBitstreamRaw != 0) {
             app->dxva.cfg = cfg;
             break;
         }

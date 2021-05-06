@@ -174,7 +174,7 @@ int d3d_render_image(struct app_state_t *app) {
     int stride_buf = app->server_width;
     int chroma_buf_size = app->server_width * app->server_height;
     int index_d3d = 0, index_buf = 0;
-    int luma_buf_end1, luma_buf_end2;
+    int luma_buf_end1;//, luma_buf_end2;
     D3DLOCKED_RECT d3d_rect;
 
     //fprintf(stderr, "INFO: d3d_render_image: %p(%d)\n", app->dec_buf, app->dec_buf_length);

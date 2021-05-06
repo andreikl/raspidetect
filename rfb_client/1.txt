@@ -55,9 +55,13 @@ ffmpeg\libavcodec\h264dec.c:1018
 (h->mb_height && h->mb_height)) {
 ----------
 ./configure --prefix=/usr/local --disable-x86asm --disable-all --enable-avcodec --enable-decoder=h264 --enable-hwaccel=h264_dxva2
-# options emitted with CONFIG_ prefix but not available on the command line
-ffmpeg_debug_version.patch
-
+if configure can't find h264_dxva2
+change ffbuild\config.mak
+CONFIG_DXVA2=yes
+CONFIG_H264_DXVA2_HWACCEL=yes
+config.h
+#define CONFIG_DXVA2 1
+#define CONFIG_H264_DXVA2_HWACCEL 1
 ------------
 easy to understand
 https://github.com/intel/libva-h264/blob/master/src/h264_decoder.cc

@@ -547,10 +547,10 @@ extern "C" {
 
 #include "ffmpeg.h"
     struct ffmpeg_state_t {
-        AVCodec* codec;
+        const AVCodec* codec;
         AVCodecContext* ctx;
         AVFrame* fr;
-        AVPacket pkt;
+        AVPacket* pkt;
     };
 #endif //ENABLE_FFMPEG
 

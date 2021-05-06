@@ -339,7 +339,7 @@ int h264_decode(struct app_state_t* app);
 
 #define H264_RBSP_DEBUG(value) \
 { \
-    fprintf(stderr, "INFO: %s, "#value" (%lld:%d-%lld) %d\n", \
+    fprintf(stderr, "INFO: %s, "#value" (%d:%d-%d) %d\n", \
         __FUNCTION__, \
         rbsp->p - rbsp->start, \
         rbsp->bits_left, \
@@ -349,7 +349,7 @@ int h264_decode(struct app_state_t* app);
 
 #define H264_RBSP_DEBUG_STR(value) \
 { \
-    fprintf(stderr, "INFO: %s, "#value" (%lld:%d-%lld) %s\n", \
+    fprintf(stderr, "INFO: %s, "#value" (%d:%d-%d) %s\n", \
         __FUNCTION__, \
         rbsp->p - rbsp->start, \
         rbsp->bits_left, \

@@ -7,7 +7,11 @@ extern "C" {
 
 void ffmpeg_destroy(struct app_state_t* app)
 {
-    av_packet_unref(&app->ffmpeg.pkt);
+    //av_packet_unref(&app->ffmpeg.pkt);
+    if (app->ffmpeg.pkt) {
+        av_packet_free(&app->ffmpeg.pkt);
+        app->ffmpeg.pkt = NULL;
+    }
     if (app->ffmpeg.fr) {
         av_frame_free(&app->ffmpeg.fr);
         app->ffmpeg.fr = NULL;
@@ -46,6 +50,9 @@ int ffmpeg_init(struct app_state_t* app)
                 app->ffmpeg.codec->name, av_hwdevice_get_type_name(AV_HWDEVICE_TYPE_DXVA2));
             return -1;
         }
+        fprintf(stderr, "Decoder %s supports device type %s.\n",
+            app->ffmpeg.codec->name, av_hwdevice_get_type_name(config->device_type));
+
         if (config->methods & AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX &&
             config->device_type == AV_HWDEVICE_TYPE_DXVA2) {
             //app->ffmpeg.ctx->pix_fmt = config->pix_fmt;
@@ -84,7 +91,9 @@ int ffmpeg_init(struct app_state_t* app)
         goto error;
     }
 
-    av_init_packet(&app->ffmpeg.pkt);
+    app->ffmpeg.pkt = av_packet_alloc();
+    //av_init_packet(&app->ffmpeg.pkt);
+
     return 0;
 
 error:
@@ -96,8 +105,8 @@ int ffmpeg_decode(struct app_state_t* app, int start, int end)
 {
     // fprintf(stderr, "INFO: ffmpeg_decode: app->enc_buf %p(%d)\n",
     //     app->enc_buf, app->enc_buf_length);
-    app->ffmpeg.pkt.data = app->enc_buf + start - 4;
-    app->ffmpeg.pkt.size = end - start + 4;
+    app->ffmpeg.pkt->data = app->enc_buf + start - 4;
+    app->ffmpeg.pkt->size = end - start + 4;
     // fprintf(stderr, "INFO: start %d, end: %d\n", start, end);
     // fprintf(stderr, "INFO: nal1 %X%X%X%X\n",
     //     *(app->enc_buf + start - 4),
@@ -111,7 +120,7 @@ int ffmpeg_decode(struct app_state_t* app, int start, int end)
         app->ffmpeg.ctx,
         app->ffmpeg.fr,
         &got_frame,
-        &app->ffmpeg.pkt
+        app->ffmpeg.pkt
     );
     //fprintf(stderr, "INFO: app->ffmpeg.codec->decode: got_frame %d\n", got_frame);
     if (res < 0) {

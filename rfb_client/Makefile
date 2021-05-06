@@ -70,7 +70,8 @@ endif
 
 ifeq ($(ENABLE_FFMPEG), 1)
 	COMMON += -I$(LIBDIR)/include -DENABLE_FFMPEG
-	LDFLAGS += -L$(LIBDIR)/lib -lavcodec -lavutil -lbcrypt -liconv -lole32
+#-liconv
+	LDFLAGS += -L$(LIBDIR)/lib -lavcodec -lavutil -lbcrypt -lole32
 	OBJ += ffmpeg.o
 endif
 
