@@ -238,101 +238,103 @@ static int dxva_fill_slice(struct app_state_t *app, uint8_t *buffer)
 {
     struct h264_slice_header_t* header = LINKED_HASH_GET_HEAD(app->h264.headers);
 
+    memset(&app->dxva.slice, 0, sizeof(app->dxva.slice));
     app->dxva.slice.BSNALunitDataLocation = buffer - app->enc_buf;
     GENERAL_DEBUG(app->dxva.slice.BSNALunitDataLocation);
     //TODO: calculate length without 000x
     app->dxva.slice.SliceBytesInBuffer = app->enc_buf_length - 4;
     GENERAL_DEBUG(app->dxva.slice.SliceBytesInBuffer);
     app->dxva.slice.wBadSliceChopping = 0;
-    GENERAL_DEBUG(app->dxva.slice.wBadSliceChopping);
-    app->dxva.slice.first_mb_in_slice = header->first_mb_in_slice;
-    GENERAL_DEBUG(app->dxva.slice.first_mb_in_slice);
-    //...
-    //TODO: should be 0 for first slice
-    app->dxva.slice.NumMbsForSlice = header->PicSizeInMbs - header->first_mb_in_slice;
-    GENERAL_DEBUG(app->dxva.slice.NumMbsForSlice);
-    //TODO: replace to right calculation
-    app->dxva.slice.BitOffsetToSliceData = 24;
-    GENERAL_DEBUG(app->dxva.slice.BitOffsetToSliceData);
-    app->dxva.slice.slice_type = header->slice_type_origin;
-    GENERAL_DEBUG(app->dxva.slice.slice_type);
-    app->dxva.slice.luma_log2_weight_denom = header->luma_log2_weight_denom;
-    GENERAL_DEBUG(app->dxva.slice.luma_log2_weight_denom);
-    app->dxva.slice.chroma_log2_weight_denom = header->chroma_log2_weight_denom;
-    GENERAL_DEBUG(app->dxva.slice.chroma_log2_weight_denom);
-    app->dxva.slice.num_ref_idx_l0_active_minus1 = header->ref_count[0] - 1;
-    GENERAL_DEBUG(app->dxva.slice.num_ref_idx_l0_active_minus1);
-    app->dxva.slice.num_ref_idx_l1_active_minus1 = header->ref_count[1] - 1;
-    GENERAL_DEBUG(app->dxva.slice.num_ref_idx_l1_active_minus1);
-    app->dxva.slice.slice_alpha_c0_offset_div2 = header->slice_alpha_c0_offset_div2;
-    GENERAL_DEBUG(app->dxva.slice.slice_alpha_c0_offset_div2);
-    app->dxva.slice.slice_beta_offset_div2 = header->slice_beta_offset_div2;
-    GENERAL_DEBUG(app->dxva.slice.slice_beta_offset_div2);
-    GENERAL_DEBUG(app->dxva.slice.Reserved8Bits);
-    app->dxva.slice.slice_qs_delta = header->slice_qs_delta;
-    GENERAL_DEBUG(app->dxva.slice.slice_qs_delta);
-    app->dxva.slice.slice_qp_delta = header->slice_qp_delta;
-    GENERAL_DEBUG(app->dxva.slice.slice_qp_delta);
-    app->dxva.slice.redundant_pic_cnt = header->redundant_pic_cnt;
-    GENERAL_DEBUG(app->dxva.slice.redundant_pic_cnt);
-    app->dxva.slice.direct_spatial_mv_pred_flag = header->direct_spatial_mv_pred_flag;
-    GENERAL_DEBUG(app->dxva.slice.direct_spatial_mv_pred_flag);
-    app->dxva.slice.cabac_init_idc = header->cabac_init_idc;
-    GENERAL_DEBUG(app->dxva.slice.cabac_init_idc);
-    app->dxva.slice.disable_deblocking_filter_idc = header->disable_deblocking_filter_idc;
-    GENERAL_DEBUG(app->dxva.slice.disable_deblocking_filter_idc);
-    app->dxva.slice.slice_id = app->dxva.slice_id++;
-    GENERAL_DEBUG(app->dxva.slice_id);
 
-    //TODO: RefPicList, DXVA_PicEntry_H264 RefPicList[2][32]; - DXVA_PicEntry_H264 - char
-    for (unsigned list = 0; list < 2; list++) {
-        for (unsigned ref = 0; ref < ARRAY_SIZE(app->dxva.slice.RefPicList[0]); ref++) {
-            if (list < header->list_count && ref < header->ref_count[list]) {
-                fprintf(stderr, "ERROR: TO IMPLEMENT header->list_count %d, "
-                    "%s:%d - %s\n",
-                    header->list_count, __FILE__, __LINE__, __FUNCTION__);
+    //TODO: long slice isn't supported
+    // GENERAL_DEBUG(app->dxva.slice.wBadSliceChopping);
+    // app->dxva.slice.first_mb_in_slice = header->first_mb_in_slice;
+    // GENERAL_DEBUG(app->dxva.slice.first_mb_in_slice);
+    // //TODO: should be 0 for first slice
+    // app->dxva.slice.NumMbsForSlice = header->PicSizeInMbs - header->first_mb_in_slice;
+    // GENERAL_DEBUG(app->dxva.slice.NumMbsForSlice);
+    // //TODO: replace to right calculation
+    // app->dxva.slice.BitOffsetToSliceData = 24;
+    // GENERAL_DEBUG(app->dxva.slice.BitOffsetToSliceData);
+    // app->dxva.slice.slice_type = header->slice_type_origin;
+    // GENERAL_DEBUG(app->dxva.slice.slice_type);
+    // app->dxva.slice.luma_log2_weight_denom = header->luma_log2_weight_denom;
+    // GENERAL_DEBUG(app->dxva.slice.luma_log2_weight_denom);
+    // app->dxva.slice.chroma_log2_weight_denom = header->chroma_log2_weight_denom;
+    // GENERAL_DEBUG(app->dxva.slice.chroma_log2_weight_denom);
+    // app->dxva.slice.num_ref_idx_l0_active_minus1 = header->ref_count[0] - 1;
+    // GENERAL_DEBUG(app->dxva.slice.num_ref_idx_l0_active_minus1);
+    // app->dxva.slice.num_ref_idx_l1_active_minus1 = header->ref_count[1] - 1;
+    // GENERAL_DEBUG(app->dxva.slice.num_ref_idx_l1_active_minus1);
+    // app->dxva.slice.slice_alpha_c0_offset_div2 = header->slice_alpha_c0_offset_div2;
+    // GENERAL_DEBUG(app->dxva.slice.slice_alpha_c0_offset_div2);
+    // app->dxva.slice.slice_beta_offset_div2 = header->slice_beta_offset_div2;
+    // GENERAL_DEBUG(app->dxva.slice.slice_beta_offset_div2);
+    // GENERAL_DEBUG(app->dxva.slice.Reserved8Bits);
+    // app->dxva.slice.slice_qs_delta = header->slice_qs_delta;
+    // GENERAL_DEBUG(app->dxva.slice.slice_qs_delta);
+    // app->dxva.slice.slice_qp_delta = header->slice_qp_delta;
+    // GENERAL_DEBUG(app->dxva.slice.slice_qp_delta);
+    // app->dxva.slice.redundant_pic_cnt = header->redundant_pic_cnt;
+    // GENERAL_DEBUG(app->dxva.slice.redundant_pic_cnt);
+    // app->dxva.slice.direct_spatial_mv_pred_flag = header->direct_spatial_mv_pred_flag;
+    // GENERAL_DEBUG(app->dxva.slice.direct_spatial_mv_pred_flag);
+    // app->dxva.slice.cabac_init_idc = header->cabac_init_idc;
+    // GENERAL_DEBUG(app->dxva.slice.cabac_init_idc);
+    // app->dxva.slice.disable_deblocking_filter_idc = header->disable_deblocking_filter_idc;
+    // GENERAL_DEBUG(app->dxva.slice.disable_deblocking_filter_idc);
+    // app->dxva.slice.slice_id = app->dxva.slice_id++;
+    // GENERAL_DEBUG(app->dxva.slice_id);
 
-                // const H264Picture *r = sl->ref_list[list][i].parent;
-                // unsigned plane;
-                // unsigned index;
-                // if (DXVA_CONTEXT_WORKAROUND(avctx, ctx) & FF_DXVA2_WORKAROUND_INTEL_CLEARVIDEO)
-                //     index = ff_dxva2_get_surface_index(avctx, ctx, r->f);
-                // else
-                //     index = get_refpic_index(pp, ff_dxva2_get_surface_index(avctx, ctx, r->f));
-                // fill_picture_entry(&slice->RefPicList[list][i], index,
-                //                    sl->ref_list[list][i].reference == PICT_BOTTOM_FIELD);
+    // //TODO: RefPicList, DXVA_PicEntry_H264 RefPicList[2][32]; - DXVA_PicEntry_H264 - char
+    // for (unsigned list = 0; list < 2; list++) {
+    //     for (unsigned ref = 0; ref < ARRAY_SIZE(app->dxva.slice.RefPicList[0]); ref++) {
+    //         if (list < header->list_count && ref < header->ref_count[list]) {
+    //             fprintf(stderr, "ERROR: TO IMPLEMENT header->list_count %d, "
+    //                 "%s:%d - %s\n",
+    //                 header->list_count, __FILE__, __LINE__, __FUNCTION__);
 
-                //app->dxva.slice.RefPicList[list][ref].bPicEntry = index | (flag << 7);
+    //             // const H264Picture *r = sl->ref_list[list][i].parent;
+    //             // unsigned plane;
+    //             // unsigned index;
+    //             // if (DXVA_CONTEXT_WORKAROUND(avctx, ctx) & FF_DXVA2_WORKAROUND_INTEL_CLEARVIDEO)
+    //             //     index = ff_dxva2_get_surface_index(avctx, ctx, r->f);
+    //             // else
+    //             //     index = get_refpic_index(pp, ff_dxva2_get_surface_index(avctx, ctx, r->f));
+    //             // fill_picture_entry(&slice->RefPicList[list][i], index,
+    //             //                    sl->ref_list[list][i].reference == PICT_BOTTOM_FIELD);
 
-                struct h264_weight_t* weight = header->weights[list] + ref;
-                for (unsigned plane = 0; plane < 3; plane++) {
-                    int w, o;
-                    if (plane == 0 && weight->luma_weight_flag) {
-                        w = weight->luma_weight;
-                        o = weight->luma_offset;
-                    } else if (plane >= 1 && weight->chroma_weight_flag) {
-                        w = weight->chroma_weight[plane-1];
-                        o = weight->chroma_offset[plane-1];
-                    } else {
-                        w = 1 << (
-                            plane == 0?
-                            header->luma_log2_weight_denom:
-                            header->chroma_log2_weight_denom
-                        );
-                        o = 0;
-                    }
-                    app->dxva.slice.Weights[list][ref][plane][0] = w;
-                    app->dxva.slice.Weights[list][ref][plane][1] = o;
-                }
-            } else {
-                app->dxva.slice.RefPicList[list][ref].bPicEntry = 0xff;
-                for (unsigned plane = 0; plane < 3; plane++) {
-                    app->dxva.slice.Weights[list][ref][plane][0] = 0;
-                    app->dxva.slice.Weights[list][ref][plane][1] = 0;
-                }
-            }
-        }
-    }
+    //             //app->dxva.slice.RefPicList[list][ref].bPicEntry = index | (flag << 7);
+
+    //             struct h264_weight_t* weight = header->weights[list] + ref;
+    //             for (unsigned plane = 0; plane < 3; plane++) {
+    //                 int w, o;
+    //                 if (plane == 0 && weight->luma_weight_flag) {
+    //                     w = weight->luma_weight;
+    //                     o = weight->luma_offset;
+    //                 } else if (plane >= 1 && weight->chroma_weight_flag) {
+    //                     w = weight->chroma_weight[plane-1];
+    //                     o = weight->chroma_offset[plane-1];
+    //                 } else {
+    //                     w = 1 << (
+    //                         plane == 0?
+    //                         header->luma_log2_weight_denom:
+    //                         header->chroma_log2_weight_denom
+    //                     );
+    //                     o = 0;
+    //                 }
+    //                 app->dxva.slice.Weights[list][ref][plane][0] = w;
+    //                 app->dxva.slice.Weights[list][ref][plane][1] = o;
+    //             }
+    //         } else {
+    //             app->dxva.slice.RefPicList[list][ref].bPicEntry = 0xff;
+    //             for (unsigned plane = 0; plane < 3; plane++) {
+    //                 app->dxva.slice.Weights[list][ref][plane][0] = 0;
+    //                 app->dxva.slice.Weights[list][ref][plane][1] = 0;
+    //             }
+    //         }
+    //     }
+    // }
     return 0;
 }
 
@@ -380,7 +382,7 @@ static int dxva_commit_slice(
     void* dxva_data;
     unsigned dxva_size;
     D3D_CALL(
-        app->dxva.decoder->GetBuffer(DXVA2_BitStreamDateBufferType, &dxva_data, &dxva_size),
+        app->dxva.decoder->GetBuffer(DXVA2_SliceControlBufferType, &dxva_data, &dxva_size),
         close
     );
 
@@ -398,7 +400,9 @@ static int dxva_commit_slice(
             DXVA2_BitStreamDateBufferType);
         goto release_stream;
     }
+    ..
 
+    memset(buffer, 0, sizeof(*buffer));
     buffer->CompressedBufferType = DXVA2_BitStreamDateBufferType;
     buffer->DataSize = app->dxva.slice.SliceBytesInBuffer;
     buffer->NumMBsInBuffer = app->dxva.slice.NumMbsForSlice;
@@ -449,16 +453,16 @@ int dxva_decode(struct app_state_t *app) {
     ), end_frame);
     buffers_size++;
 
-    GENERAL_CALL(dxva_commit_slice(app, buffers + buffers_size), end_frame);
-    buffers_size++;
-
     GENERAL_CALL(dxva_fill_slice(app, app->enc_buf), end_frame);
     GENERAL_CALL(dxva_commit_buffer(
         app,
-        DXVA2_SliceControlBufferType,
+        DXVA2_BitStreamDateBufferType,
         buffers + buffers_size,
         &app->dxva.slice, sizeof(app->dxva.slice)
     ), end_frame);
+    buffers_size++;
+
+    GENERAL_CALL(dxva_commit_slice(app, buffers + buffers_size), end_frame);
     buffers_size++;
 
     params = {

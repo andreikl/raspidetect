@@ -61,6 +61,7 @@
 #include <windows.h>
 #include <fcntl.h> // O_BINARY
 #include <time.h> // nanosleep
+#include <errno.h> // errno
 
 #include "utils.h"
 
