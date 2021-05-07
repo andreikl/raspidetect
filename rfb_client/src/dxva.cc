@@ -30,6 +30,8 @@ static const uint8_t default_scaling8[2][64] = {
       24, 25, 27, 28, 30, 32, 33, 35 }
 };
 
+static const uint8_t start_code[] = { 0, 0, 1 };
+
 void dxva_destroy(struct app_state_t *app)
 {
     if (app->dxva.device != NULL) {
@@ -236,13 +238,13 @@ static int dxva_fill_matrices(struct app_state_t *app)
 
 static int dxva_fill_slice(struct app_state_t *app, uint8_t *buffer)
 {
-    struct h264_slice_header_t* header = LINKED_HASH_GET_HEAD(app->h264.headers);
+    //struct h264_slice_header_t* header = LINKED_HASH_GET_HEAD(app->h264.headers);
 
     memset(&app->dxva.slice, 0, sizeof(app->dxva.slice));
     app->dxva.slice.BSNALunitDataLocation = buffer - app->enc_buf;
     GENERAL_DEBUG(app->dxva.slice.BSNALunitDataLocation);
     //TODO: calculate length without 000x
-    app->dxva.slice.SliceBytesInBuffer = app->enc_buf_length - 4;
+    app->dxva.slice.SliceBytesInBuffer = sizeof(start_code) + app->enc_buf_length - 4;
     GENERAL_DEBUG(app->dxva.slice.SliceBytesInBuffer);
     app->dxva.slice.wBadSliceChopping = 0;
 
@@ -341,14 +343,13 @@ static int dxva_fill_slice(struct app_state_t *app, uint8_t *buffer)
 static int dxva_commit_buffer(struct app_state_t *app,
     unsigned type,
     DXVA2_DecodeBufferDesc* buffer,
-    const void *data,
-    unsigned size)
+    const void *data, unsigned size,
+    unsigned mb_count)
 {
     int res = -1;
 
     void* dxva_data;
     unsigned dxva_size;
-
     D3D_CALL(app->dxva.decoder->GetBuffer(type, &dxva_data, &dxva_size), close);
     if (size <= dxva_size) {
         memcpy(dxva_data, data, size);
@@ -366,49 +367,48 @@ static int dxva_commit_buffer(struct app_state_t *app,
     memset(buffer, 0, sizeof(*buffer));
     buffer->CompressedBufferType = type;
     buffer->DataSize = size;
+    buffer->NumMBsInBuffer = mb_count;
 
 close:
     return res;
 }
 
-static int dxva_commit_slice(
-    struct app_state_t *app,
-    DXVA2_DecodeBufferDesc* buffer
+static int dxva_commit_slice(struct app_state_t *app,
+    unsigned type,
+    DXVA2_DecodeBufferDesc* buffer,
+    unsigned mb_count
 ) {
-    static const uint8_t start_code[] = { 0, 0, 1 };
-
     int res = -1;
 
     void* dxva_data;
     unsigned dxva_size;
     D3D_CALL(
-        app->dxva.decoder->GetBuffer(DXVA2_SliceControlBufferType, &dxva_data, &dxva_size),
+        app->dxva.decoder->GetBuffer(type, &dxva_data, &dxva_size),
         close
     );
 
+    //TODO: remove first 4 bytes from slice buffer
     if (sizeof(start_code) + app->enc_buf_length - 4 <= dxva_size) {
         uint8_t* position = (uint8_t*)dxva_data;
         memcpy(position, start_code, sizeof(start_code));
         position += sizeof(start_code);
         memcpy(position, app->enc_buf + 4, app->enc_buf_length - 4);
         position += app->enc_buf_length - 4;
-
-        app->dxva.slice.SliceBytesInBuffer = sizeof(start_code) + app->enc_buf_length - 4;
         res = 0;
     } else {
         fprintf(stderr, "ERROR: dxva_commit_slice(type: %d) failed, buffer to commit is too big\n",
-            DXVA2_BitStreamDateBufferType);
+            type);
         goto release_stream;
     }
-    ..
 
     memset(buffer, 0, sizeof(*buffer));
-    buffer->CompressedBufferType = DXVA2_BitStreamDateBufferType;
+    buffer->CompressedBufferType = type;
     buffer->DataSize = app->dxva.slice.SliceBytesInBuffer;
-    buffer->NumMBsInBuffer = app->dxva.slice.NumMbsForSlice;
+    buffer->NumMBsInBuffer = mb_count;
+    GENERAL_DEBUG(buffer->NumMBsInBuffer);
 
 release_stream:
-    D3D_CALL(app->dxva.decoder->ReleaseBuffer(DXVA2_BitStreamDateBufferType));
+    D3D_CALL(app->dxva.decoder->ReleaseBuffer(type));
 
 close:
     return res;
@@ -416,7 +416,6 @@ close:
 
 int dxva_decode(struct app_state_t *app) {
     int res = -1;
-
     // typedef struct _DXVA2_DecodeBufferDesc {
     //     DWORD CompressedBufferType;
     //     UINT BufferIndex;
@@ -430,6 +429,11 @@ int dxva_decode(struct app_state_t *app) {
     //     UINT ReservedBits;
     //     PVOID pvPVPState;
     // } DXVA2_DecodeBufferDesc;
+
+    IDirect3DDevice9* device = NULL;
+    D3D_CALL(app->dxva.device_manager->LockDevice(app->dxva.device, &device, TRUE));
+
+    struct h264_slice_header_t* header = LINKED_HASH_GET_HEAD(app->h264.headers);
     DXVA2_DecodeExecuteParams params;
     DXVA2_DecodeBufferDesc buffers[4];
     unsigned buffers_size = 0;
@@ -440,7 +444,8 @@ int dxva_decode(struct app_state_t *app) {
         app,
         DXVA2_PictureParametersBufferType,
         buffers + buffers_size,
-        &app->dxva.pic_params, sizeof(app->dxva.pic_params)
+        &app->dxva.pic_params, sizeof(app->dxva.pic_params),
+        0
     ), end_frame);
     buffers_size++;
 
@@ -449,20 +454,27 @@ int dxva_decode(struct app_state_t *app) {
         app,
         DXVA2_InverseQuantizationMatrixBufferType,
         buffers + buffers_size,
-        &app->dxva.matrices, sizeof(app->dxva.matrices)
+        &app->dxva.matrices, sizeof(app->dxva.matrices),
+        0
     ), end_frame);
     buffers_size++;
 
     GENERAL_CALL(dxva_fill_slice(app, app->enc_buf), end_frame);
-    GENERAL_CALL(dxva_commit_buffer(
+    GENERAL_CALL(dxva_commit_slice(
         app,
         DXVA2_BitStreamDateBufferType,
         buffers + buffers_size,
-        &app->dxva.slice, sizeof(app->dxva.slice)
+        header->PicSizeInMbs
     ), end_frame);
     buffers_size++;
 
-    GENERAL_CALL(dxva_commit_slice(app, buffers + buffers_size), end_frame);
+    GENERAL_CALL(dxva_commit_buffer(
+        app, 
+        DXVA2_SliceControlBufferType,
+        buffers + buffers_size,
+        &app->dxva.slice, sizeof(app->dxva.slice),
+        header->PicSizeInMbs
+    ), end_frame);
     buffers_size++;
 
     params = {
@@ -480,6 +492,7 @@ int dxva_decode(struct app_state_t *app) {
 end_frame:
     D3D_CALL(app->dxva.decoder->EndFrame(NULL));
 
+    D3D_CALL(app->dxva.device_manager->UnlockDevice(app->dxva.device, FALSE));
 close:
     return res;
 }

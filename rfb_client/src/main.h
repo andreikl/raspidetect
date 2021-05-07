@@ -237,7 +237,7 @@
 
         DXVA_PicParams_H264 pic_params;
         DXVA_Qmatrix_H264 matrices;
-        DXVA_Slice_H264_Long slice;
+        DXVA_Slice_H264_Short slice;
 
         unsigned status_report;
         unsigned slice_id;

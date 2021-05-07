@@ -155,7 +155,6 @@ int d3d_render_frame(struct app_state_t *app)
     catch (...) {
         fprintf(stderr, "INFO: exception d3d_render_frame\n");
     }
-
 end_scene:
     D3D_CALL(IDirect3DDevice9_EndScene(app->d3d.dev), error);
 
