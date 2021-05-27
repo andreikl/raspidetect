@@ -34,20 +34,24 @@
 
 
 void utils_parse_args(int argc, char** argv);
-void utils_default_status(app_state_t *state);
+void utils_default_status(struct app_state_t *app);
 char *utils_read_str_value(const char name[], char *def_value);
 int utils_read_int_value(const char name[], int def_value);
 
-int utils_camera_get_defaults(app_state_t *app);
+int utils_camera_get_defaults(struct app_state_t *app);
+int utils_camera_create(struct app_state_t *app);
+int utils_camera_cleanup(struct app_state_t *app);
+int utils_camera_create_h264_encoder(struct app_state_t *app);
+int utils_camera_cleanup_h264_encoder(struct app_state_t *app);
 
 int utils_fill_buffer(const char *path, char *buffer, int buffer_size, size_t *read);
 void *utils_read_file(const char *path, size_t *len);
 void utils_write_file(const char *path, unsigned char *data, int width, int height);
 
-void utils_get_cpu_load(char * buffer, cpu_state_t *state);
-void utils_get_memory_load(char * buffer, memory_state_t *state);
-void utils_get_temperature(char * buffer, temperature_state_t *state);
+void utils_get_cpu_load(char * buffer, struct cpu_state_t *cpu);
+void utils_get_memory_load(char * buffer, struct memory_state_t *memory);
+void utils_get_temperature(char * buffer, struct temperature_state_t *temperature);
 
-int utils_get_worker_buffer(app_state_t *state);
+int utils_get_worker_buffer(struct app_state_t *app);
 
 #endif //utils_h

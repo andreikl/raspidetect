@@ -5,10 +5,10 @@
 
 int mmal_get_defaults(int camera_num, char *camera_name, int *width, int *height );
 
-int camera_encode_buffer(app_state_t *app, char *buffer, int length);
+int mmal_encode_buffer(app_state_t *app, char *buffer, int length);
 
-int camera_create(app_state_t *app);
-int camera_destroy(app_state_t *app);
+int mmal_create(app_state_t *app);
+int mmal_cleanup(app_state_t *app);
 
-int camera_create_h264_encoder(app_state_t *app);
-int camera_destroy_h264_encoder(app_state_t *app);
+int mmal_create_h264_encoder(app_state_t *app);
+int mmal_cleanup_h264_encoder(app_state_t *app);

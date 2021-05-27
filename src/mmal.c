@@ -66,6 +66,8 @@ int mmal_get_defaults(int camera_num, char *camera_name, int *width, int *height
     MMAL_COMPONENT_T *camera_info;
     MMAL_STATUS_T status;
 
+    bcm_host_init();
+
     // Try to get the camera name and maximum supported resolution
     status = mmal_component_create(MMAL_COMPONENT_DEFAULT_CAMERA_INFO, &camera_info);
     if (status == MMAL_SUCCESS) {
@@ -347,7 +349,7 @@ error:
 }
 
 //  Destroy the camera component
-int camera_destroy(app_state_t *app)
+int camera_cleanup(app_state_t *app)
 {
     int res = 0;
 
@@ -476,8 +478,7 @@ error:
     return 1;
 }
 
-//  Destroy the camera component
-int camera_destroy_h264_encoder(app_state_t *app)
+int camera_cleanup_h264_encoder(app_state_t *app)
 {
     int res = 0;
 

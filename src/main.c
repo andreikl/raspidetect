@@ -5,7 +5,6 @@
 #include "main.h"
 #include "utils.h"
 #include "overlay.h"
-#include "mmal.h"
 
 #ifdef OPENVG
 #include "openvg.h"
@@ -29,7 +28,7 @@ static int exit_code = EX_SOFTWARE;
 
 void *worker_function(void *data)
 {
-    app_state_t* app = (app_state_t*) data;
+    struct app_state_t* app = (struct app_state_t*) data;
     if (app->verbose) {
         fprintf(stderr, "INFO: Worker thread has been started\n");
     }
@@ -99,10 +98,8 @@ static void print_help()
 static int main_function()
 {
     int res;
-    char buffer[BUFFER_SIZE];
-    app_state_t app;
-
-    bcm_host_init();
+    char buffer[MAX_DATA];
+    struct app_state_t app;
 
     utils_default_status(&app);
 
@@ -194,29 +191,22 @@ static int main_function()
         goto error;
     }
 
-    // Setup for sensor specific parameters
-    utils_camera_get_defaults(&app);
+    CALL(res = utils_camera_get_defaults(&app), error);
 
     if (app.verbose) {
-        fprintf(stderr, "INFO: camera_num: %d\n", app.mmal.camera_num);
-        fprintf(stderr, "INFO: camera_name: %s\n", app.mmal.camera_name);
-        fprintf(stderr, "INFO: camera max size: %d, %d\n", app.mmal.max_width, app.mmal.max_height);
+        fprintf(stderr, "INFO: camera_num: %d\n", app.camera_num);
+        fprintf(stderr, "INFO: camera_name: %s\n", app.camera_name);
+        fprintf(stderr, "INFO: camera max size: %d, %d\n", app.camera_max_width, app.camera_max_height);
         fprintf(stderr, "INFO: video size: %d, %d, %d\n", app.width, app.height, app.bits_per_pixel);
-        fprintf(stderr, "INFO: display size: %d, %d\n", app.openvg.display_width, app.openvg.display_height);
+        fprintf(stderr, "INFO: window size: %d, %d\n", app.window_width, app.window_height);
         fprintf(stderr, "INFO: worker size: %d, %d\n", app.worker_width, app.worker_height);
         fprintf(stderr, "INFO: output type: %d\n", app.output_type);
     }
 
-    if (camera_create(&app)) {
-        fprintf(stderr, "ERROR: camera_create failed\n");
-        goto error;
-    }
+    CALL(res = utils_camera_create(&app), error);
 
     if (app.output_type == OUTPUT_STREAM) {
-        if (camera_create_h264_encoder(&app)) {
-            fprintf(stderr, "ERROR: camera_create_h264_encoder failed\n");
-            goto error;
-        }
+        CALL(res = utils_camera_create_h264_encoder(&app), error);
     } else if (app.output_type == OUTPUT_RFB) {
 #ifdef RFB
         if (rfb_init(&app)) {
@@ -357,14 +347,9 @@ error:
     rfb_destroy(&app);
 #endif //RFB 
 
-    if (app.output_type == OUTPUT_STREAM) {
-        if (camera_destroy_h264_encoder(&app)) {
-            fprintf(stderr, "ERROR: camera_destroy_h264_encoder failed\n");
-        }
-    }
-    if (camera_destroy(&app)) {
-        fprintf(stderr, "ERROR: camera_destroy failed\n");
-    }
+    if (app.output_type == OUTPUT_STREAM)
+        CALL(res = utils_camera_cleanup_h264_encoder(&app));
+    CALL(res = utils_camera_cleanup(&app));
 
     // destroy semaphore and mutex before stop thread to prevent blocking
     if (sem_destroy(&app.worker_semaphore)) {
@@ -428,7 +413,7 @@ int main(int argc, char** argv)
 
     unsigned k = kh_get(map_str, h, HELP);
     if (k != kh_end(h)) {
-        utils_print_help();
+        print_help();
     }
     else {
         main_function();

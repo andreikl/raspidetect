@@ -105,7 +105,7 @@ static void *rfb_function(void *data)
     int res;
 
     const int one = 1;    
-    app_state_t * app = (app_state_t*) data;
+    struct app_state_t * app = (struct app_state_t*) data;
     if (app->verbose) {
         fprintf(stderr, "INFO: RFB thread has been started\n");
     }
@@ -322,7 +322,7 @@ rfb_error:
     return NULL;
 }
 
-int rfb_init(app_state_t *app)
+int rfb_init(struct app_state_t *app)
 {
     update_message.message_type = RFBFramebufferUpdate;
     update_message.padding = 0;
@@ -373,7 +373,7 @@ exit:
     return -1; 
 }
 
-int rfb_send_frame(app_state_t *app)
+int rfb_send_frame(struct app_state_t *app)
 {
     int res;
 
@@ -433,7 +433,7 @@ int rfb_send_frame(app_state_t *app)
     return 0;
 }
 
-int rfb_destroy(app_state_t *app)
+int rfb_destroy(struct app_state_t *app)
 {
     int res;
 

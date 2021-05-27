@@ -32,8 +32,8 @@
 #define ARG_NONE "none"
 
 #define THRESHOLD 0.5
-#define TEXT_SIZE 256
-#define BUFFER_SIZE 1024
+#define MAX_STRING 256
+#define MAX_DATA 1024
 #define TICK_TIME 500000 //500 miliseconds
 
 #define FONT_DIR "."
@@ -58,17 +58,96 @@
     #endif
 #endif
 
+#define GET_3RD_ARG(arg1, arg2, arg3, ...) arg3
+
+#define ASSERT_INT(value, condition, expectation, error) \
+{ \
+    if (value condition expectation) { \
+        fprintf(stderr, "ERROR: assert "#value"(%d) "#condition" "#expectation"(%d)\n%s:%d - %s\n", \
+            value, expectation, __FILE__, __LINE__, __FUNCTION__); \
+        goto error; \
+    } \
+}
+
+#define ASSERT_LNG(value, condition, expectation, error) \
+{ \
+    if (value condition expectation) { \
+        fprintf(stderr, "ERROR: assert "#value"(%ld) "#condition" "#expectation"(%ld)\n%s:%d - %s\n", \
+            value, (long int)expectation, __FILE__, __LINE__, __FUNCTION__); \
+        goto error; \
+    } \
+}
+
+#define ASSERT_PTR(value, condition, expectation, error) \
+{ \
+    if (value condition expectation) { \
+        fprintf(stderr, "ERROR: assert "#value"(%p) "#condition" "#expectation"(%p)\n%s:%d - %s\n", \
+            value, expectation, __FILE__, __LINE__, __FUNCTION__); \
+        goto error; \
+    } \
+}
+
+#define DEBUG_INT(text, value) \
+{ \
+    fprintf(stderr, "INFO: %s, "#text": %d\n", \
+        __FUNCTION__, \
+        value); \
+}
+
+#define DEBUG_POINTER(text, value) \
+{ \
+    fprintf(stderr, "INFO: %s, "#text": %p\n", \
+        __FUNCTION__, \
+        value); \
+}
+
+#define DEBUG_STR(text, value) \
+{ \
+    fprintf(stderr, "INFO: %s, "#text": %s\n", \
+        __FUNCTION__, \
+        value); \
+}
+
+#define CALL_MESSAGE(call, res) \
+{ \
+    fprintf(stderr, "ERROR: "#call" returned error: %s (%d)\n%s:%d - %s\n", \
+        strerror(res), res, __FILE__, __LINE__, __FUNCTION__); \
+}
+
+#define CALL_2(call, error) \
+{ \
+    int res = call; \
+    if (res) { \
+        CALL_MESSAGE(call, res); \
+        goto error; \
+    } \
+}
+
+#define CALL_1(call) \
+{ \
+    int res = call; \
+    if (res) { \
+        CALL_MESSAGE(call, res); \
+    } \
+}
+
+#define CALL_X(...) GET_3RD_ARG(__VA_ARGS__, CALL_2, CALL_1, )
+
+#define CALL(...) CALL_X(__VA_ARGS__)(__VA_ARGS__)
+
 #include <stdio.h>     // fprintf
+#include <unistd.h>    // STDIN_FILENO
 #include <time.h>      // time_t
 #include <semaphore.h>
 #include <errno.h>     // error codes
 #include <signal.h>    // SIGUSR1
+#include <string.h>    // memcpy
 
-typedef struct {
+struct cpu_state_t {
     float cpu;
-} cpu_state_t;
+};
 
-typedef struct {
+struct memory_state_t {
     // memory status
     int total_size;
     int swap_size; 
@@ -77,11 +156,11 @@ typedef struct {
     int exe_size;
     int stk_size;
     int data_size;
-} memory_state_t;
+};
 
-typedef struct {
+struct temperature_state_t {
     float temp;
-} temperature_state_t;
+};
 
 #ifdef MMAL
 #include "interface/mmal/mmal.h"
@@ -93,12 +172,7 @@ typedef struct {
 #include "interface/mmal/util/mmal_connection.h"
 #include "interface/mmal/mmal_parameters_camera.h"
 
-typedef struct {
-    // camera properties
-    char camera_name[TEXT_SIZE]; // Name of the camera sensor
-    int max_width; // camera max width
-    int max_height; // camera max height
-    int camera_num; // Camera number
+struct mmal_state_t {
     MMAL_COMPONENT_T *camera;
     MMAL_COMPONENT_T *encoder_h264;
 
@@ -117,13 +191,13 @@ typedef struct {
     sem_t h264_semaphore;
     int is_h264_semaphore;
 
-} mmal_state_t;
+};
 #endif //MMAL
 
 #ifdef TENSORFLOW
 #include "tensorflow/lite/experimental/c/c_api.h"
 
-typedef struct {
+struct tensorflow_state_t {
     TfLiteModel *tf_model;
     TfLiteInterpreterOptions *tf_options;
     TfLiteInterpreter *tf_interpreter;
@@ -134,13 +208,13 @@ typedef struct {
     const TfLiteTensor *tf_tensor_scores;
     const TfLiteTensor *tf_tensor_num_detections;
 
-} tensorflow_state_t;
+};
 #elif DARKNET
 #include "include/darknet.h"
 
-typedef struct {
+struct darknet_state_t {
     network *dn_net;
-} darknet_state_t;
+};
 #endif
 
 #ifdef OPENVG
@@ -151,7 +225,7 @@ typedef struct {
 /**
  * Structure used to store an EGL client state. 
  ***********************************************************/
-typedef struct {
+struct openvg_state_t {
     EGLDisplay display;
     EGLContext context;
     EGLSurface surface;
@@ -167,37 +241,44 @@ typedef struct {
     int egl_maj;
     int egl_min;
 
-    unsigned int display_width;
-    unsigned int display_height;
-
     FT_Library font_lib;
     void* font_data;
     size_t font_len;
-} openvg_state_t;
+};
 #endif //OPENVG
 
 #ifdef CONTROL
-typedef struct {
+struct control_state_t {
     volatile unsigned *gpio;
-} control_state_t;
+};
 #endif //CONTROL
 
 #ifdef RFB
-typedef struct {
+struct rfb_state_t {
     pthread_t thread;
     int thread_res;
     int serv_socket;
     int client_socket;
-} rfb_state_t;
+};
 #endif //RFB
 
-typedef enum {
+enum output_enum_t {
     OUTPUT_NONE,
     OUTPUT_STREAM,
     OUTPUT_RFB
-} output_enum_t;
+};
 
-typedef struct {
+struct app_state_t {
+    // camera properties
+    int camera_num;               // Camera number
+    char camera_name[MAX_STRING]; // Name of the camera sensor
+    int camera_max_width;         // camera max width
+    int camera_max_height;        // camera max height
+
+    // window properties
+    unsigned window_width;
+    unsigned window_height;
+
     // common properties
     int width;
     int height;
@@ -206,7 +287,7 @@ typedef struct {
     char *filename;                     // name of output file
     float fps;
     int verbose;                        // debug
-    output_enum_t output_type;
+    enum output_enum_t output_type;
     char* model_path;
     char* config_path;
     volatile unsigned *gpio;
@@ -231,30 +312,30 @@ typedef struct {
     float *worker_scores;
 
 #ifdef CONTROL
-    control_state_t control;
+    struct control_state_t control;
 #endif
 
 #ifdef MMAL
-    mmal_state_t mmal;
+    struct mmal_state_t mmal;
 #endif
 
 #ifdef TENSORFLOW
-    tensorflow_state_t tf;
+    struct tensorflow_state_t tf;
 #elif DARKNET
-    darknet_state_t dn;
+    struct darknet_state_t dn;
 #endif
 
 #ifdef OPENVG
-    openvg_state_t openvg;
+    struct openvg_state_t openvg;
 #endif
 
 #ifdef RFB
-	rfb_state_t rfb;
+	struct rfb_state_t rfb;
 #endif
 
-    temperature_state_t temperature;
-    memory_state_t memory;
-    cpu_state_t cpu;
-} app_state_t;
+    struct temperature_state_t temperature;
+    struct memory_state_t memory;
+    struct cpu_state_t cpu;
+};
 
 #endif // main_h

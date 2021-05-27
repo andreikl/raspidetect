@@ -1,4 +1,4 @@
-int control_init(app_state_t *state);
-int control_destroy(app_state_t *state);
-int control_ssh_key(app_state_t *state);
-int control_vnc_key(app_state_t *state, int down, int key);
+int control_init(struct app_state_t *app);
+int control_destroy(struct app_state_t *app);
+int control_ssh_key(struct app_state_t *app);
+int control_vnc_key(struct app_state_t *app, int down, int key);

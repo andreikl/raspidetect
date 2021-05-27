@@ -7,6 +7,12 @@
 #include "opencv2/imgproc/imgproc_c.h"
 #endif
 
+#if defined(MMAL)
+    #include "mmal.h"
+#elif defined(V4L)
+    #include "v4l.h"
+#endif
+
 KHASH_MAP_INIT_STR(map_str, char *)
 extern khash_t(map_str) *h;
 
@@ -23,36 +29,36 @@ void utils_parse_args(int argc, char** argv)
     }
 }
 
-void utils_default_status(app_state_t *state)
+void utils_default_status(struct app_state_t *app)
 {
-    memset(state, 0, sizeof(app_state_t));
+    memset(app, 0, sizeof(struct app_state_t));
 
     int width = utils_read_int_value(WIDTH, WIDTH_DEF);
     int height = utils_read_int_value(HEIGHT, HEIGHT_DEF);
-    state->width = (width / 32 * 32) + (width % 32? 32: 0);
-    state->height = (height / 16 * 16) + (height % 16? 16: 0);
-    state->bits_per_pixel = 16;
-    state->port = utils_read_int_value(PORT, PORT_DEF);
-    state->worker_width = utils_read_int_value(WORKER_WIDTH, WORKER_WIDTH_DEF);
-    state->worker_height = utils_read_int_value(WORKER_HEIGHT, WORKER_HEIGHT_DEF);
-    state->worker_bits_per_pixel = 24;
-    state->worker_total_objects = 10;
-    state->worker_thread_res = -1;
-    state->verbose = utils_read_int_value(VERBOSE, VERBOSE_DEF);
+    app->width = (width / 32 * 32) + (width % 32? 32: 0);
+    app->height = (height / 16 * 16) + (height % 16? 16: 0);
+    app->bits_per_pixel = 16;
+    app->port = utils_read_int_value(PORT, PORT_DEF);
+    app->worker_width = utils_read_int_value(WORKER_WIDTH, WORKER_WIDTH_DEF);
+    app->worker_height = utils_read_int_value(WORKER_HEIGHT, WORKER_HEIGHT_DEF);
+    app->worker_bits_per_pixel = 24;
+    app->worker_total_objects = 10;
+    app->worker_thread_res = -1;
+    app->verbose = utils_read_int_value(VERBOSE, VERBOSE_DEF);
 #ifdef RFB
-    state->rfb.thread_res = -1;
+    app->rfb.thread_res = -1;
 #endif
 #ifdef TENSORFLOW
-    state->model_path = utils_read_str_value(TFL_MODEL_PATH, TFL_MODEL_PATH_DEF);
+    app->model_path = utils_read_str_value(TFL_MODEL_PATH, TFL_MODEL_PATH_DEF);
 #elif DARKNET
-    state->model_path = utils_read_str_value(DN_MODEL_PATH, DN_MODEL_PATH_DEF);
-    state->config_path = utils_read_str_value(DN_CONFIG_PATH, DN_CONFIG_PATH_DEF);
+    app->model_path = utils_read_str_value(DN_MODEL_PATH, DN_MODEL_PATH_DEF);
+    app->config_path = utils_read_str_value(DN_CONFIG_PATH, DN_CONFIG_PATH_DEF);
 #endif
     char *output = utils_read_str_value(OUTPUT, OUTPUT_DEF);
     if (strcmp(output, ARG_STREAM) == 0) {
-        state->output_type = OUTPUT_STREAM;
+        app->output_type = OUTPUT_STREAM;
     } else if (strcmp(output, ARG_RFB) == 0) {
-        state->output_type = OUTPUT_RFB;
+        app->output_type = OUTPUT_RFB;
     }
 }
 
@@ -75,16 +81,62 @@ int utils_read_int_value(const char name[], int def_value)
     return def_value;
 }
 
-int utils_camera_get_defaults(app_state_t *app)
+int utils_camera_get_defaults(struct app_state_t *app)
 {
 #ifdef MMAL
     // Setup for sensor specific parameters
-    return camera_get_defaults(app->mmal.camera_num,
+    return mmal_get_defaults(app->mmal.camera_num,
         app->mmal.camera_name,
         &app->mmal.max_width,
         &app->mmal.max_height);
-#endif //MMAL
+#elif V4L
+    return v4l_get_defaults(app);
+#endif
     return EAGAIN;
+}
+
+int utils_camera_create(struct app_state_t *app)
+{
+#if defined(MMAL)
+    return mmal_create(app);
+#elif defined(V4L)
+    return v4l_create(app);
+#else
+    return EAGAIN;
+#endif
+}
+
+int utils_camera_cleanup(struct app_state_t *app)
+{
+#if defined(MMAL)
+    return mmal_cleanup(app);
+#elif defined(V4L)
+    return v4l_cleanup(app);
+#else
+    return EAGAIN;
+#endif
+}
+
+int utils_camera_create_h264_encoder(struct app_state_t *app)
+{
+#if defined(MMAL)
+    return mmal_create_h264_encoder(app);
+#elif defined(V4L)
+    return EAGAIN;
+#else
+    return EAGAIN;
+#endif
+}
+
+int utils_camera_cleanup_h264_encoder(struct app_state_t *app)
+{
+#if defined(MMAL)
+    return mmal_cleanup_h264_encoder(app);
+#elif defined(V4L)
+    return EAGAIN;
+#else
+    return EAGAIN;
+#endif
 }
 
 int utils_fill_buffer(const char *path, char *buffer, int buffer_size, size_t *read)
@@ -197,7 +249,7 @@ void utils_write_file(const char *path, unsigned char *data, int width, int heig
 {
     FILE* fstream;
     size_t written;
-    unsigned char buffer[BUFFER_SIZE];
+    unsigned char buffer[MAX_DATA];
     int i = 0, j = 0, size = width * height;
     unsigned char b;
 
@@ -215,7 +267,7 @@ void utils_write_file(const char *path, unsigned char *data, int width, int heig
 
     fprintf(fstream, "P6\n%d %d\n255\n", width, height);
     while (j < size) {
-        if (i + 3 >= BUFFER_SIZE) {
+        if (i + 3 >= MAX_DATA) {
             written += fwrite(buffer, 1, i, fstream);
             i = 0;
         }
@@ -253,25 +305,25 @@ void utils_write_file(const char *path, unsigned char *data, int width, int heig
 #endif
 }
 
-void utils_get_cpu_load(char * buffer, cpu_state_t *state)
+void utils_get_cpu_load(char * buffer, struct cpu_state_t *cpu)
 {
-    utils_fill_buffer("/proc/stat", buffer, BUFFER_SIZE, NULL);
+    utils_fill_buffer("/proc/stat", buffer, MAX_DATA, NULL);
 
     int user, nice, system, idle;
     sscanf(&buffer[4], "%d %d %d %d", &user, &nice, &system, &idle);
 
     int load = user + nice + system, all = load + idle;
     static int last_load = 0, last_all = 0;
-    float cpu = (load - last_load) / (float)(all - last_all) * 100;
+    float fcpu = (load - last_load) / (float)(all - last_all) * 100;
 
     last_load = user + nice + system;
     last_all = load + idle;
 
-    state->cpu = cpu;
+    cpu->cpu = fcpu;
 }
 
 
-void utils_get_memory_load(char * buffer, memory_state_t *state)
+void utils_get_memory_load(char * buffer, struct memory_state_t *memory)
 {
 //  VmPeak                      peak virtual memory size
 //  VmSize                      total program size
@@ -284,7 +336,7 @@ void utils_get_memory_load(char * buffer, memory_state_t *state)
 //  VmLib                       size of shared library code
 //  VmPTE                       size of page table entries
 //  VmSwap                      size of swap usage (the number of referred swapents)    
-    utils_fill_buffer("/proc/self/status", buffer, BUFFER_SIZE, NULL);
+    utils_fill_buffer("/proc/self/status", buffer, MAX_DATA, NULL);
     char * line = buffer;
     while (line) {
         char * next_line = strchr(line, '\n');
@@ -296,30 +348,30 @@ void utils_get_memory_load(char * buffer, memory_state_t *state)
             value_line++;
 
             if (line[2] == 'S' && line[3] == 'i') {
-                state->total_size = atoi(value_line);
+                memory->total_size = atoi(value_line);
             } else if (line[2] == 'S' && line[3] == 'w') {
-                state->swap_size = atoi(value_line);
+                memory->swap_size = atoi(value_line);
             } else if (line[2] == 'P' && line[3] == 'T') {
-                state->pte_size = atoi(value_line);
+                memory->pte_size = atoi(value_line);
             } else if (line[2] == 'L' && line[3] == 'i') {
-                state->lib_size = atoi(value_line);
+                memory->lib_size = atoi(value_line);
             } else if (line[2] == 'E' && line[3] == 'x') {
-                state->exe_size = atoi(value_line);
+                memory->exe_size = atoi(value_line);
             } else if (line[2] == 'S' && line[3] == 't') {
-                state->stk_size = atoi(value_line);
+                memory->stk_size = atoi(value_line);
             } else if (line[2] == 'D' && line[3] == 'a') {
-                state->data_size = atoi(value_line);
+                memory->data_size = atoi(value_line);
             }
         }
         line = next_line ? next_line + 1: NULL;
     }
 }
 
-void utils_get_temperature(char * buffer, temperature_state_t *state)
+void utils_get_temperature(char * buffer, struct temperature_state_t *temperature)
 {
-    utils_fill_buffer("/sys/class/thermal/thermal_zone0/temp", buffer, BUFFER_SIZE, NULL);
+    utils_fill_buffer("/sys/class/thermal/thermal_zone0/temp", buffer, MAX_DATA, NULL);
 
-    state->temp = (float)(atoi(buffer)) / 1000;
+    temperature->temp = (float)(atoi(buffer)) / 1000;
 }
 
 static float lerpf(float s, float e, float t)
@@ -496,58 +548,58 @@ static int resize_li_16(int *src, int src_width, int src_height, int *dst, int d
 #endif
 }
 
-int utils_get_worker_buffer(app_state_t *state)
+int utils_get_worker_buffer(struct app_state_t *app)
 {
 #ifdef OPENCV
-    CvMat *img1 = cvCreateMatHeader(state->width,
-                                    state->height,
+    CvMat *img1 = cvCreateMatHeader(app->width,
+                                    app->height,
                                     CV_8UC2);
-    cvSetData(img1, state->openvg.video_buffer, state->width << 1);
+    cvSetData(img1, app->openvg.video_buffer, app->width << 1);
 
-    CvMat *img2 = cvCreateMatHeader(state->worker_width,
-                                    state->worker_height,
+    CvMat *img2 = cvCreateMatHeader(app->worker_width,
+                                    app->worker_height,
                                     CV_8UC2);
-    cvSetData(img2, state->worker_buffer_565, state->worker_width << 1);
+    cvSetData(img2, app->worker_buffer_565, app->worker_width << 1);
 
     cvResize(img1, img2, CV_INTER_LINEAR);
 
     cvRelease(&img1);
     cvRelease(&img2);
 #elif OPENVG
-    int res = resize_li_16(state->openvg.video_buffer.i,
-                state->width,
-                state->height,
-                (int*)state->worker_buffer_565,
-                state->worker_width,
-                state->worker_height);
+    int res = resize_li_16(app->openvg.video_buffer.i,
+                app->width,
+                app->height,
+                (int*)app->worker_buffer_565,
+                app->worker_width,
+                app->worker_height);
     if (res != 0) {
         fprintf(stderr, "ERROR: Failed to resize image %d\n", res);
         return -1;
     }
 #endif
     // openvg implementation
-    // vgImageSubData(state->openvg.video_image,
-    //             state->openvg.video_buffer,
-    //             state->width << 1,
+    // vgImageSubData(app->openvg.video_image,
+    //             app->openvg.video_buffer,
+    //             app->width << 1,
     //             VG_sRGB_565,
     //             0, 0,
-    //             state->width, state->height);
+    //             app->width, app->height);
 
     // vgSeti(VG_MATRIX_MODE, VG_MATRIX_IMAGE_USER_TO_SURFACE);
     // vgLoadIdentity();
-    // vgScale(((float)state->worker_width) / state->width, ((float)state->worker_height) / state->height);
-    // vgDrawImage(state->openvg.video_image);
+    // vgScale(((float)app->worker_width) / app->width, ((float)app->worker_height) / app->height);
+    // vgDrawImage(app->openvg.video_image);
 
-    // vgReadPixels(   state->worker_buffer_565,
-    //                 state->width << 1,
+    // vgReadPixels(   app->worker_buffer_565,
+    //                 app->width << 1,
     //                 VG_sRGB_565,
     //                 0, 0,
-    //                 state->worker_width, state->worker_height);
+    //                 app->worker_width, app->worker_height);
 #if defined(ENV32BIT)
-    int32_t *buffer_565 = (int32_t *)state->worker_buffer_565;
-    int32_t *buffer_rgb = (int32_t *)state->worker_buffer_rgb;
+    int32_t *buffer_565 = (int32_t *)app->worker_buffer_565;
+    int32_t *buffer_rgb = (int32_t *)app->worker_buffer_rgb;
     int i = 0, j = 0;
-    int l = state->worker_width * state->worker_height >> 1;
+    int l = app->worker_width * app->worker_height >> 1;
     int32_t vs1, vs2, vd1, vd2, vd3;
     while(i < l) {
         vs1 = buffer_565[i++];

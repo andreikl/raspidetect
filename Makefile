@@ -1,4 +1,5 @@
 MMAL = 0
+V4L = 1
 OPENCV = 0
 OPENVG = 0
 TENSORFLOW = 0
@@ -41,6 +42,13 @@ ifeq ($(MMAL), 1)
     COMMON += `pkg-config --cflags mmal`
     LDFLAGS += `pkg-config --libs mmal`
     OBJ += mmal.o
+endif
+
+ifeq ($(V4L), 1) 
+    COMMON += -DV4L
+    COMMON += `pkg-config --cflags libv4l2`
+    LDFLAGS += `pkg-config --libs libv4l2`
+    OBJ += v4l.o
 endif
 
 ifeq ($(OPENVG), 1) 
