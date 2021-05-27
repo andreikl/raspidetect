@@ -58,7 +58,11 @@
     #endif
 #endif
 
-#include "semaphore.h" 
+#include <stdio.h>     // fprintf
+#include <time.h>      // time_t
+#include <semaphore.h>
+#include <errno.h>     // error codes
+#include <signal.h>    // SIGUSR1
 
 typedef struct {
     float cpu;

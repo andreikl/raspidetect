@@ -1,12 +1,11 @@
 #include <sysexits.h>// exit codes
 
-#include "bcm_host.h"
 #include "khash.h"
 
 #include "main.h"
 #include "utils.h"
 #include "overlay.h"
-#include "camera.h"
+#include "mmal.h"
 
 #ifdef OPENVG
 #include "openvg.h"
@@ -74,6 +73,27 @@ static void signal_handler(int signal_number)
         fprintf(stderr, "INFO: Other signal %d\n", signal_number);
     }
     is_abort = 1;
+}
+
+static void print_help()
+{
+    printf("ov5647 [options]\n");
+    printf("options:\n");
+    printf("\n");
+    printf("%s: help\n", HELP);
+    printf("%s: width, default: %d\n", WIDTH, WIDTH_DEF);
+    printf("%s: height, default: %d\n", HEIGHT, HEIGHT_DEF);
+    printf("%s: port, default: %d\n", PORT, PORT_DEF);
+    printf("%s: worke_width, default: %d\n", WORKER_WIDTH, WORKER_WIDTH_DEF);
+    printf("%s: worker_height, default: %d\n", WORKER_HEIGHT, WORKER_HEIGHT_DEF);
+    printf("%s: TFL model path, default: %s\n", TFL_MODEL_PATH, TFL_MODEL_PATH_DEF);    
+    printf("%s: DN model path, default: %s\n", DN_MODEL_PATH, DN_MODEL_PATH_DEF);    
+    printf("%s: DN config path, default: %s\n", DN_CONFIG_PATH, DN_CONFIG_PATH_DEF);    
+    printf("%s: input, default: %s\n", INPUT, INPUT_DEF);
+    printf("%s: output, default: %s\n", OUTPUT, OUTPUT_DEF);
+    printf("\toptions: "ARG_STREAM" - output stream, "ARG_RFB" - output rfb, "ARG_NONE"\n");
+    printf("%s: verbose, verbose: %d\n", VERBOSE, VERBOSE_DEF);
+    exit(0);
 }
 
 static int main_function()
@@ -175,10 +195,7 @@ static int main_function()
     }
 
     // Setup for sensor specific parameters
-    camera_get_defaults(app.mmal.camera_num,
-        app.mmal.camera_name,
-        &app.mmal.max_width,
-        &app.mmal.max_height);
+    utils_camera_get_defaults(&app);
 
     if (app.verbose) {
         fprintf(stderr, "INFO: camera_num: %d\n", app.mmal.camera_num);

@@ -1,10 +1,10 @@
-MMAL = 1
+MMAL = 0
 OPENCV = 0
-OPENVG = 1
-TENSORFLOW = 1
+OPENVG = 0
+TENSORFLOW = 0
 DARKNET = 0
-CONTROL = 1
-RFB = 1
+CONTROL = 0
+RFB = 0
 
 EXEC = raspidetect
 OBJDIR = ./obj/
@@ -40,7 +40,7 @@ ifeq ($(MMAL), 1)
     COMMON += -DMMAL
     COMMON += `pkg-config --cflags mmal`
     LDFLAGS += `pkg-config --libs mmal`
-    OBJ += camera.o
+    OBJ += mmal.o
 endif
 
 ifeq ($(OPENVG), 1) 

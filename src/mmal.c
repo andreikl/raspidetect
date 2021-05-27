@@ -1,10 +1,67 @@
 #include "main.h"
 #include "utils.h"
-#include "camera.h"
+#include "mmal.h"
+
+#include "bcm_host.h"
 
 extern int is_abort;
 
-int camera_get_defaults(int camera_num, char *camera_name, int *width, int *height )
+static const char* get_mmal_message(int result)
+{
+    if (result == MMAL_SUCCESS) {
+        return "MMAL_SUCCESS";
+    }
+    else if (result == MMAL_ENOMEM) {
+        return "MMAL_ENOMEM: Out of memory";
+    }
+    else if (result == MMAL_ENOSPC) {
+        return "MMAL_ENOSPC: Out of resources (other than memory)";
+    }
+    else if (result == MMAL_EINVAL) {
+        return "MMAL_EINVAL: Argument is invalid";
+    }
+    else if (result == MMAL_ENOSYS) {
+        return "MMAL_ENOSYS: Function not implemented";
+    }
+    else if (result == MMAL_ENOENT) {
+        return "MMAL_ENOENT: No such file or directory";
+    }
+    else if (result == MMAL_ENXIO) {
+        return "MMAL_ENXIO: No such device or address";
+    }
+    else if (result == MMAL_EIO) {
+        return "MMAL_EIO: I/O error";
+    }
+    else if (result == MMAL_ESPIPE) {
+        return "MMAL_ESPIPE: Illegal seek";
+    }
+    else if (result == MMAL_ECORRUPT) {
+        return "MMAL_ECORRUPT: Data is corrupt";
+    }
+    else if (result == MMAL_ENOTREADY) {
+        return "MMAL_ENOTREADY: Component is not ready";
+    }
+    else if (result == MMAL_ECONFIG) {
+        return "MMAL_ECONFIG: Component is not configured";
+    }
+    else if (result == MMAL_EISCONN) {
+        return "MMAL_EISCONN: Port is already connected";
+    }
+    else if (result == MMAL_ENOTCONN) {
+        return "MMAL_ENOTCONN: Port is disconnected";
+    }
+    else if (result == MMAL_EAGAIN) {
+        return "MMAL_EAGAIN: Resource temporarily unavailable. Try again later";
+    }
+    else if (result == MMAL_EFAULT) {
+        return "MMAL_EFAULT: Bad address";
+    }
+    else {
+        return "UNKNOWN";
+    }
+}
+
+int mmal_get_defaults(int camera_num, char *camera_name, int *width, int *height )
 {
     MMAL_COMPONENT_T *camera_info;
     MMAL_STATUS_T status;

@@ -23,27 +23,6 @@ void utils_parse_args(int argc, char** argv)
     }
 }
 
-void utils_print_help(void)
-{
-    printf("ov5647 [options]\n");
-    printf("options:\n");
-    printf("\n");
-    printf("%s: help\n", HELP);
-    printf("%s: width, default: %d\n", WIDTH, WIDTH_DEF);
-    printf("%s: height, default: %d\n", HEIGHT, HEIGHT_DEF);
-    printf("%s: port, default: %d\n", PORT, PORT_DEF);
-    printf("%s: worke_width, default: %d\n", WORKER_WIDTH, WORKER_WIDTH_DEF);
-    printf("%s: worker_height, default: %d\n", WORKER_HEIGHT, WORKER_HEIGHT_DEF);
-    printf("%s: TFL model path, default: %s\n", TFL_MODEL_PATH, TFL_MODEL_PATH_DEF);    
-    printf("%s: DN model path, default: %s\n", DN_MODEL_PATH, DN_MODEL_PATH_DEF);    
-    printf("%s: DN config path, default: %s\n", DN_CONFIG_PATH, DN_CONFIG_PATH_DEF);    
-    printf("%s: input, default: %s\n", INPUT, INPUT_DEF);
-    printf("%s: output, default: %s\n", OUTPUT, OUTPUT_DEF);
-    printf("\toptions: "ARG_STREAM" - output stream, "ARG_RFB" - output rfb, "ARG_NONE"\n");
-    printf("%s: verbose, verbose: %d\n", VERBOSE, VERBOSE_DEF);
-    exit(0);
-}
-
 void utils_default_status(app_state_t *state)
 {
     memset(state, 0, sizeof(app_state_t));
@@ -94,6 +73,18 @@ int utils_read_int_value(const char name[], int def_value)
         return atoi(value);
     }
     return def_value;
+}
+
+int utils_camera_get_defaults(app_state_t *app)
+{
+#ifdef MMAL
+    // Setup for sensor specific parameters
+    return camera_get_defaults(app->mmal.camera_num,
+        app->mmal.camera_name,
+        &app->mmal.max_width,
+        &app->mmal.max_height);
+#endif //MMAL
+    return EAGAIN;
 }
 
 int utils_fill_buffer(const char *path, char *buffer, int buffer_size, size_t *read)
@@ -522,7 +513,7 @@ int utils_get_worker_buffer(app_state_t *state)
 
     cvRelease(&img1);
     cvRelease(&img2);
-#else
+#elif OPENVG
     int res = resize_li_16(state->openvg.video_buffer.i,
                 state->width,
                 state->height,
@@ -585,59 +576,4 @@ int utils_get_worker_buffer(app_state_t *state)
     return -1;
 #endif
     return 0;
-}
-
-char* get_mmal_message(int result)
-{
-    if (result == MMAL_SUCCESS) {
-        return "MMAL_SUCCESS";
-    }
-    else if (result == MMAL_ENOMEM) {
-        return "MMAL_ENOMEM: Out of memory";
-    }
-    else if (result == MMAL_ENOSPC) {
-        return "MMAL_ENOSPC: Out of resources (other than memory)";
-    }
-    else if (result == MMAL_EINVAL) {
-        return "MMAL_EINVAL: Argument is invalid";
-    }
-    else if (result == MMAL_ENOSYS) {
-        return "MMAL_ENOSYS: Function not implemented";
-    }
-    else if (result == MMAL_ENOENT) {
-        return "MMAL_ENOENT: No such file or directory";
-    }
-    else if (result == MMAL_ENXIO) {
-        return "MMAL_ENXIO: No such device or address";
-    }
-    else if (result == MMAL_EIO) {
-        return "MMAL_EIO: I/O error";
-    }
-    else if (result == MMAL_ESPIPE) {
-        return "MMAL_ESPIPE: Illegal seek";
-    }
-    else if (result == MMAL_ECORRUPT) {
-        return "MMAL_ECORRUPT: Data is corrupt";
-    }
-    else if (result == MMAL_ENOTREADY) {
-        return "MMAL_ENOTREADY: Component is not ready";
-    }
-    else if (result == MMAL_ECONFIG) {
-        return "MMAL_ECONFIG: Component is not configured";
-    }
-    else if (result == MMAL_EISCONN) {
-        return "MMAL_EISCONN: Port is already connected";
-    }
-    else if (result == MMAL_ENOTCONN) {
-        return "MMAL_ENOTCONN: Port is disconnected";
-    }
-    else if (result == MMAL_EAGAIN) {
-        return "MMAL_EAGAIN: Resource temporarily unavailable. Try again later";
-    }
-    else if (result == MMAL_EFAULT) {
-        return "MMAL_EFAULT: Bad address";
-    }
-    else {
-        return "UNKNOWN";
-    }
 }

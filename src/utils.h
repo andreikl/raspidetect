@@ -34,12 +34,11 @@
 
 
 void utils_parse_args(int argc, char** argv);
-void utils_print_help(void);
-
 void utils_default_status(app_state_t *state);
-
 char *utils_read_str_value(const char name[], char *def_value);
 int utils_read_int_value(const char name[], int def_value);
+
+int utils_camera_get_defaults(app_state_t *app);
 
 int utils_fill_buffer(const char *path, char *buffer, int buffer_size, size_t *read);
 void *utils_read_file(const char *path, size_t *len);
@@ -50,7 +49,5 @@ void utils_get_memory_load(char * buffer, memory_state_t *state);
 void utils_get_temperature(char * buffer, temperature_state_t *state);
 
 int utils_get_worker_buffer(app_state_t *state);
-
-char* get_mmal_message(int result);
 
 #endif //utils_h

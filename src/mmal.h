@@ -3,7 +3,7 @@
 #define MMAL_CAMERA_VIDEO_PORT 1
 #define MMAL_CAMERA_CAPTURE_PORT 2
 
-int camera_get_defaults(int camera_num, char *camera_name, int *width, int *height );
+int mmal_get_defaults(int camera_num, char *camera_name, int *width, int *height );
 
 int camera_encode_buffer(app_state_t *app, char *buffer, int length);
 
