@@ -34,12 +34,12 @@
 
 
 void utils_parse_args(int argc, char** argv);
-void utils_default_status(struct app_state_t *app);
-char *utils_read_str_value(const char name[], char *def_value);
+const char *utils_read_str_value(const char name[], char *def_value);
 int utils_read_int_value(const char name[], int def_value);
 
 int utils_camera_get_defaults(struct app_state_t *app);
-int utils_camera_create(struct app_state_t *app);
+int utils_camera_init(struct app_state_t *app);
+int utils_camera_open(struct app_state_t *app);
 int utils_camera_cleanup(struct app_state_t *app);
 int utils_camera_create_h264_encoder(struct app_state_t *app);
 int utils_camera_cleanup_h264_encoder(struct app_state_t *app);

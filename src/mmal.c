@@ -61,7 +61,7 @@ static const char* get_mmal_message(int result)
     }
 }
 
-int mmal_get_defaults(int camera_num, char *camera_name, int *width, int *height )
+int mmal_get_capabilities(int camera_num, char *camera_name, int *width, int *height )
 {
     MMAL_COMPONENT_T *camera_info;
     MMAL_STATUS_T status;
@@ -213,7 +213,7 @@ int camera_encode_buffer(app_state_t *app, char *buffer, int length)
     return res;
 }
 
-int camera_create(app_state_t *app)
+int camera_open(app_state_t *app)
 {
     MMAL_PORT_T *video_port = NULL;
     MMAL_POOL_T *video_port_pool = NULL;

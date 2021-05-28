@@ -95,13 +95,51 @@ static void print_help()
     exit(0);
 }
 
+void set_default_state(struct app_state_t *app)
+{
+    memset(app, 0, sizeof(struct app_state_t));
+
+    int width = utils_read_int_value(WIDTH, WIDTH_DEF);
+    int height = utils_read_int_value(HEIGHT, HEIGHT_DEF);
+    app->width = (width / 32 * 32) + (width % 32? 32: 0);
+    app->height = (height / 16 * 16) + (height % 16? 16: 0);
+    app->bits_per_pixel = 16;
+    app->port = utils_read_int_value(PORT, PORT_DEF);
+    app->worker_width = utils_read_int_value(WORKER_WIDTH, WORKER_WIDTH_DEF);
+    app->worker_height = utils_read_int_value(WORKER_HEIGHT, WORKER_HEIGHT_DEF);
+    app->worker_bits_per_pixel = 24;
+    app->worker_total_objects = 10;
+    app->worker_thread_res = -1;
+    app->verbose = utils_read_int_value(VERBOSE, VERBOSE_DEF);
+#ifdef RFB
+    app->rfb.thread_res = -1;
+#endif
+#ifdef TENSORFLOW
+    app->model_path = utils_read_str_value(TFL_MODEL_PATH, TFL_MODEL_PATH_DEF);
+#elif DARKNET
+    app->model_path = utils_read_str_value(DN_MODEL_PATH, DN_MODEL_PATH_DEF);
+    app->config_path = utils_read_str_value(DN_CONFIG_PATH, DN_CONFIG_PATH_DEF);
+#endif
+    const char *output = utils_read_str_value(OUTPUT, OUTPUT_DEF);
+    if (strcmp(output, ARG_STREAM) == 0) {
+        app->output_type = OUTPUT_STREAM;
+    } else if (strcmp(output, ARG_RFB) == 0) {
+        app->output_type = OUTPUT_RFB;
+    }
+
+#ifdef V4L
+    sprintf(app->v4l.dev_name, "/dev/video%d", app->camera_num);
+    app->v4l.dev_id = -1;
+#endif
+}
+
 static int main_function()
 {
     int res;
-    char buffer[MAX_DATA];
+    char buffer[MAX_STRING];
     struct app_state_t app;
 
-    utils_default_status(&app);
+    set_default_state(&app);
 
 #ifdef CONTROL
     if (control_init(&app)) {
@@ -191,8 +229,8 @@ static int main_function()
         goto error;
     }
 
+    CALL(res = utils_camera_init(&app), error);
     CALL(res = utils_camera_get_defaults(&app), error);
-
     if (app.verbose) {
         fprintf(stderr, "INFO: camera_num: %d\n", app.camera_num);
         fprintf(stderr, "INFO: camera_name: %s\n", app.camera_name);
@@ -202,8 +240,7 @@ static int main_function()
         fprintf(stderr, "INFO: worker size: %d, %d\n", app.worker_width, app.worker_height);
         fprintf(stderr, "INFO: output type: %d\n", app.output_type);
     }
-
-    CALL(res = utils_camera_create(&app), error);
+    CALL(res = utils_camera_open(&app), error);
 
     if (app.output_type == OUTPUT_STREAM) {
         CALL(res = utils_camera_create_h264_encoder(&app), error);

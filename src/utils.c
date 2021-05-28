@@ -29,40 +29,7 @@ void utils_parse_args(int argc, char** argv)
     }
 }
 
-void utils_default_status(struct app_state_t *app)
-{
-    memset(app, 0, sizeof(struct app_state_t));
-
-    int width = utils_read_int_value(WIDTH, WIDTH_DEF);
-    int height = utils_read_int_value(HEIGHT, HEIGHT_DEF);
-    app->width = (width / 32 * 32) + (width % 32? 32: 0);
-    app->height = (height / 16 * 16) + (height % 16? 16: 0);
-    app->bits_per_pixel = 16;
-    app->port = utils_read_int_value(PORT, PORT_DEF);
-    app->worker_width = utils_read_int_value(WORKER_WIDTH, WORKER_WIDTH_DEF);
-    app->worker_height = utils_read_int_value(WORKER_HEIGHT, WORKER_HEIGHT_DEF);
-    app->worker_bits_per_pixel = 24;
-    app->worker_total_objects = 10;
-    app->worker_thread_res = -1;
-    app->verbose = utils_read_int_value(VERBOSE, VERBOSE_DEF);
-#ifdef RFB
-    app->rfb.thread_res = -1;
-#endif
-#ifdef TENSORFLOW
-    app->model_path = utils_read_str_value(TFL_MODEL_PATH, TFL_MODEL_PATH_DEF);
-#elif DARKNET
-    app->model_path = utils_read_str_value(DN_MODEL_PATH, DN_MODEL_PATH_DEF);
-    app->config_path = utils_read_str_value(DN_CONFIG_PATH, DN_CONFIG_PATH_DEF);
-#endif
-    char *output = utils_read_str_value(OUTPUT, OUTPUT_DEF);
-    if (strcmp(output, ARG_STREAM) == 0) {
-        app->output_type = OUTPUT_STREAM;
-    } else if (strcmp(output, ARG_RFB) == 0) {
-        app->output_type = OUTPUT_RFB;
-    }
-}
-
-char *utils_read_str_value(const char *name, char *def_value)
+const char *utils_read_str_value(const char *name, char *def_value)
 {
     unsigned k = kh_get(map_str, h, name);
     if (k != kh_end(h)) {
@@ -81,6 +48,17 @@ int utils_read_int_value(const char name[], int def_value)
     return def_value;
 }
 
+int utils_camera_init(struct app_state_t *app)
+{
+#if defined(MMAL)
+    return 0;
+#elif defined(V4L)
+    return v4l_init(app);
+#else
+    return EAGAIN;
+#endif
+}
+
 int utils_camera_get_defaults(struct app_state_t *app)
 {
 #ifdef MMAL
@@ -90,17 +68,17 @@ int utils_camera_get_defaults(struct app_state_t *app)
         &app->mmal.max_width,
         &app->mmal.max_height);
 #elif V4L
-    return v4l_get_defaults(app);
+    return v4l_get_capabilities(app);
 #endif
     return EAGAIN;
 }
 
-int utils_camera_create(struct app_state_t *app)
+int utils_camera_open(struct app_state_t *app)
 {
 #if defined(MMAL)
-    return mmal_create(app);
+    return mmal_open(app);
 #elif defined(V4L)
-    return v4l_create(app);
+    return 0;
 #else
     return EAGAIN;
 #endif

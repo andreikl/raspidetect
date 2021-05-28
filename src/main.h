@@ -142,6 +142,8 @@
 #include <errno.h>     // error codes
 #include <signal.h>    // SIGUSR1
 #include <string.h>    // memcpy
+#include <sys/stat.h>  // stat
+#include <fcntl.h>     // O_RDWR | O_NONBLOCK
 
 struct cpu_state_t {
     float cpu;
@@ -192,7 +194,13 @@ struct mmal_state_t {
     int is_h264_semaphore;
 
 };
-#endif //MMAL
+#elif defined(V4L)
+#include "linux/videodev2.h"
+struct v4l_state_t {
+    char dev_name[20];
+    int dev_id;
+};
+#endif
 
 #ifdef TENSORFLOW
 #include "tensorflow/lite/experimental/c/c_api.h"
@@ -317,6 +325,8 @@ struct app_state_t {
 
 #ifdef MMAL
     struct mmal_state_t mmal;
+#elif defined (V4L)
+    struct v4l_state_t v4l;
 #endif
 
 #ifdef TENSORFLOW
