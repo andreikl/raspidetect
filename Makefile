@@ -89,6 +89,5 @@ obj:
 	mkdir -p obj
 
 .PHONY: clean
-
 clean:
 	rm -rf $(OBJDIR)

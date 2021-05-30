@@ -48,6 +48,34 @@ int utils_read_int_value(const char name[], int def_value)
     return def_value;
 }
 
+const char *video_formats[] = {
+    VIDEO_FORMAT_UNKNOWN_STR,
+    VIDEO_FORMAT_YUV422_STR
+};
+
+const char* utils_get_video_format_str(int format)
+{
+    int size = ARRAY_SIZE(video_formats);
+    ASSERT_INT(format, <, 0, error);
+    ASSERT_INT(format, >=, size, error);
+    return video_formats[format];
+
+error:
+    errno = EOVERFLOW;
+    return NULL;
+}
+
+int utils_get_video_format_int(const char* format)
+{
+    int size = ARRAY_SIZE(video_formats);
+    for (int i = 1; i < size; i++) {
+        if (!strcmp(video_formats[i], format)) {
+            return i;
+        }
+    }
+    return 0;    
+}
+
 int utils_camera_init(struct app_state_t *app)
 {
 #if defined(MMAL)
@@ -59,7 +87,7 @@ int utils_camera_init(struct app_state_t *app)
 #endif
 }
 
-int utils_camera_get_defaults(struct app_state_t *app)
+int utils_camera_verify_capabilities(struct app_state_t *app)
 {
 #ifdef MMAL
     // Setup for sensor specific parameters
@@ -68,7 +96,7 @@ int utils_camera_get_defaults(struct app_state_t *app)
         &app->mmal.max_width,
         &app->mmal.max_height);
 #elif V4L
-    return v4l_get_capabilities(app);
+    return v4l_verify_capabilities(app);
 #endif
     return EAGAIN;
 }

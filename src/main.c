@@ -80,10 +80,11 @@ static void print_help()
     printf("options:\n");
     printf("\n");
     printf("%s: help\n", HELP);
-    printf("%s: width, default: %d\n", WIDTH, WIDTH_DEF);
-    printf("%s: height, default: %d\n", HEIGHT, HEIGHT_DEF);
+    printf("%s: video width, default: %d\n", VIDEO_WIDTH, VIDEO_WIDTH_DEF);
+    printf("%s: video height, default: %d\n", VIDEO_HEIGHT, VIDEO_HEIGHT_DEF);
+    printf("%s: video format, default: %s\n", VIDEO_FORMAT, VIDEO_FORMAT_DEF);
     printf("%s: port, default: %d\n", PORT, PORT_DEF);
-    printf("%s: worke_width, default: %d\n", WORKER_WIDTH, WORKER_WIDTH_DEF);
+    printf("%s: worker_width, default: %d\n", WORKER_WIDTH, WORKER_WIDTH_DEF);
     printf("%s: worker_height, default: %d\n", WORKER_HEIGHT, WORKER_HEIGHT_DEF);
     printf("%s: TFL model path, default: %s\n", TFL_MODEL_PATH, TFL_MODEL_PATH_DEF);    
     printf("%s: DN model path, default: %s\n", DN_MODEL_PATH, DN_MODEL_PATH_DEF);    
@@ -99,15 +100,16 @@ void set_default_state(struct app_state_t *app)
 {
     memset(app, 0, sizeof(struct app_state_t));
 
-    int width = utils_read_int_value(WIDTH, WIDTH_DEF);
-    int height = utils_read_int_value(HEIGHT, HEIGHT_DEF);
-    app->width = (width / 32 * 32) + (width % 32? 32: 0);
-    app->height = (height / 16 * 16) + (height % 16? 16: 0);
-    app->bits_per_pixel = 16;
+    int width = utils_read_int_value(VIDEO_WIDTH, VIDEO_WIDTH_DEF);
+    int height = utils_read_int_value(VIDEO_HEIGHT, VIDEO_HEIGHT_DEF);
+    app->video_width = (width / 32 * 32) + (width % 32? 32: 0);
+    app->video_height = (height / 16 * 16) + (height % 16? 16: 0);
+    const char* format = utils_read_str_value(VIDEO_FORMAT, VIDEO_FORMAT_DEF);
+    app->video_format = utils_get_video_format_int(format);
+
     app->port = utils_read_int_value(PORT, PORT_DEF);
     app->worker_width = utils_read_int_value(WORKER_WIDTH, WORKER_WIDTH_DEF);
     app->worker_height = utils_read_int_value(WORKER_HEIGHT, WORKER_HEIGHT_DEF);
-    app->worker_bits_per_pixel = 24;
     app->worker_total_objects = 10;
     app->worker_thread_res = -1;
     app->verbose = utils_read_int_value(VERBOSE, VERBOSE_DEF);
@@ -230,17 +232,20 @@ static int main_function()
     }
 
     CALL(res = utils_camera_init(&app), error);
-    CALL(res = utils_camera_get_defaults(&app), error);
+    CALL(res = utils_camera_verify_capabilities(&app), error);
     if (app.verbose) {
         fprintf(stderr, "INFO: camera_num: %d\n", app.camera_num);
         fprintf(stderr, "INFO: camera_name: %s\n", app.camera_name);
-        fprintf(stderr, "INFO: camera max size: %d, %d\n", app.camera_max_width, app.camera_max_height);
-        fprintf(stderr, "INFO: video size: %d, %d, %d\n", app.width, app.height, app.bits_per_pixel);
+        fprintf(stderr, "INFO: camera max size: %d, %d\n", app.camera_max_width,
+            app.camera_max_height);
+        fprintf(stderr, "INFO: video size: %d, %d\n", app.video_width, app.video_height);
+        fprintf(stderr, "INFO: video format: %s\n", utils_get_video_format_str(app.video_format));
         fprintf(stderr, "INFO: window size: %d, %d\n", app.window_width, app.window_height);
         fprintf(stderr, "INFO: worker size: %d, %d\n", app.worker_width, app.worker_height);
         fprintf(stderr, "INFO: output type: %d\n", app.output_type);
     }
     CALL(res = utils_camera_open(&app), error);
+    goto error;
 
     if (app.output_type == OUTPUT_STREAM) {
         CALL(res = utils_camera_create_h264_encoder(&app), error);

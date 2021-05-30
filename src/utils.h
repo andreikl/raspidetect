@@ -11,12 +11,23 @@
 #define B_888_MASK      (0x000000FF)
 #define ALPHA_888_MASK  (0xFF000000)
 
-#define R1_565_MASK      (0b00000000000000001111100000000000) // (0b00000000 00000000 11111000 00000000)
-#define G1_565_MASK      (0b00000000000000000000011111100000) // (0b00000000 00000000 00000111 11100000)
-#define B1_565_MASK      (0b00000000000000000000000000011111) // (0b00000000 00000000 00000000 00011111)
-#define R2_565_MASK      (0b11111000000000000000000000000000) // (0b11111000 00000000 00000000 00000000)
-#define G2_565_MASK      (0b00000111111000000000000000000000) // (0b00000111 11100000 00000000 00000000)
-#define B2_565_MASK      (0b00000000000111110000000000000000) // (0b00000000 00011111 00000000 00000000)
+#define GET_A(argb) ( ((argb) & ALPHA_888_MASK) >> 24 )
+#define GET_R(argb) ( ((argb) & R_888_MASK) >> 16 )
+#define GET_G(argb) ( ((argb) & G_888_MASK) >> 8 )
+#define GET_B(argb) ( ((argb) & B_888_MASK) >> 0 )
+
+                   // (0b00000000 00000000 11111000 00000000)
+#define R1_565_MASK      (0b00000000000000001111100000000000)
+                   // (0b00000000 00000000 00000111 11100000)
+#define G1_565_MASK      (0b00000000000000000000011111100000)
+                   // (0b00000000 00000000 00000000 00011111)
+#define B1_565_MASK      (0b00000000000000000000000000011111)
+                   // (0b11111000 00000000 00000000 00000000)
+#define R2_565_MASK      (0b11111000000000000000000000000000)
+                   // (0b00000111 11100000 00000000 00000000)
+#define G2_565_MASK      (0b00000111111000000000000000000000)
+                   // (0b00000000 00011111 00000000 00000000)
+#define B2_565_MASK      (0b00000000000111110000000000000000)
 
 #define GET_R5651(rgb565) ( ((rgb565) & R1_565_MASK) >> 11 )
 #define GET_G5651(rgb565) ( ((rgb565) & G1_565_MASK) >> 5 )
@@ -37,7 +48,10 @@ void utils_parse_args(int argc, char** argv);
 const char *utils_read_str_value(const char name[], char *def_value);
 int utils_read_int_value(const char name[], int def_value);
 
-int utils_camera_get_defaults(struct app_state_t *app);
+const char* utils_get_video_format_str(int format);
+int utils_get_video_format_int(const char* format);
+
+int utils_camera_verify_capabilities(struct app_state_t *app);
 int utils_camera_init(struct app_state_t *app);
 int utils_camera_open(struct app_state_t *app);
 int utils_camera_cleanup(struct app_state_t *app);

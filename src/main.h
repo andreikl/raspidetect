@@ -1,10 +1,17 @@
 #ifndef main_h
 #define main_h
 
-#define WIDTH "-w"
-#define WIDTH_DEF 640
-#define HEIGHT "-h"
-#define HEIGHT_DEF 480
+#define VIDEO_FORMAT_UNKNOWN_STR "Unknown"
+#define VIDEO_FORMAT_YUV422_STR "YUV422"
+#define VIDEO_FORMAT_UNKNOWN 0
+#define VIDEO_FORMAT_YUV422 1
+
+#define VIDEO_WIDTH "-w"
+#define VIDEO_WIDTH_DEF 640
+#define VIDEO_HEIGHT "-h"
+#define VIDEO_HEIGHT_DEF 480
+#define VIDEO_FORMAT "-f"
+#define VIDEO_FORMAT_DEF VIDEO_FORMAT_YUV422_STR
 #define PORT "-p"
 #define PORT_DEF 5900
 #define HELP "--help"
@@ -57,6 +64,8 @@
         #define ENV32BIT
     #endif
 #endif
+
+#define ARRAY_SIZE(a) (sizeof(a) / sizeof(a[0]))
 
 #define GET_3RD_ARG(arg1, arg2, arg3, ...) arg3
 
@@ -111,23 +120,23 @@
 #define CALL_MESSAGE(call, res) \
 { \
     fprintf(stderr, "ERROR: "#call" returned error: %s (%d)\n%s:%d - %s\n", \
-        strerror(res), res, __FILE__, __LINE__, __FUNCTION__); \
+        strerror(errno), errno, __FILE__, __LINE__, __FUNCTION__); \
 }
 
 #define CALL_2(call, error) \
 { \
-    int res = call; \
-    if (res) { \
-        CALL_MESSAGE(call, res); \
+    int __res = call; \
+    if (__res == -1) { \
+        CALL_MESSAGE(call, errno); \
         goto error; \
     } \
 }
 
 #define CALL_1(call) \
 { \
-    int res = call; \
-    if (res) { \
-        CALL_MESSAGE(call, res); \
+    int __res = call; \
+    if (__res == -1) { \
+        CALL_MESSAGE(call, errno); \
     } \
 }
 
@@ -283,14 +292,11 @@ struct app_state_t {
     int camera_max_width;         // camera max width
     int camera_max_height;        // camera max height
 
-    // window properties
-    unsigned window_width;
-    unsigned window_height;
-
     // common properties
-    int width;
-    int height;
-    int bits_per_pixel;
+    int video_width;
+    int video_height;
+    int video_format;
+
     int port;
     char *filename;                     // name of output file
     float fps;
@@ -301,6 +307,10 @@ struct app_state_t {
     volatile unsigned *gpio;
     float rfb_fps;
 
+    // window properties
+    unsigned window_width;
+    unsigned window_height;
+
     pthread_mutex_t buffer_mutex;
     sem_t buffer_semaphore;
 
@@ -309,7 +319,6 @@ struct app_state_t {
     int worker_thread_res;
     int worker_width;
     int worker_height;
-    int worker_bits_per_pixel;
     char *worker_buffer_565;
     char *worker_buffer_rgb;
     int worker_objects;
