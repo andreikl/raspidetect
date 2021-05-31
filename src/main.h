@@ -2,9 +2,18 @@
 #define main_h
 
 #define VIDEO_FORMAT_UNKNOWN_STR "Unknown"
-#define VIDEO_FORMAT_YUV422_STR "YUV422"
+#define VIDEO_FORMAT_YUV422_STR  "YUV422"
 #define VIDEO_FORMAT_UNKNOWN 0
-#define VIDEO_FORMAT_YUV422 1
+#define VIDEO_FORMAT_YUV422  1
+
+#define VIDEO_OUTPUT_NULL_STR   "null"
+#define VIDEO_OUTPUT_STDOUT_STR "stdout"
+#define VIDEO_OUTPUT_SDL_STR    "sdl"
+#define VIDEO_OUTPUT_RFB_STR    "rfb"
+#define VIDEO_OUTPUT_NULL   0
+#define VIDEO_OUTPUT_STDOUT 1
+#define VIDEO_OUTPUT_SDL    2
+#define VIDEO_OUTPUT_RFB    4
 
 #define VIDEO_WIDTH "-w"
 #define VIDEO_WIDTH_DEF 640
@@ -12,6 +21,9 @@
 #define VIDEO_HEIGHT_DEF 480
 #define VIDEO_FORMAT "-f"
 #define VIDEO_FORMAT_DEF VIDEO_FORMAT_YUV422_STR
+#define VIDEO_OUTPUT "-o"
+#define VIDEO_OUTPUT_DEF VIDEO_OUTPUT_SDL_STR
+
 #define PORT "-p"
 #define PORT_DEF 5900
 #define HELP "--help"
@@ -22,10 +34,6 @@
 #define WORKER_HEIGHT_DEF 300
 
 #define APP_NAME "raspidetect\0"
-#define INPUT "-i"
-#define INPUT_DEF "camera"
-#define OUTPUT "-o"
-#define OUTPUT_DEF "none"
 #define VERBOSE "-d"
 #define VERBOSE_DEF 1
 #define TFL_MODEL_PATH "-m"
@@ -34,9 +42,6 @@
 #define DN_MODEL_PATH_DEF "./dn_models/yolov3-tiny.weights"
 #define DN_CONFIG_PATH "-c"
 #define DN_CONFIG_PATH_DEF "./dn_models/yolov3-tiny.cfg"
-#define ARG_STREAM "-"
-#define ARG_RFB "rfb"
-#define ARG_NONE "none"
 
 #define THRESHOLD 0.5
 #define MAX_STRING 256
@@ -270,6 +275,17 @@ struct control_state_t {
 };
 #endif //CONTROL
 
+#ifdef SDL
+#include <SDL.h>
+struct sdl_state_t {
+    char* buffer;
+    int buffer_length;
+    SDL_Window *window;
+    SDL_Renderer *renderer;
+    SDL_Surface *surface;
+};
+#endif //SDL
+
 #ifdef RFB
 struct rfb_state_t {
     pthread_t thread;
@@ -278,12 +294,6 @@ struct rfb_state_t {
     int client_socket;
 };
 #endif //RFB
-
-enum output_enum_t {
-    OUTPUT_NONE,
-    OUTPUT_STREAM,
-    OUTPUT_RFB
-};
 
 struct app_state_t {
     // camera properties
@@ -296,12 +306,12 @@ struct app_state_t {
     int video_width;
     int video_height;
     int video_format;
+    int video_output;
 
     int port;
     char *filename;                     // name of output file
     float fps;
     int verbose;                        // debug
-    enum output_enum_t output_type;
     char* model_path;
     char* config_path;
     volatile unsigned *gpio;
@@ -348,8 +358,12 @@ struct app_state_t {
     struct openvg_state_t openvg;
 #endif
 
+#ifdef SDL
+	struct sdl_state_t sdl;
+#endif
+
 #ifdef RFB
-	struct rfb_state_t rfb;
+    struct rfb_state_t rfb;
 #endif
 
     struct temperature_state_t temperature;

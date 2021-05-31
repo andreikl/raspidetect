@@ -83,15 +83,17 @@ static void print_help()
     printf("%s: video width, default: %d\n", VIDEO_WIDTH, VIDEO_WIDTH_DEF);
     printf("%s: video height, default: %d\n", VIDEO_HEIGHT, VIDEO_HEIGHT_DEF);
     printf("%s: video format, default: %s\n", VIDEO_FORMAT, VIDEO_FORMAT_DEF);
+    printf("\toptions: "VIDEO_FORMAT_YUV422_STR"\n");
+    printf("%s: output, default: %s\n", VIDEO_OUTPUT, VIDEO_OUTPUT_DEF);
+    printf("\toptions: "VIDEO_OUTPUT_NULL_STR", "VIDEO_OUTPUT_STDOUT_STR", "
+        VIDEO_OUTPUT_SDL_STR", "VIDEO_OUTPUT_RFB_STR"\n");
+
     printf("%s: port, default: %d\n", PORT, PORT_DEF);
     printf("%s: worker_width, default: %d\n", WORKER_WIDTH, WORKER_WIDTH_DEF);
     printf("%s: worker_height, default: %d\n", WORKER_HEIGHT, WORKER_HEIGHT_DEF);
     printf("%s: TFL model path, default: %s\n", TFL_MODEL_PATH, TFL_MODEL_PATH_DEF);    
     printf("%s: DN model path, default: %s\n", DN_MODEL_PATH, DN_MODEL_PATH_DEF);    
     printf("%s: DN config path, default: %s\n", DN_CONFIG_PATH, DN_CONFIG_PATH_DEF);    
-    printf("%s: input, default: %s\n", INPUT, INPUT_DEF);
-    printf("%s: output, default: %s\n", OUTPUT, OUTPUT_DEF);
-    printf("\toptions: "ARG_STREAM" - output stream, "ARG_RFB" - output rfb, "ARG_NONE"\n");
     printf("%s: verbose, verbose: %d\n", VERBOSE, VERBOSE_DEF);
     exit(0);
 }
@@ -106,6 +108,8 @@ void set_default_state(struct app_state_t *app)
     app->video_height = (height / 16 * 16) + (height % 16? 16: 0);
     const char* format = utils_read_str_value(VIDEO_FORMAT, VIDEO_FORMAT_DEF);
     app->video_format = utils_get_video_format_int(format);
+    const char *output = utils_read_str_value(VIDEO_OUTPUT, VIDEO_OUTPUT_DEF);
+    app->video_output = utils_get_video_output_int(output);
 
     app->port = utils_read_int_value(PORT, PORT_DEF);
     app->worker_width = utils_read_int_value(WORKER_WIDTH, WORKER_WIDTH_DEF);
@@ -122,12 +126,6 @@ void set_default_state(struct app_state_t *app)
     app->model_path = utils_read_str_value(DN_MODEL_PATH, DN_MODEL_PATH_DEF);
     app->config_path = utils_read_str_value(DN_CONFIG_PATH, DN_CONFIG_PATH_DEF);
 #endif
-    const char *output = utils_read_str_value(OUTPUT, OUTPUT_DEF);
-    if (strcmp(output, ARG_STREAM) == 0) {
-        app->output_type = OUTPUT_STREAM;
-    } else if (strcmp(output, ARG_RFB) == 0) {
-        app->output_type = OUTPUT_RFB;
-    }
 
 #ifdef V4L
     sprintf(app->v4l.dev_name, "/dev/video%d", app->camera_num);
@@ -231,8 +229,8 @@ static int main_function()
         goto error;
     }
 
-    CALL(res = utils_camera_init(&app), error);
-    CALL(res = utils_camera_verify_capabilities(&app), error);
+    CALL(utils_camera_init(&app), error);
+    CALL(utils_camera_verify_capabilities(&app), error);
     if (app.verbose) {
         fprintf(stderr, "INFO: camera_num: %d\n", app.camera_num);
         fprintf(stderr, "INFO: camera_name: %s\n", app.camera_name);
@@ -240,23 +238,18 @@ static int main_function()
             app.camera_max_height);
         fprintf(stderr, "INFO: video size: %d, %d\n", app.video_width, app.video_height);
         fprintf(stderr, "INFO: video format: %s\n", utils_get_video_format_str(app.video_format));
+        fprintf(stderr, "INFO: video output: %s\n", utils_get_video_output_str(app.video_output));
+
         fprintf(stderr, "INFO: window size: %d, %d\n", app.window_width, app.window_height);
         fprintf(stderr, "INFO: worker size: %d, %d\n", app.worker_width, app.worker_height);
-        fprintf(stderr, "INFO: output type: %d\n", app.output_type);
     }
-    CALL(res = utils_camera_open(&app), error);
-    goto error;
+    CALL(utils_output_init(&app), error);
+    CALL(utils_camera_open(&app), error);
 
-    if (app.output_type == OUTPUT_STREAM) {
-        CALL(res = utils_camera_create_h264_encoder(&app), error);
-    } else if (app.output_type == OUTPUT_RFB) {
-#ifdef RFB
-        if (rfb_init(&app)) {
-            fprintf(stderr, "ERROR: Can't init RFB server");
-            goto error;
-        }
-#endif //RFB    
-    }
+    //TODO: move to something like camara start
+    // if (app.video_output == VIDEO_OUTPUT_STDOUT) {
+    //     CALL(utils_camera_create_h264_encoder(&app), error);
+    // }
 
     while (!is_abort) {
         // ----- fps
@@ -385,13 +378,11 @@ error:
     control_destroy(&app);
 #endif //CONTROL
 
-#ifdef RFB
-    rfb_destroy(&app);
-#endif //RFB 
-
-    if (app.output_type == OUTPUT_STREAM)
-        CALL(res = utils_camera_cleanup_h264_encoder(&app));
-    CALL(res = utils_camera_cleanup(&app));
+    //TODO: move to something like camara start
+    // if (app.video_output == VIDEO_OUTPUT_STDOUT) {
+    //    CALL(res = utils_camera_cleanup_h264_encoder(&app));
+    utils_output_cleanup(&app);
+    utils_camera_cleanup(&app);
 
     // destroy semaphore and mutex before stop thread to prevent blocking
     if (sem_destroy(&app.worker_semaphore)) {

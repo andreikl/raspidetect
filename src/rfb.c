@@ -183,10 +183,10 @@ static void *rfb_function(void *data)
         }
     
         rfb_server_init_message_t init_message = {
-            .framebuffer_width = htons(app->width),
-            .framebuffer_height = htons(app->height),
-            .pixel_format.bpp = app->bits_per_pixel,
-            .pixel_format.depth = app->bits_per_pixel,
+            .framebuffer_width = htons(app->video_width),
+            .framebuffer_height = htons(app->video_height),
+            
+            
             .pixel_format.big_endian = 1,
             .pixel_format.true_color = 1,
             .pixel_format.red_max = htons(31),
@@ -197,6 +197,15 @@ static void *rfb_function(void *data)
             .pixel_format.blue_shift = 0,
             .name_length = htonl(sizeof(init_message.name))
         };
+        if (app->video_format == VIDEO_FORMAT_YUV422) {
+            init_message.pixel_format.bpp = 16;
+            init_message.pixel_format.depth = 16;
+        }
+        else {
+            DEBUG_INT("Video format isn't supported", app->video_format);
+            errno = EINVAL;
+            goto rfb_error;
+        }
         memset(init_message.name, 0, sizeof(init_message.name));
         memcpy(init_message.name, APP_NAME, strlen(APP_NAME));
 
@@ -368,7 +377,7 @@ int rfb_init(struct app_state_t *app)
 
     return 0;
 error:
-   rfb_destroy(app); 
+   rfb_cleanup(app); 
 exit:
     return -1; 
 }

@@ -50,13 +50,18 @@ int utils_read_int_value(const char name[], int def_value);
 
 const char* utils_get_video_format_str(int format);
 int utils_get_video_format_int(const char* format);
+const char* utils_get_video_output_str(int format);
+int utils_get_video_output_int(const char* format);
 
 int utils_camera_verify_capabilities(struct app_state_t *app);
 int utils_camera_init(struct app_state_t *app);
 int utils_camera_open(struct app_state_t *app);
-int utils_camera_cleanup(struct app_state_t *app);
+void utils_camera_cleanup(struct app_state_t *app);
 int utils_camera_create_h264_encoder(struct app_state_t *app);
 int utils_camera_cleanup_h264_encoder(struct app_state_t *app);
+
+int utils_output_init(struct app_state_t *app);
+void utils_output_cleanup(struct app_state_t *app);
 
 int utils_fill_buffer(const char *path, char *buffer, int buffer_size, size_t *read);
 void *utils_read_file(const char *path, size_t *len);

@@ -1,11 +1,13 @@
-MMAL = 0
 V4L = 1
+MMAL = 0 #TODO: to check
+CONTROL = 1
+RFB = 0
+SDL = 1
+
 OPENCV = 0
 OPENVG = 0
 TENSORFLOW = 0
 DARKNET = 0
-CONTROL = 0
-RFB = 0
 
 EXEC = raspidetect
 OBJDIR = ./obj/
@@ -27,6 +29,20 @@ COMMON = -Iexternal/klib -Isrc/
 CFLAGS = -pthread -O3 -fPIC -Wall -Wno-implicit-function-declaration -Wno-unused-function -DNDEBUG -std=c11 -D_POSIX_C_SOURCE=199309L
 OBJ = utils.o main.o
 
+ifeq ($(V4L), 1) 
+    COMMON += -DV4L
+    COMMON += `pkg-config --cflags libv4l2`
+    LDFLAGS += `pkg-config --libs libv4l2`
+    OBJ += v4l.o
+endif
+
+ifeq ($(MMAL), 1) 
+    COMMON += -DMMAL
+    COMMON += `pkg-config --cflags mmal`
+    LDFLAGS += `pkg-config --libs mmal`
+    OBJ += mmal.o
+endif
+
 ifeq ($(CONTROL), 1) 
     COMMON += -DCONTROL
     OBJ += control.o
@@ -37,18 +53,11 @@ ifeq ($(RFB), 1)
     OBJ += rfb.o
 endif
 
-ifeq ($(MMAL), 1) 
-    COMMON += -DMMAL
-    COMMON += `pkg-config --cflags mmal`
-    LDFLAGS += `pkg-config --libs mmal`
-    OBJ += mmal.o
-endif
-
-ifeq ($(V4L), 1) 
-    COMMON += -DV4L
-    COMMON += `pkg-config --cflags libv4l2`
-    LDFLAGS += `pkg-config --libs libv4l2`
-    OBJ += v4l.o
+ifeq ($(SDL), 1) 
+    COMMON += -DSDL
+    COMMON += `pkg-config --cflags sdl2`
+    LDFLAGS += `pkg-config --libs sdl2`
+    OBJ += sdl.o
 endif
 
 ifeq ($(OPENVG), 1) 

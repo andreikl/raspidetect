@@ -349,16 +349,12 @@ error:
 }
 
 //  Destroy the camera component
-int camera_cleanup(app_state_t *app)
+void camera_cleanup(app_state_t *app)
 {
-    int res = 0;
-
     if (app->mmal.camera) {
         mmal_component_destroy(app->mmal.camera);
         app->mmal.camera = NULL;
     }
-
-    return res;
 }
 
 int camera_create_h264_encoder(app_state_t *app)
@@ -478,7 +474,7 @@ error:
     return 1;
 }
 
-int camera_cleanup_h264_encoder(app_state_t *app)
+void camera_cleanup_h264_encoder(app_state_t *app)
 {
     int res = 0;
 
@@ -510,6 +506,4 @@ int camera_cleanup_h264_encoder(app_state_t *app)
         }
         app->mmal.is_h264_semaphore = 0;
     }
-
-    return res;
 }

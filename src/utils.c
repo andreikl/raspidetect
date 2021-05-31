@@ -76,6 +76,55 @@ int utils_get_video_format_int(const char* format)
     return 0;    
 }
 
+const char *video_outputs[] = {
+    VIDEO_OUTPUT_NULL_STR,
+    VIDEO_OUTPUT_STDOUT_STR,
+    VIDEO_OUTPUT_SDL_STR,
+    VIDEO_OUTPUT_STDOUT_STR","VIDEO_OUTPUT_SDL_STR,
+    VIDEO_OUTPUT_RFB_STR,
+    VIDEO_OUTPUT_STDOUT_STR","VIDEO_OUTPUT_RFB_STR,
+    VIDEO_OUTPUT_SDL_STR","VIDEO_OUTPUT_RFB_STR,
+    VIDEO_OUTPUT_STDOUT_STR","VIDEO_OUTPUT_SDL_STR","VIDEO_OUTPUT_RFB_STR,
+};
+
+const char* utils_get_video_output_str(int output)
+{
+
+    int size = ARRAY_SIZE(video_outputs);
+    ASSERT_INT(output, <, 0, error);
+    ASSERT_INT(output, >=, size, error);
+    return video_outputs[output];
+
+error:
+    errno = EOVERFLOW;
+    return NULL;
+}
+
+int utils_get_video_output_int(const char* output)
+{
+    ASSERT_PTR(output, ==, NULL, error);
+    ASSERT_INT((int)strlen(output), >, MAX_STRING, error);
+
+    int res = 0;
+    const char coma = ',';
+    const char *next_start = output;
+    const char *next_end = strchr(next_start, coma);
+    do {
+        int len = next_end != NULL? next_end - next_start: strlen(next_start);
+        if (strncmp(VIDEO_OUTPUT_STDOUT_STR, next_start, len) == 0)
+            res |= VIDEO_OUTPUT_STDOUT;
+        else if (strncmp(VIDEO_OUTPUT_SDL_STR, next_start, len) == 0)
+            res |= VIDEO_OUTPUT_SDL;
+        else if (strncmp(VIDEO_OUTPUT_RFB_STR, next_start, len) == 0)
+            res |= VIDEO_OUTPUT_RFB;
+    } while (next_end != NULL);
+    return res;
+
+error:
+    errno = EOVERFLOW;
+    return -1;
+}
+
 int utils_camera_init(struct app_state_t *app)
 {
 #if defined(MMAL)
@@ -112,14 +161,12 @@ int utils_camera_open(struct app_state_t *app)
 #endif
 }
 
-int utils_camera_cleanup(struct app_state_t *app)
+void utils_camera_cleanup(struct app_state_t *app)
 {
 #if defined(MMAL)
-    return mmal_cleanup(app);
+    mmal_cleanup(app);
 #elif defined(V4L)
-    return v4l_cleanup(app);
-#else
-    return EAGAIN;
+    v4l_cleanup(app);
 #endif
 }
 
@@ -143,6 +190,34 @@ int utils_camera_cleanup_h264_encoder(struct app_state_t *app)
 #else
     return EAGAIN;
 #endif
+}
+
+int utils_output_init(struct app_state_t *app)
+{
+#ifdef SDL
+    if ((app->video_output & VIDEO_OUTPUT_SDL) == VIDEO_OUTPUT_SDL)
+        return sdl_init(&app);
+#endif //SDL
+
+#ifdef RFB
+    if ((app->video_output & VIDEO_OUTPUT_RFB) == VIDEO_OUTPUT_RFB)
+        return rfb_init(&app);
+#endif //RFB
+
+    return 0;
+}
+
+void utils_output_cleanup(struct app_state_t *app)
+{
+#ifdef SDL
+    if ((app->video_output & VIDEO_OUTPUT_SDL) == VIDEO_OUTPUT_SDL)
+        sdl_cleanup(&app);
+#endif //SDL
+
+#ifdef RFB
+    if ((app->video_output & VIDEO_OUTPUT_RFB) == VIDEO_OUTPUT_RFB)
+        rfb_cleanup(&app);
+#endif //RFB
 }
 
 int utils_fill_buffer(const char *path, char *buffer, int buffer_size, size_t *read)
