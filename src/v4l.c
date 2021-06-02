@@ -1,6 +1,8 @@
 #include "main.h"
 #include "utils.h"
 
+#include "v4l.h"
+
 static int ioctl_wait(int fd, int request, void *arg)
 {
     struct timespec rem;
@@ -9,7 +11,7 @@ static int ioctl_wait(int fd, int request, void *arg)
         .tv_nsec = 10000,
     };
     int res = ioctl(fd, request, arg);
-    while (res == -1 && errno == EINTR) {
+    while (res == -1 && (errno == EINTR) ) {
         CALL(nanosleep(&req, &rem), cleanup);
         res = ioctl(fd, request, arg);
     }
@@ -36,6 +38,8 @@ int v4l_verify_capabilities(struct app_state_t *app)
     strncpy(app->camera_name, (const char *)cap.card, 32);
     ASSERT_INT((cap.capabilities & V4L2_CAP_VIDEO_CAPTURE), ==, 0, cleanup);
     ASSERT_INT((cap.capabilities & V4L2_CAP_STREAMING), ==, 0, cleanup);
+    //ASSERT_INT((cap.capabilities & V4L2_CAP_READWRITE), ==, 0, cleanup);
+    
 
     int is_found = 0;
     enum v4l2_buf_type type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
@@ -102,8 +106,8 @@ int v4l_verify_capabilities(struct app_state_t *app)
         errno = EOPNOTSUPP;
         return -1;
     }
-    return 0;
 
+    return 0;
 cleanup:
     if (errno == 0)
         errno = EAGAIN;
@@ -112,6 +116,16 @@ cleanup:
 
 int v4l_init(struct app_state_t *app)
 {
+    int len = app->video_width * app->video_height * 4;
+    char *data = malloc(len);
+    if (data == NULL) {
+        errno = ENOMEM;
+        CALL_MESSAGE(malloc, 0);
+        goto cleanup;
+    }
+    app->v4l.buffer = data;
+    app->v4l.buffer_length = len;
+
     struct stat st;
     CALL(stat(app->v4l.dev_name, &st), cleanup);
     ASSERT_INT(S_ISCHR(st.st_mode), ==, 0, cleanup);
@@ -122,6 +136,89 @@ int v4l_init(struct app_state_t *app)
     }
     return 0;
 cleanup:
+
+    v4l_cleanup(app);
+    if (errno == 0)
+        errno = EAGAIN;
+    return -1;
+}
+
+int v4l_open(struct app_state_t *app)
+{
+    struct v4l2_format fmt;
+    memset(&fmt, 0, sizeof(fmt));
+    fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+    fmt.fmt.pix.width = app->video_width;
+    fmt.fmt.pix.height = app->video_height;
+    fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_YUYV;
+    fmt.fmt.pix.field = V4L2_FIELD_INTERLACED;
+    CALL(ioctl_enum(app->v4l.dev_id, VIDIOC_S_FMT, &fmt), cleanup);
+
+    struct v4l2_requestbuffers req;
+    memset(&req, 0, sizeof(req));
+    req.count = 1;
+    req.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+    req.memory = V4L2_MEMORY_USERPTR;
+    CALL(ioctl_wait(app->v4l.dev_id, VIDIOC_REQBUFS, &req), cleanup);
+
+    struct v4l2_buffer buf;
+    memset(&buf, 0, sizeof(buf));
+    buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+    buf.memory = V4L2_MEMORY_USERPTR;
+    buf.index = 0;
+    buf.m.userptr = (unsigned long)app->v4l.buffer;
+    buf.length = app->v4l.buffer_length;
+    CALL(ioctl_wait(app->v4l.dev_id, VIDIOC_QBUF, &buf), cleanup);
+
+    enum v4l2_buf_type type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+    CALL(ioctl_wait(app->v4l.dev_id, VIDIOC_STREAMON, &type), cleanup);
+
+    return 0;
+cleanup:
+    if (errno == 0)
+        errno = EAGAIN;
+    return -1;
+}
+
+int v4l_get_frame(struct app_state_t *app)
+{
+    struct timeval tv;
+    fd_set rfds;
+
+    FD_ZERO(&rfds);
+    FD_SET(app->v4l.dev_id, &rfds);
+
+    tv.tv_sec = 1;
+    tv.tv_usec = 0;
+    CALL(select(1, &rfds, NULL, NULL, &tv), cleanup);
+
+    struct v4l2_buffer buf;
+    memset(&buf, 0, sizeof(buf));
+    buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+    buf.memory = V4L2_MEMORY_USERPTR;
+    CALL(ioctl_wait(app->v4l.dev_id, VIDIOC_DQBUF, &buf), cleanup);
+
+    //TODO: process
+
+    buf.index = 0;
+    buf.m.userptr = (unsigned long)app->v4l.buffer;
+    buf.length = app->v4l.buffer_length;
+    CALL(ioctl_wait(app->v4l.dev_id, VIDIOC_QBUF, &buf), cleanup);
+    return 0;
+
+cleanup:
+    if (errno == 0)
+        errno = EAGAIN;
+    return -1;
+}
+
+int v4l_close(struct app_state_t *app)
+{
+    enum v4l2_buf_type type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+    CALL(ioctl_wait(app->v4l.dev_id, VIDIOC_STREAMOFF, &type), cleanup);
+
+    return 0;
+cleanup:
     if (errno == 0)
         errno = EAGAIN;
     return -1;
@@ -129,6 +226,12 @@ cleanup:
 
 void v4l_cleanup(struct app_state_t *app)
 {
-    if (app->v4l.dev_id != -1)
+    if (app->v4l.dev_id != -1) {
         CALL(close(app->v4l.dev_id));
+        app->v4l.dev_id = -1;
+    }
+    if (app->v4l.buffer) {
+        free(app->v4l.buffer);
+        app->v4l.buffer = NULL;
+    }
 }

@@ -150,6 +150,7 @@
 #define CALL(...) CALL_X(__VA_ARGS__)(__VA_ARGS__)
 
 #include <stdio.h>     // fprintf
+#include <stdlib.h>    // malloc, free
 #include <unistd.h>    // STDIN_FILENO
 #include <time.h>      // time_t
 #include <semaphore.h>
@@ -213,6 +214,9 @@ struct mmal_state_t {
 struct v4l_state_t {
     char dev_name[20];
     int dev_id;
+
+    char *buffer;
+    int buffer_length;
 };
 #endif
 

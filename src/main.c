@@ -252,6 +252,13 @@ static int main_function()
     // }
 
     while (!is_abort) {
+        CALL(res = utils_camera_get_frame(&app));
+        if (errno == EAGAIN)
+            continue;
+        else
+            goto error;
+            
+
         // ----- fps
         static int frame_count = 0;
         static struct timespec t1;
@@ -286,83 +293,84 @@ static int main_function()
                 app.worker_objects);
         }
 
+//TODO: move to open vg
 #ifdef OPENVG
-        //wait frame from camera
-        sem_wait(&app.buffer_semaphore);
+        // //wait frame from camera
+        // sem_wait(&app.buffer_semaphore);
 
-        //pthread_mutex_lock(&app.buffer_mutex);
-        int value, res;
-        res = sem_getvalue(&app.worker_semaphore, &value);
-        if (res) {
-            fprintf(stderr, "ERROR: Unable to read value from worker semaphore: %d\n", errno);
-            is_abort = 1;
-        }
-        if (!value) {
-            res = utils_get_worker_buffer(&app);
-            if (res) {
-                fprintf(stderr, "ERROR: cannot get worker buffer, res: %d\n", res);
-                is_abort = 1;
-            }
+        // //pthread_mutex_lock(&app.buffer_mutex);
+        // int value, res;
+        // res = sem_getvalue(&app.worker_semaphore, &value);
+        // if (res) {
+        //     fprintf(stderr, "ERROR: Unable to read value from worker semaphore: %d\n", errno);
+        //     is_abort = 1;
+        // }
+        // if (!value) {
+        //     res = utils_get_worker_buffer(&app);
+        //     if (res) {
+        //         fprintf(stderr, "ERROR: cannot get worker buffer, res: %d\n", res);
+        //         is_abort = 1;
+        //     }
 
-            res = sem_post(&app.worker_semaphore);
-            if (res) {
-                fprintf(stderr, "ERROR: Unable to increase worker semaphore\n");
-                is_abort = 1;
-            }
-        }
+        //     res = sem_post(&app.worker_semaphore);
+        //     if (res) {
+        //         fprintf(stderr, "ERROR: Unable to increase worker semaphore\n");
+        //         is_abort = 1;
+        //     }
+        // }
 
-        vgWritePixels(  app.openvg.video_buffer.c,
-                        app.width << 1,
-                        VG_sRGB_565,
-                        0, 0,
-                        app.width, app.height);
+        // vgWritePixels(  app.openvg.video_buffer.c,
+        //                 app.width << 1,
+        //                 VG_sRGB_565,
+        //                 0, 0,
+        //                 app.width, app.height);
 
-        res = vgGetError();
-        if (res != 0) {
-            fprintf(stderr, "ERROR: Failed to draw image %d\n", res);
-        }
-        //pthread_mutex_unlock(&app.buffer_mutex);
-        // ------------------------------
+        // res = vgGetError();
+        // if (res != 0) {
+        //     fprintf(stderr, "ERROR: Failed to draw image %d\n", res);
+        // }
+        // //pthread_mutex_unlock(&app.buffer_mutex);
+        // // ------------------------------
 
-        VGfloat vg_colour[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+        // VGfloat vg_colour[4] = {1.0f, 1.0f, 1.0f, 1.0f};
 
-        res = pthread_mutex_lock(&app.buffer_mutex);
-        if (res)
-            fprintf(stderr, "ERROR: pthread_mutex_lock failed with code %d\n", res);
+        // res = pthread_mutex_lock(&app.buffer_mutex);
+        // if (res)
+        //     fprintf(stderr, "ERROR: pthread_mutex_lock failed with code %d\n", res);
 
-        sprintf(buffer, "camera: %2.2f detect: %2.2f, rfb: %2.2f FPS, CPU: %2.1f%%, Memory: %d kb, T: %.2fC, Objects: %d",
-            app.fps,
-            app.worker_fps,
-            app.rfb_fps,
-            app.cpu.cpu,
-            app.memory.total_size,
-            app.temperature.temp,
-            app.worker_objects);
+        // sprintf(buffer, "camera: %2.2f detect: %2.2f, rfb: %2.2f FPS, CPU: %2.1f%%, Memory: %d kb, T: %.2fC, Objects: %d",
+        //     app.fps,
+        //     app.worker_fps,
+        //     app.rfb_fps,
+        //     app.cpu.cpu,
+        //     app.memory.total_size,
+        //     app.temperature.temp,
+        //     app.worker_objects);
 
-        res = openvg_draw_text(&app, 0, 0, buffer, strlen(buffer), 20, vg_colour);
-        if (res)
-            fprintf(stderr, "ERROR: failed to draw text\n");
+        // res = openvg_draw_text(&app, 0, 0, buffer, strlen(buffer), 20, vg_colour);
+        // if (res)
+        //     fprintf(stderr, "ERROR: failed to draw text\n");
 
-        res = openvg_draw_boxes(&app, vg_colour);
-        if (res)
-            fprintf(stderr, "ERROR: failed to draw boxes\n");
+        // res = openvg_draw_boxes(&app, vg_colour);
+        // if (res)
+        //     fprintf(stderr, "ERROR: failed to draw boxes\n");
 
-        res = pthread_mutex_unlock(&app.buffer_mutex);
-        if (res)
-            fprintf(stderr, "ERROR: pthread_mutex_unlock failed with code %d\n", res);
+        // res = pthread_mutex_unlock(&app.buffer_mutex);
+        // if (res)
+        //     fprintf(stderr, "ERROR: pthread_mutex_unlock failed with code %d\n", res);
 
-        if (app.output_type == OUTPUT_STREAM) {
-            openvg_read_buffer(&app);
-            camera_encode_buffer(&app, app.openvg.video_buffer.c, ((app.width * app.height) << 1));
-        } else if (app.output_type == OUTPUT_RFB) {
-            openvg_read_buffer(&app);
-        }
+        // if (app.output_type == OUTPUT_STREAM) {
+        //     openvg_read_buffer(&app);
+        //     camera_encode_buffer(&app, app.openvg.video_buffer.c, ((app.width * app.height) << 1));
+        // } else if (app.output_type == OUTPUT_RFB) {
+        //     openvg_read_buffer(&app);
+        // }
 
-        EGLBoolean egl_res;
-        egl_res = eglSwapBuffers(app.openvg.display, app.openvg.surface);
-        if (egl_res == EGL_FALSE) {
-             fprintf(stderr, "ERROR: failed to clear screan: 0x%x\n", egl_res);
-        }
+        // EGLBoolean egl_res;
+        // egl_res = eglSwapBuffers(app.openvg.display, app.openvg.surface);
+        // if (egl_res == EGL_FALSE) {
+        //      fprintf(stderr, "ERROR: failed to clear screan: 0x%x\n", egl_res);
+        // }
 #endif //OPENVG
 
 #ifdef CONTROL
@@ -371,6 +379,8 @@ static int main_function()
 
         //usleep(TICK_TIME);
     }
+    CALL(utils_camera_close(&app), error);
+
     exit_code = EX_OK;
 
 error:

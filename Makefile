@@ -1,8 +1,8 @@
 V4L = 1
 MMAL = 0 #TODO: to check
-CONTROL = 1
+CONTROL = 0
 RFB = 0
-SDL = 1
+SDL = 0
 
 OPENCV = 0
 OPENVG = 0

@@ -155,7 +155,29 @@ int utils_camera_open(struct app_state_t *app)
 #if defined(MMAL)
     return mmal_open(app);
 #elif defined(V4L)
+    return v4l_open(app);
+#else
+    return EAGAIN;
+#endif
+}
+
+int utils_camera_get_frame(struct app_state_t *app)
+{
+#if defined(MMAL)
     return 0;
+#elif defined(V4L)
+    return v4l_get_frame(app);
+#else
+    return EAGAIN;
+#endif
+}
+
+int utils_camera_close(struct app_state_t *app)
+{
+#if defined(MMAL)
+    return 0;
+#elif defined(V4L)
+    return v4l_close(app);
 #else
     return EAGAIN;
 #endif

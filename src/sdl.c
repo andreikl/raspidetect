@@ -2,8 +2,6 @@
 #include "utils.h"
 
 #include "sdl.h"
-//TODO: use opengl
-//http://lazyfoo.net/SDL_tutorials/lesson36/index.php
 
 static int sdl_filter(void* data, union SDL_Event *event)
 {
@@ -40,7 +38,7 @@ int sdl_init(struct app_state_t *app)
     char *data = malloc(len);
     if (data == NULL) {
         errno = ENOMEM;
-        MESSAGE(malloc, 0);
+        CALL_MESSAGE(malloc, 0);
         goto error;
     }
     app->sdl.buffer = data;

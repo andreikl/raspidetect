@@ -56,6 +56,8 @@ int utils_get_video_output_int(const char* format);
 int utils_camera_verify_capabilities(struct app_state_t *app);
 int utils_camera_init(struct app_state_t *app);
 int utils_camera_open(struct app_state_t *app);
+int utils_camera_get_frame(struct app_state_t *app);
+int utils_camera_close(struct app_state_t *app);
 void utils_camera_cleanup(struct app_state_t *app);
 int utils_camera_create_h264_encoder(struct app_state_t *app);
 int utils_camera_cleanup_h264_encoder(struct app_state_t *app);
