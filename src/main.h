@@ -375,4 +375,13 @@ struct app_state_t {
     struct cpu_state_t cpu;
 };
 
+struct input_t {
+    int (*verify_capabilities)(struct app_state_t *app);
+    int (*init)(struct app_state_t *app);
+    int (*open)(struct app_state_t *app);
+    int (*get_frame)(struct app_state_t *app);
+    int (*close)(struct app_state_t *app);
+    void (*cleanup)(struct app_state_t *app);
+};
+
 #endif // main_h

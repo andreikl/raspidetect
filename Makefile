@@ -27,7 +27,6 @@ LDFLAGS = -lm
 COMMON = -Iexternal/klib -Isrc/
 #-D_POSIX_C_SOURCE=199309L fixes CLOCK_REALTIME error on pi zero 
 CFLAGS = -pthread -O3 -fPIC -Wall -Wno-implicit-function-declaration -Wno-unused-function -DNDEBUG -std=c11 -D_POSIX_C_SOURCE=199309L
-OBJ = utils.o main.o
 
 ifeq ($(V4L), 1) 
     COMMON += -DV4L
@@ -83,6 +82,8 @@ else ifeq ($(DARKNET), 1)
     LDFLAGS += -L/home/pi/darknet -ldarknet
     OBJ += darknet.o 
 endif
+
+OBJ += utils.o main.o
 
 OBJS = $(addprefix $(OBJDIR), $(OBJ))
 

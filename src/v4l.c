@@ -30,7 +30,19 @@ static int ioctl_enum(int fd, int request, void *arg)
     return res;
 }
 
-int v4l_verify_capabilities(struct app_state_t *app)
+static void v4l_cleanup(struct app_state_t *app)
+{
+    if (app->v4l.dev_id != -1) {
+        CALL(close(app->v4l.dev_id));
+        app->v4l.dev_id = -1;
+    }
+    if (app->v4l.buffer) {
+        free(app->v4l.buffer);
+        app->v4l.buffer = NULL;
+    }
+}
+
+static int v4l_verify_capabilities(struct app_state_t *app)
 {
     int res = 0;
     struct v4l2_capability cap;
@@ -114,7 +126,7 @@ cleanup:
     return -1;
 }
 
-int v4l_init(struct app_state_t *app)
+static int v4l_init(struct app_state_t *app)
 {
     int len = app->video_width * app->video_height * 4;
     char *data = malloc(len);
@@ -143,7 +155,7 @@ cleanup:
     return -1;
 }
 
-int v4l_open(struct app_state_t *app)
+static int v4l_open(struct app_state_t *app)
 {
     struct v4l2_format fmt;
     memset(&fmt, 0, sizeof(fmt));
@@ -180,7 +192,7 @@ cleanup:
     return -1;
 }
 
-int v4l_get_frame(struct app_state_t *app)
+static int v4l_get_frame(struct app_state_t *app)
 {
     struct timeval tv;
     fd_set rfds;
@@ -224,14 +236,11 @@ cleanup:
     return -1;
 }
 
-void v4l_cleanup(struct app_state_t *app)
-{
-    if (app->v4l.dev_id != -1) {
-        CALL(close(app->v4l.dev_id));
-        app->v4l.dev_id = -1;
-    }
-    if (app->v4l.buffer) {
-        free(app->v4l.buffer);
-        app->v4l.buffer = NULL;
-    }
-}
+struct input_t v4l = {
+    .verify_capabilities = v4l_verify_capabilities,
+    .init = v4l_init,
+    .open = v4l_open,
+    .get_frame = v4l_get_frame,
+    .close = v4l_close, 
+    .cleanup = v4l_cleanup
+};

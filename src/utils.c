@@ -125,12 +125,14 @@ error:
     return -1;
 }
 
+extern struct input_t v4l;
+
 int utils_camera_init(struct app_state_t *app)
 {
 #if defined(MMAL)
     return 0;
 #elif defined(V4L)
-    return v4l_init(app);
+    return v4l.init(app);
 #else
     return EAGAIN;
 #endif
@@ -145,7 +147,7 @@ int utils_camera_verify_capabilities(struct app_state_t *app)
         &app->mmal.max_width,
         &app->mmal.max_height);
 #elif V4L
-    return v4l_verify_capabilities(app);
+    return v4l.verify_capabilities(app);
 #endif
     return EAGAIN;
 }
@@ -155,7 +157,7 @@ int utils_camera_open(struct app_state_t *app)
 #if defined(MMAL)
     return mmal_open(app);
 #elif defined(V4L)
-    return v4l_open(app);
+    return v4l.open(app);
 #else
     return EAGAIN;
 #endif
@@ -166,7 +168,7 @@ int utils_camera_get_frame(struct app_state_t *app)
 #if defined(MMAL)
     return 0;
 #elif defined(V4L)
-    return v4l_get_frame(app);
+    return v4l.get_frame(app);
 #else
     return EAGAIN;
 #endif
@@ -177,7 +179,7 @@ int utils_camera_close(struct app_state_t *app)
 #if defined(MMAL)
     return 0;
 #elif defined(V4L)
-    return v4l_close(app);
+    return v4l.close(app);
 #else
     return EAGAIN;
 #endif
@@ -188,7 +190,7 @@ void utils_camera_cleanup(struct app_state_t *app)
 #if defined(MMAL)
     mmal_cleanup(app);
 #elif defined(V4L)
-    v4l_cleanup(app);
+    v4l.cleanup(app);
 #endif
 }
 
