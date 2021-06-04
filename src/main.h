@@ -179,47 +179,6 @@ struct temperature_state_t {
     float temp;
 };
 
-#ifdef MMAL
-#include "interface/mmal/mmal.h"
-#include "interface/mmal/mmal_logging.h"
-#include "interface/mmal/mmal_buffer.h"
-#include "interface/mmal/util/mmal_util.h"
-#include "interface/mmal/util/mmal_util_params.h"
-#include "interface/mmal/util/mmal_default_components.h"
-#include "interface/mmal/util/mmal_connection.h"
-#include "interface/mmal/mmal_parameters_camera.h"
-
-struct mmal_state_t {
-    MMAL_COMPONENT_T *camera;
-    MMAL_COMPONENT_T *encoder_h264;
-
-    MMAL_PORT_T *video_port;
-    MMAL_POOL_T *video_port_pool;
-    MMAL_PORT_T *h264_input_port;
-    MMAL_POOL_T *h264_input_pool;
-    MMAL_PORT_T *h264_output_port;
-    MMAL_POOL_T *h264_output_pool;
-
-    char *h264_buffer;
-    int32_t h264_buffer_length;
-    pthread_mutex_t h264_mutex;
-    int is_h264_mutex;
-
-    sem_t h264_semaphore;
-    int is_h264_semaphore;
-
-};
-#elif defined(V4L)
-#include "linux/videodev2.h"
-struct v4l_state_t {
-    char dev_name[20];
-    int dev_id;
-
-    char *buffer;
-    int buffer_length;
-};
-#endif
-
 #ifdef TENSORFLOW
 #include "tensorflow/lite/experimental/c/c_api.h"
 
@@ -299,6 +258,18 @@ struct rfb_state_t {
 };
 #endif //RFB
 
+struct app_state_t;
+
+struct input_t {
+    void *context;
+    int (*verify_capabilities)(struct app_state_t *app);
+    int (*init)(struct app_state_t *app);
+    int (*open)(struct app_state_t *app);
+    int (*get_frame)(struct app_state_t *app);
+    int (*close)(struct app_state_t *app);
+    void (*cleanup)(struct app_state_t *app);
+};
+
 struct app_state_t {
     // camera properties
     int camera_num;               // Camera number
@@ -342,14 +313,10 @@ struct app_state_t {
     float *worker_classes;
     float *worker_scores;
 
+    struct input_t input;
+
 #ifdef CONTROL
     struct control_state_t control;
-#endif
-
-#ifdef MMAL
-    struct mmal_state_t mmal;
-#elif defined (V4L)
-    struct v4l_state_t v4l;
 #endif
 
 #ifdef TENSORFLOW
@@ -373,15 +340,6 @@ struct app_state_t {
     struct temperature_state_t temperature;
     struct memory_state_t memory;
     struct cpu_state_t cpu;
-};
-
-struct input_t {
-    int (*verify_capabilities)(struct app_state_t *app);
-    int (*init)(struct app_state_t *app);
-    int (*open)(struct app_state_t *app);
-    int (*get_frame)(struct app_state_t *app);
-    int (*close)(struct app_state_t *app);
-    void (*cleanup)(struct app_state_t *app);
 };
 
 #endif // main_h

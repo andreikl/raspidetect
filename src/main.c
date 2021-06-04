@@ -25,6 +25,7 @@ khash_t(map_str) *h;
 
 int is_abort = 0;
 static int exit_code = EX_SOFTWARE;
+extern struct input_t input;
 
 void *worker_function(void *data)
 {
@@ -126,11 +127,6 @@ void set_default_state(struct app_state_t *app)
     app->model_path = utils_read_str_value(DN_MODEL_PATH, DN_MODEL_PATH_DEF);
     app->config_path = utils_read_str_value(DN_CONFIG_PATH, DN_CONFIG_PATH_DEF);
 #endif
-
-#ifdef V4L
-    sprintf(app->v4l.dev_name, "/dev/video%d", app->camera_num);
-    app->v4l.dev_id = -1;
-#endif
 }
 
 static int main_function()
@@ -229,8 +225,8 @@ static int main_function()
         goto error;
     }
 
-    CALL(utils_camera_init(&app), error);
-    CALL(utils_camera_verify_capabilities(&app), error);
+    CALL(input.init(&app), error);
+    CALL(input.verify_capabilities(&app), error);
     if (app.verbose) {
         fprintf(stderr, "INFO: camera_num: %d\n", app.camera_num);
         fprintf(stderr, "INFO: camera_name: %s\n", app.camera_name);
@@ -244,7 +240,7 @@ static int main_function()
         fprintf(stderr, "INFO: worker size: %d, %d\n", app.worker_width, app.worker_height);
     }
     CALL(utils_output_init(&app), error);
-    CALL(utils_camera_open(&app), error);
+    CALL(input.open(&app), error);
 
     //TODO: move to something like camara start
     // if (app.video_output == VIDEO_OUTPUT_STDOUT) {
@@ -252,7 +248,7 @@ static int main_function()
     // }
 
     while (!is_abort) {
-        CALL(res = utils_camera_get_frame(&app));
+        CALL(res = input.get_frame(&app));
         if (errno == EAGAIN)
             continue;
         else
@@ -379,7 +375,7 @@ static int main_function()
 
         //usleep(TICK_TIME);
     }
-    CALL(utils_camera_close(&app), error);
+    CALL(input.close(&app), error);
 
     exit_code = EX_OK;
 
@@ -392,7 +388,7 @@ error:
     // if (app.video_output == VIDEO_OUTPUT_STDOUT) {
     //    CALL(res = utils_camera_cleanup_h264_encoder(&app));
     utils_output_cleanup(&app);
-    utils_camera_cleanup(&app);
+    input.cleanup(&app);
 
     // destroy semaphore and mutex before stop thread to prevent blocking
     if (sem_destroy(&app.worker_semaphore)) {
