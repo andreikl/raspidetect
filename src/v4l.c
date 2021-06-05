@@ -10,6 +10,8 @@ static struct v4l_state_t v4l = {
     .buffer_length = -1
 };
 
+extern struct input_t input;
+
 static int ioctl_wait(int fd, int request, void *arg)
 {
     struct timespec rem;
@@ -251,12 +253,14 @@ cleanup:
     return -1;
 }
 
-struct input_t input = {
-    .context = &v4l,
-    .verify_capabilities = v4l_verify_capabilities,
-    .init = v4l_init,
-    .open = v4l_open,
-    .get_frame = v4l_get_frame,
-    .close = v4l_close, 
-    .cleanup = v4l_cleanup
-};
+void v4l_construct(struct app_state_t *app)
+{
+    input.context = &v4l;
+    input.verify_capabilities = v4l_verify_capabilities;
+    input.init = v4l_init;
+    input.open = v4l_open;
+    input.get_frame = v4l_get_frame;
+    input.close = v4l_close;
+    input.cleanup = v4l_cleanup;
+}
+

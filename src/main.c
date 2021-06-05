@@ -25,7 +25,9 @@ khash_t(map_str) *h;
 
 int is_abort = 0;
 static int exit_code = EX_SOFTWARE;
-extern struct input_t input;
+
+struct input_t input;
+struct output_t outputs[VIDEO_MAX_OUTPUTS];
 
 void *worker_function(void *data)
 {
@@ -102,11 +104,8 @@ static void print_help()
 void set_default_state(struct app_state_t *app)
 {
     memset(app, 0, sizeof(struct app_state_t));
-
-    int width = utils_read_int_value(VIDEO_WIDTH, VIDEO_WIDTH_DEF);
-    int height = utils_read_int_value(VIDEO_HEIGHT, VIDEO_HEIGHT_DEF);
-    app->video_width = (width / 32 * 32) + (width % 32? 32: 0);
-    app->video_height = (height / 16 * 16) + (height % 16? 16: 0);
+    app->video_width = utils_read_int_value(VIDEO_WIDTH, VIDEO_WIDTH_DEF);
+    app->video_height = utils_read_int_value(VIDEO_HEIGHT, VIDEO_HEIGHT_DEF);
     const char* format = utils_read_str_value(VIDEO_FORMAT, VIDEO_FORMAT_DEF);
     app->video_format = utils_get_video_format_int(format);
     const char *output = utils_read_str_value(VIDEO_OUTPUT, VIDEO_OUTPUT_DEF);
@@ -136,13 +135,13 @@ static int main_function()
     struct app_state_t app;
 
     set_default_state(&app);
+    utils_construct(&app);
 
 #ifdef CONTROL
     if (control_init(&app)) {
         fprintf(stderr, "ERROR: Failed to initialise control gpio\n");
         goto error;
     }
-
 #endif // CONTROL
 
 #ifdef OPENVG
@@ -239,7 +238,8 @@ static int main_function()
         fprintf(stderr, "INFO: window size: %d, %d\n", app.window_width, app.window_height);
         fprintf(stderr, "INFO: worker size: %d, %d\n", app.worker_width, app.worker_height);
     }
-    CALL(utils_output_init(&app), error);
+    for (int i = 0; outputs[i].context != NULL && i < VIDEO_MAX_OUTPUTS; i++)
+        CALL(outputs[i].init(&app), error);
     CALL(input.open(&app), error);
 
     //TODO: move to something like camara start
@@ -387,7 +387,8 @@ error:
     //TODO: move to something like camara start
     // if (app.video_output == VIDEO_OUTPUT_STDOUT) {
     //    CALL(res = utils_camera_cleanup_h264_encoder(&app));
-    utils_output_cleanup(&app);
+    for (int i = 0; outputs[i].context != NULL && i < VIDEO_MAX_OUTPUTS; i++)
+        outputs[i].cleanup(&app);
     input.cleanup(&app);
 
     // destroy semaphore and mutex before stop thread to prevent blocking

@@ -11,10 +11,10 @@
 #define B_888_MASK      (0x000000FF)
 #define ALPHA_888_MASK  (0xFF000000)
 
-#define GET_A(argb) ( ((argb) & ALPHA_888_MASK) >> 24 )
-#define GET_R(argb) ( ((argb) & R_888_MASK) >> 16 )
-#define GET_G(argb) ( ((argb) & G_888_MASK) >> 8 )
-#define GET_B(argb) ( ((argb) & B_888_MASK) >> 0 )
+#define GET_A(argb) ((argb >> 24) & 0xff)
+#define GET_R(argb) ((argb >> 16) & 0xff)
+#define GET_G(argb) ((argb >> 8) & 0xff)
+#define GET_B(argb) (argb & 0xff)
 
                    // (0b00000000 00000000 11111000 00000000)
 #define R1_565_MASK      (0b00000000000000001111100000000000)
@@ -43,6 +43,8 @@
 #define SET_G5652(rgb565) ( ((rgb565) & 0b111111) << 21 )
 #define SET_B5652(rgb565) ( ((rgb565) & 0b11111) << 16 )
 
+#define MAX(a, b) (a > b ? a : b)
+#define MIN(a, b) (a > b ? b : a)
 
 void utils_parse_args(int argc, char** argv);
 const char *utils_read_str_value(const char name[], char *def_value);
@@ -53,11 +55,7 @@ int utils_get_video_format_int(const char* format);
 const char* utils_get_video_output_str(int format);
 int utils_get_video_output_int(const char* format);
 
-int utils_camera_create_h264_encoder(struct app_state_t *app);
-int utils_camera_cleanup_h264_encoder(struct app_state_t *app);
-
-int utils_output_init(struct app_state_t *app);
-void utils_output_cleanup(struct app_state_t *app);
+void utils_construct(struct app_state_t *app);
 
 int utils_fill_buffer(const char *path, char *buffer, int buffer_size, size_t *read);
 void *utils_read_file(const char *path, size_t *len);

@@ -9,4 +9,6 @@ struct v4l_state_t {
     int buffer_length;
 };
 
+void v4l_construct(struct app_state_t *app);
+
 #endif //v4l_h

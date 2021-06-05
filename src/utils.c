@@ -7,12 +7,6 @@
 #include "opencv2/imgproc/imgproc_c.h"
 #endif
 
-#if defined(MMAL)
-    #include "mmal.h"
-#elif defined(V4L)
-    #include "v4l.h"
-#endif
-
 KHASH_MAP_INIT_STR(map_str, char *)
 extern khash_t(map_str) *h;
 
@@ -125,53 +119,20 @@ error:
     return -1;
 }
 
-int utils_camera_create_h264_encoder(struct app_state_t *app)
+void utils_construct(struct app_state_t *app)
 {
-#if defined(MMAL)
-    return mmal_create_h264_encoder(app);
-#elif defined(V4L)
-    return EAGAIN;
-#else
-    return EAGAIN;
-#endif
-}
+#ifdef V4L
+    v4l_construct(app);
+#endif //V4L
 
-int utils_camera_cleanup_h264_encoder(struct app_state_t *app)
-{
-#if defined(MMAL)
-    return mmal_cleanup_h264_encoder(app);
-#elif defined(V4L)
-    return EAGAIN;
-#else
-    return EAGAIN;
-#endif
-}
-
-int utils_output_init(struct app_state_t *app)
-{
 #ifdef SDL
     if ((app->video_output & VIDEO_OUTPUT_SDL) == VIDEO_OUTPUT_SDL)
-        return sdl_init(&app);
+        sdl_construct(app);
 #endif //SDL
 
 #ifdef RFB
     if ((app->video_output & VIDEO_OUTPUT_RFB) == VIDEO_OUTPUT_RFB)
-        return rfb_init(&app);
-#endif //RFB
-
-    return 0;
-}
-
-void utils_output_cleanup(struct app_state_t *app)
-{
-#ifdef SDL
-    if ((app->video_output & VIDEO_OUTPUT_SDL) == VIDEO_OUTPUT_SDL)
-        sdl_cleanup(&app);
-#endif //SDL
-
-#ifdef RFB
-    if ((app->video_output & VIDEO_OUTPUT_RFB) == VIDEO_OUTPUT_RFB)
-        rfb_cleanup(&app);
+        return rfb_construct(&app);
 #endif //RFB
 }
 

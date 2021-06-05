@@ -10,6 +10,8 @@
 #define VIDEO_OUTPUT_STDOUT_STR "stdout"
 #define VIDEO_OUTPUT_SDL_STR    "sdl"
 #define VIDEO_OUTPUT_RFB_STR    "rfb"
+
+#define VIDEO_MAX_OUTPUTS   3
 #define VIDEO_OUTPUT_NULL   0
 #define VIDEO_OUTPUT_STDOUT 1
 #define VIDEO_OUTPUT_SDL    2
@@ -238,17 +240,6 @@ struct control_state_t {
 };
 #endif //CONTROL
 
-#ifdef SDL
-#include <SDL.h>
-struct sdl_state_t {
-    char* buffer;
-    int buffer_length;
-    SDL_Window *window;
-    SDL_Renderer *renderer;
-    SDL_Surface *surface;
-};
-#endif //SDL
-
 #ifdef RFB
 struct rfb_state_t {
     pthread_t thread;
@@ -267,6 +258,15 @@ struct input_t {
     int (*open)(struct app_state_t *app);
     int (*get_frame)(struct app_state_t *app);
     int (*close)(struct app_state_t *app);
+    void (*cleanup)(struct app_state_t *app);
+};
+
+struct output_t {
+    void *context;
+    int (*init)(struct app_state_t *app);
+    int (*get_frame)(struct app_state_t *app);
+    int (*render_rgb)(struct app_state_t *app, char *buffer);
+    int (*render_yuv)(struct app_state_t *app, char *buffer);
     void (*cleanup)(struct app_state_t *app);
 };
 
@@ -327,10 +327,6 @@ struct app_state_t {
 
 #ifdef OPENVG
     struct openvg_state_t openvg;
-#endif
-
-#ifdef SDL
-	struct sdl_state_t sdl;
 #endif
 
 #ifdef RFB

@@ -28,7 +28,16 @@
 
 #define SDL_CALL(...) SDL_X(__VA_ARGS__)(__VA_ARGS__)
 
-int rfb_init(struct app_state_t *app);
-void rfb_cleanup(struct app_state_t *app);
+#include <SDL.h>
+
+struct sdl_state_t {
+    char* buffer;
+    int buffer_length;
+    SDL_Window *window;
+    SDL_Renderer *renderer;
+    SDL_Surface *surface;
+};
+
+void sdl_construct(struct app_state_t *app);
 
 #endif // main_h
