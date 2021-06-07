@@ -6,6 +6,8 @@
 
 static struct v4l_state_t v4l = {
     .dev_id = -1,
+    .v4l_buf = NULL,
+    .v4l_buf_length = -1,
     .buffer = NULL,
     .buffer_length = -1
 };
@@ -48,6 +50,10 @@ static void v4l_cleanup(struct app_state_t *app)
     if (v4l.buffer) {
         free(v4l.buffer);
         v4l.buffer = NULL;
+    }
+    if (v4l.v4l_buf) {
+        free(v4l.v4l_buf);
+        v4l.v4l_buf = NULL;
     }
 }
 
@@ -145,8 +151,17 @@ static int v4l_init(struct app_state_t *app)
 {
     sprintf(v4l.dev_name, "/dev/video%d", app->camera_num);
 
-    int len = app->video_width * app->video_height * 4;
+    int len = app->video_width * app->video_height * 2;
     char *data = malloc(len);
+    if (data == NULL) {
+        errno = ENOMEM;
+        CALL_MESSAGE(malloc, 0);
+        goto cleanup;
+    }
+    v4l.v4l_buf = data;
+    v4l.v4l_buf_length = len;
+
+    data = malloc(len);
     if (data == NULL) {
         errno = ENOMEM;
         CALL_MESSAGE(malloc, 0);
@@ -154,6 +169,7 @@ static int v4l_init(struct app_state_t *app)
     }
     v4l.buffer = data;
     v4l.buffer_length = len;
+
 
     struct stat st;
     CALL(stat(v4l.dev_name, &st), cleanup);
@@ -195,8 +211,8 @@ static int v4l_open(struct app_state_t *app)
     buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
     buf.memory = V4L2_MEMORY_USERPTR;
     buf.index = 0;
-    buf.m.userptr = (unsigned long)v4l.buffer;
-    buf.length = v4l.buffer_length;
+    buf.m.userptr = (unsigned long)v4l.v4l_buf;
+    buf.length = v4l.v4l_buf_length;
     CALL(ioctl_wait(v4l.dev_id, VIDIOC_QBUF, &buf), cleanup);
 
     enum v4l2_buf_type type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
@@ -225,13 +241,19 @@ static int v4l_get_frame(struct app_state_t *app)
     memset(&buf, 0, sizeof(buf));
     buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
     buf.memory = V4L2_MEMORY_USERPTR;
-    CALL(ioctl_wait(v4l.dev_id, VIDIOC_DQBUF, &buf), cleanup);
+    int res = ioctl_wait(v4l.dev_id, VIDIOC_DQBUF, &buf);
+    if (res == -1) {
+        if (errno != EAGAIN) {
+            CALL_MESSAGE(ioctl_wait, res);
+        }
+        goto cleanup;
+    }
 
-    //TODO: process
+    memcpy(v4l.buffer, v4l.v4l_buf, v4l.v4l_buf_length);
 
     buf.index = 0;
-    buf.m.userptr = (unsigned long)v4l.buffer;
-    buf.length = v4l.buffer_length;
+    buf.m.userptr = (unsigned long)v4l.v4l_buf;
+    buf.length = v4l.v4l_buf_length;
     CALL(ioctl_wait(v4l.dev_id, VIDIOC_QBUF, &buf), cleanup);
     return 0;
 
@@ -239,6 +261,11 @@ cleanup:
     if (errno == 0)
         errno = EAGAIN;
     return -1;
+}
+
+static char *v4l_get_buffer()
+{
+    return v4l.buffer;
 }
 
 int v4l_close(struct app_state_t *app)
@@ -260,6 +287,7 @@ void v4l_construct(struct app_state_t *app)
     input.init = v4l_init;
     input.open = v4l_open;
     input.get_frame = v4l_get_frame;
+    input.get_buffer = v4l_get_buffer;
     input.close = v4l_close;
     input.cleanup = v4l_cleanup;
 }

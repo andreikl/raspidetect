@@ -1,26 +1,36 @@
 #ifndef sdl_h
 #define sdl_h
 
-#define SDL_MESSAGE(call, res) \
+#define SDL_MESSAGE(call) \
 { \
-    fprintf(stderr, "ERROR: "#call" returned error: %s (%d)\n%s:%d - %s\n", \
-        SDL_GetError(), res, __FILE__, __LINE__, __FUNCTION__); \
+    fprintf(stderr, "ERROR: "#call" returned error: %s\n%s:%d - %s\n", \
+        SDL_GetError(), __FILE__, __LINE__, __FUNCTION__); \
+}
+
+#define SDL_INT_CALL(call, error) \
+{ \
+    int __res = call; \
+    if (__res != 0) { \
+        fprintf(stderr, "ERROR: "#call" returned error: %s (%d)\n%s:%d - %s\n", \
+            SDL_GetError(), __res, __FILE__, __LINE__, __FUNCTION__); \
+        goto error; \
+    } \
 }
 
 #define SDL_2(call, error) \
 { \
-    int __res = call; \
-    if (__res < 0) { \
-        SDL_MESSAGE(call, __res); \
+    void *__res = call; \
+    if (__res == NULL) { \
+        SDL_MESSAGE(call); \
         goto error; \
     } \
 }
 
 #define SDL_1(call) \
 { \
-    int __res = call; \
-    if (__res < 0) { \
-        SDL_MESSAGE(call, __res); \
+    void * __res = call; \
+    if (__res == NULL) { \
+        SDL_MESSAGE(call); \
     } \
 }
 
@@ -34,7 +44,7 @@ struct sdl_state_t {
     char* buffer;
     int buffer_length;
     SDL_Window *window;
-    SDL_Renderer *renderer;
+    //SDL_Renderer *renderer;
     SDL_Surface *surface;
 };
 

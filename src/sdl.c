@@ -7,42 +7,37 @@ static struct sdl_state_t sdl = {
     .buffer = NULL,
     .buffer_length = 0,
     .window = NULL,
-    .renderer = NULL,
+    //.renderer = NULL,
     .surface = NULL
 };
 extern struct output_t outputs[VIDEO_MAX_OUTPUTS];
 
-/* 
- * YCbCr to RGB lookup table
- *
- * Indexes are [Y][Cb][Cr]
- * Y, Cb, Cr range is 0-255
- *
- * Stored value bits:
- *   24-16 Red
- *   15-8  Green
- *   7-0   Blue
- */
-uint32_t YCbCr_to_RGB[256][256][256];
+// yuv422 to RGB lookup table
+//
+// Indexes are [Y][U][V]
+// Y, Cb, Cr range is 0-255
+//
+// Stored value bits:
+//   24-16 Red
+//   15-8  Green
+//   7-0   Blue
+static int yuv422[256][16][16];
 
-static void generate_YCbCr_to_RGB_lookup()
+static void generate_yuv422_lookup()
 {
     for (int y = 0; y < 256; y++) {
-        for (int cb = 0; cb < 256; cb++) {
-            for (int cr = 0; cr < 256; cr++) {
-                double Y = (double)y;
-                double Cb = (double)cb;
-                double Cr = (double)cr;
+        for (int u = 0; u < 16; u++) {
+            for (int v = 0; v < 16; v++) {
 
-                int R = (int)(Y + 1.40200 * (Cr - 0x80));
-                int G = (int)(Y - 0.34414 * (Cb - 0x80) - 0.71414 * (Cr - 0x80));
-                int B = (int)(Y + 1.77200 * (Cb - 0x80));
+                int r = y + 1.370705 * (v - 128);
+                int g = y - 0.698001 * (v - 128) - 0.337633 * (u - 128);
+                int b = y + 1.732446 * (u - 128);
+                r = MAX(0, MIN(255, r));
+                g = MAX(0, MIN(255, g));
+                b = MAX(0, MIN(255, b));
 
-                R = MAX(0, MIN(255, R));
-                G = MAX(0, MIN(255, G));
-                B = MAX(0, MIN(255, B));
-
-                YCbCr_to_RGB[y][cb][cr] = R << 16 | G << 8 | B;
+                int rgb = r << 16 | g << 8 | b;
+                yuv422[y][u][v] = rgb;
             }
         }
     }
@@ -51,16 +46,16 @@ static void generate_YCbCr_to_RGB_lookup()
 static void inline yuv422_to_rgb(const char* input, char *output)
 {
     int y0 = input[0];
-    int cb = input[1];
+    int u = input[1];
     int y1 = input[2];
-    int cr = input[3];
+    int v = input[3];
 
-    uint32_t rgb = YCbCr_to_RGB[y0][cb][cr];
+    uint32_t rgb = yuv422[y0][GET_F_HI(u)][GET_F_HI(v)];
     output[0] = GET_R(rgb);
     output[1] = GET_G(rgb);
     output[2] = GET_B(rgb);
 
-    rgb = YCbCr_to_RGB[y1][cb][cr];
+    rgb = yuv422[y1][GET_F_LO(u)][GET_F_LO(v)];
     output[3] = GET_R(rgb);
     output[4] = GET_G(rgb);
     output[5] = GET_B(rgb);
@@ -73,62 +68,61 @@ static int filter(void* data, union SDL_Event *event)
 
 static int sdl_init(struct app_state_t *app)
 {
-    generate_YCbCr_to_RGB_lookup();
+    generate_yuv422_lookup();
 
-    SDL_CALL(SDL_Init(SDL_INIT_VIDEO), error)
-        return 1;
+    SDL_INT_CALL(SDL_Init(SDL_INIT_VIDEO), cleanup);
 
-    sdl.window = SDL_CreateWindow(
+    SDL_CALL(sdl.window = SDL_CreateWindow(
         "SDL Video viewer",
         SDL_WINDOWPOS_UNDEFINED,
         SDL_WINDOWPOS_UNDEFINED,
         app->video_width, app->video_height,
-        SDL_WINDOW_OPENGL);
-    if (sdl.window == NULL) {
-        SDL_MESSAGE(SDL_CreateWindow, 0);
-        goto error;
-    }
+        0 //TODO: SDL_WINDOW_OPENGL
+    ), cleanup);
 
-    sdl.renderer = SDL_CreateRenderer(
-        sdl.window,
-        -1,
-        SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC
-    );
-    if (sdl.renderer == NULL) {
-        SDL_MESSAGE(SDL_CreateRenderer, 0);
-        goto error;
-    }
+    // SDL_CALL(sdl.renderer = SDL_CreateRenderer(
+    //     sdl.window,
+    //     -1,
+    //     SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC
+    // ), cleanup);
 
     int len = app->video_width * app->video_height * 3;
     char *data = malloc(len);
     if (data == NULL) {
         errno = ENOMEM;
         CALL_MESSAGE(malloc, 0);
-        goto error;
+        goto cleanup;
     }
     sdl.buffer = data;
     sdl.buffer_length = len;
-
-    sdl.surface = SDL_CreateRGBSurfaceFrom(data,
+    SDL_CALL(sdl.surface = SDL_CreateRGBSurfaceFrom(data,
         app->video_width,
         app->video_height,
         24,
         app->video_width * 3,
-        R_888_MASK, G_888_MASK, B_888_MASK, 0);
-    if (sdl.surface == NULL) {
-        SDL_MESSAGE(SDL_CreateRGBSurfaceFrom, 0);
-        goto error;
-    }
+        R_888_MASK, G_888_MASK, B_888_MASK, 0
+    ), cleanup);
 
     SDL_SetEventFilter(filter, NULL);
     return 0;
-error:
+
+cleanup:
     errno = EAGAIN;
     return -1;
 }
 
-static int sdl_render_rgb(struct app_state_t *app, char *buffer)
+static int sdl_render(struct app_state_t *app)
 {
+    struct SDL_Surface *surface;
+    SDL_CALL(surface = SDL_GetWindowSurface(sdl.window), cleanup);
+    SDL_INT_CALL(
+        SDL_BlitSurface(sdl.surface, NULL, surface, NULL),
+        cleanup
+    );
+    SDL_INT_CALL(SDL_UpdateWindowSurface(sdl.window), cleanup);
+    return 0;
+
+cleanup:
     errno = EAGAIN;
     return -1;
 }
@@ -144,7 +138,7 @@ static int sdl_render_yuv(struct app_state_t *app, char *buffer)
             yuv422_to_rgb(buffer + (j << 1), sdl.buffer + j + (j << 1));
         }
 
-    return sdl_render_rgb(app, buffer);
+    return sdl_render(app);
 }
 
 static void sdl_cleanup(struct app_state_t *app)
@@ -157,10 +151,10 @@ static void sdl_cleanup(struct app_state_t *app)
         free(sdl.buffer);
         sdl.buffer = NULL;
     }
-    if (sdl.renderer) {
+    /*if (sdl.renderer) {
         SDL_DestroyRenderer(sdl.renderer);
         sdl.renderer = NULL;
-    }
+    }*/
     if (sdl.window) {
         SDL_DestroyWindow(sdl.window);
         sdl.window = NULL;
@@ -178,7 +172,6 @@ void sdl_construct(struct app_state_t *app)
         outputs[i].context = &sdl;
         outputs[i].init = sdl_init;
         outputs[i].render_yuv = sdl_render_yuv;
-        outputs[i].render_rgb = sdl_render_rgb;
         outputs[i].cleanup = sdl_cleanup;
     }
 }

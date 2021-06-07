@@ -257,6 +257,7 @@ struct input_t {
     int (*init)(struct app_state_t *app);
     int (*open)(struct app_state_t *app);
     int (*get_frame)(struct app_state_t *app);
+    char* (*get_buffer)();
     int (*close)(struct app_state_t *app);
     void (*cleanup)(struct app_state_t *app);
 };
@@ -265,7 +266,6 @@ struct output_t {
     void *context;
     int (*init)(struct app_state_t *app);
     int (*get_frame)(struct app_state_t *app);
-    int (*render_rgb)(struct app_state_t *app, char *buffer);
     int (*render_yuv)(struct app_state_t *app, char *buffer);
     void (*cleanup)(struct app_state_t *app);
 };

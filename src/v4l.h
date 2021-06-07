@@ -5,6 +5,9 @@ struct v4l_state_t {
     char dev_name[20];
     int dev_id;
 
+    char *v4l_buf;
+    int v4l_buf_length;
+
     char *buffer;
     int buffer_length;
 };

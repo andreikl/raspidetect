@@ -254,6 +254,8 @@ static int main_function()
         else
             goto error;
             
+        for (int i = 0; outputs[i].context != NULL && i < VIDEO_MAX_OUTPUTS; i++)
+            CALL(outputs[i].render_yuv(&app, input.get_buffer()), error);
 
         // ----- fps
         static int frame_count = 0;

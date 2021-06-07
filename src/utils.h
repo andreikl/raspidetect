@@ -16,6 +16,9 @@
 #define GET_G(argb) ((argb >> 8) & 0xff)
 #define GET_B(argb) (argb & 0xff)
 
+#define GET_F_HI(argb) (argb & 0xff)
+#define GET_F_LO(argb) ((argb >> 4) & 0xf)
+
                    // (0b00000000 00000000 11111000 00000000)
 #define R1_565_MASK      (0b00000000000000001111100000000000)
                    // (0b00000000 00000000 00000111 11100000)
