@@ -249,10 +249,12 @@ static int main_function()
 
     while (!is_abort) {
         CALL(res = input.get_frame(&app));
-        if (errno == EAGAIN)
-            continue;
-        else
-            goto error;
+        if (res != 0) {
+            if (errno == ETIME)
+                continue;
+            else
+                goto error;
+        }
             
         for (int i = 0; outputs[i].context != NULL && i < VIDEO_MAX_OUTPUTS; i++)
             CALL(outputs[i].render_yuv(&app, input.get_buffer()), error);
@@ -280,15 +282,16 @@ static int main_function()
 
         // every 8th frame
         if ((frame_count & 0b1111) == 0) {
-            fprintf(stderr, "camera: %2.2f detect: %2.2f, rfb: %2.2f FPS, CPU: %2.1f%%, Memory: %d (%d) kb, T: %.2fC, Objs: %d\n",
+            fprintf(stdout, "\rFPS: %2.2f %2.2f %2.2f, CPU: %2.1f%%, Mem: %d kb, T: %.2fC, Objs: %d"
+                "          ",
                 app.fps,
-                app.worker_fps,
                 app.rfb_fps,
+                app.worker_fps,
                 app.cpu.cpu,
                 app.memory.total_size,
-                app.memory.swap_size,
                 app.temperature.temp,
                 app.worker_objects);
+            fflush(stdout);
         }
 
 //TODO: move to open vg
@@ -377,11 +380,15 @@ static int main_function()
 
         //usleep(TICK_TIME);
     }
+    fprintf(stdout, "\n");
+    fprintf(stderr, "input.close");
     CALL(input.close(&app), error);
 
     exit_code = EX_OK;
 
 error:
+    fprintf(stderr, "control_destroy");
+
 #ifdef CONTROL
     control_destroy(&app);
 #endif //CONTROL
@@ -389,9 +396,12 @@ error:
     //TODO: move to something like camara start
     // if (app.video_output == VIDEO_OUTPUT_STDOUT) {
     //    CALL(res = utils_camera_cleanup_h264_encoder(&app));
+    fprintf(stderr, "outputs[i].cleanup");
     for (int i = 0; outputs[i].context != NULL && i < VIDEO_MAX_OUTPUTS; i++)
         outputs[i].cleanup(&app);
+    fprintf(stderr, "input.cleanup");
     input.cleanup(&app);
+
 
     // destroy semaphore and mutex before stop thread to prevent blocking
     if (sem_destroy(&app.worker_semaphore)) {
@@ -442,6 +452,8 @@ error:
     openvg_destroy(&app);
     dispmanx_destroy(&app);
 #endif
+    fprintf(stderr, "exit");
+
 
     return exit_code;
 }

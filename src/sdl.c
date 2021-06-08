@@ -1,3 +1,5 @@
+#define YUV_MEMORY_OPTIMIZATION
+
 #include "main.h"
 #include "utils.h"
 
@@ -11,7 +13,9 @@ static struct sdl_state_t sdl = {
     .surface = NULL
 };
 extern struct output_t outputs[VIDEO_MAX_OUTPUTS];
+extern int is_abort;
 
+#ifdef YUV_MEMORY_OPTIMIZATION
 // yuv422 to RGB lookup table
 //
 // Indexes are [Y][U][V]
@@ -21,13 +25,13 @@ extern struct output_t outputs[VIDEO_MAX_OUTPUTS];
 //   24-16 Red
 //   15-8  Green
 //   7-0   Blue
-static int yuv422[256][16][16];
+static int yuv422[256][256][256];
 
 static void generate_yuv422_lookup()
 {
     for (int y = 0; y < 256; y++) {
-        for (int u = 0; u < 16; u++) {
-            for (int v = 0; v < 16; v++) {
+        for (int u = 0; u < 256; u++) {
+            for (int v = 0; v < 256; v++) {
 
                 int r = y + 1.370705 * (v - 128);
                 int g = y - 0.698001 * (v - 128) - 0.337633 * (u - 128);
@@ -42,6 +46,7 @@ static void generate_yuv422_lookup()
         }
     }
 }
+#endif //YUV_MEMORY_OPTIMIZATION
 
 static void inline yuv422_to_rgb(const char* input, char *output)
 {
@@ -50,15 +55,31 @@ static void inline yuv422_to_rgb(const char* input, char *output)
     int y1 = input[2];
     int v = input[3];
 
-    uint32_t rgb = yuv422[y0][GET_F_HI(u)][GET_F_HI(v)];
+#ifndef YUV_MEMORY_OPTIMIZATION
+    int r0 = y0 + 1.370705 * (v - 128);
+    int g0 = y0 - 0.698001 * (v - 128) - 0.337633 * (u - 128);
+    int b0 = y0 + 1.732446 * (u - 128);
+    output[0] = MAX(0, MIN(255, r0));
+    output[1] = MAX(0, MIN(255, g0));
+    output[2] = MAX(0, MIN(255, b0));
+
+    int r1 = y1 + 1.370705 * (v - 128);
+    int g1 = y1 - 0.698001 * (v - 128) - 0.337633 * (u - 128);
+    int b1 = y1 + 1.732446 * (u - 128);
+    output[3] = MAX(0, MIN(255, r1));
+    output[4] = MAX(0, MIN(255, g1));
+    output[5] = MAX(0, MIN(255, b1));
+#else
+    uint32_t rgb = yuv422[y0][u][v];
     output[0] = GET_R(rgb);
     output[1] = GET_G(rgb);
     output[2] = GET_B(rgb);
 
-    rgb = yuv422[y1][GET_F_LO(u)][GET_F_LO(v)];
+    rgb = yuv422[y1][u][v];
     output[3] = GET_R(rgb);
     output[4] = GET_G(rgb);
     output[5] = GET_B(rgb);
+#endif
 }
 
 static int filter(void* data, union SDL_Event *event)
@@ -68,7 +89,9 @@ static int filter(void* data, union SDL_Event *event)
 
 static int sdl_init(struct app_state_t *app)
 {
+#ifdef YUV_MEMORY_OPTIMIZATION
     generate_yuv422_lookup();
+#endif //YUV_MEMORY_OPTIMIZATION
 
     SDL_INT_CALL(SDL_Init(SDL_INIT_VIDEO), cleanup);
 
@@ -120,6 +143,12 @@ static int sdl_render(struct app_state_t *app)
         cleanup
     );
     SDL_INT_CALL(SDL_UpdateWindowSurface(sdl.window), cleanup);
+
+    SDL_Event event;
+    while (SDL_PollEvent(&event))
+        if (event.type == SDL_QUIT)
+            is_abort = 1;
+    
     return 0;
 
 cleanup:

@@ -227,6 +227,7 @@ cleanup:
 
 static int v4l_get_frame(struct app_state_t *app)
 {
+    int res;
     struct timeval tv;
     fd_set rfds;
 
@@ -235,19 +236,17 @@ static int v4l_get_frame(struct app_state_t *app)
 
     tv.tv_sec = 1;
     tv.tv_usec = 0;
-    CALL(select(1, &rfds, NULL, NULL, &tv), cleanup);
+    CALL(res = select(v4l.dev_id + 1, &rfds, NULL, NULL, &tv), cleanup);
+    if (res == 0) {
+        errno = ETIME;
+        goto cleanup;
+    }
 
     struct v4l2_buffer buf;
     memset(&buf, 0, sizeof(buf));
     buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
     buf.memory = V4L2_MEMORY_USERPTR;
-    int res = ioctl_wait(v4l.dev_id, VIDIOC_DQBUF, &buf);
-    if (res == -1) {
-        if (errno != EAGAIN) {
-            CALL_MESSAGE(ioctl_wait, res);
-        }
-        goto cleanup;
-    }
+    CALL(ioctl_wait(v4l.dev_id, VIDIOC_DQBUF, &buf), cleanup);
 
     memcpy(v4l.buffer, v4l.v4l_buf, v4l.v4l_buf_length);
 
