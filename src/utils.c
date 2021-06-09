@@ -125,6 +125,12 @@ void utils_construct(struct app_state_t *app)
     v4l_construct(app);
 #endif //V4L
 
+#ifdef V4L_ENCODER
+    v4l_encoder_construct(app);
+#elif MMAL_ENCODER
+    mmal_encoder_construct(app);
+#endif
+
 #ifdef SDL
     if ((app->video_output & VIDEO_OUTPUT_SDL) == VIDEO_OUTPUT_SDL)
         sdl_construct(app);

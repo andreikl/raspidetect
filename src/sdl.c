@@ -12,7 +12,7 @@ static struct sdl_state_t sdl = {
     //.renderer = NULL,
     .surface = NULL
 };
-extern struct output_t outputs[VIDEO_MAX_OUTPUTS];
+extern struct output_t outputs[MAX_OUTPUTS];
 extern int is_abort;
 
 #ifdef YUV_MEMORY_OPTIMIZATION
@@ -194,13 +194,13 @@ static void sdl_cleanup(struct app_state_t *app)
 void sdl_construct(struct app_state_t *app)
 {
     int i = 0;
-    while (outputs[i].context != NULL && i < VIDEO_MAX_OUTPUTS)
+    while (outputs[i].context != NULL && i < MAX_OUTPUTS)
         i++;
 
-    if (i != VIDEO_MAX_OUTPUTS) {
+    if (i != MAX_OUTPUTS) {
         outputs[i].context = &sdl;
         outputs[i].init = sdl_init;
-        outputs[i].render_yuv = sdl_render_yuv;
+        outputs[i].render = sdl_render_yuv;
         outputs[i].cleanup = sdl_cleanup;
     }
 }

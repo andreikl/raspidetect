@@ -11,7 +11,8 @@
 #define VIDEO_OUTPUT_SDL_STR    "sdl"
 #define VIDEO_OUTPUT_RFB_STR    "rfb"
 
-#define VIDEO_MAX_OUTPUTS   3
+#define MAX_OUTPUTS   3
+#define MAX_FILTERS   3
 #define VIDEO_OUTPUT_NULL   0
 #define VIDEO_OUTPUT_STDOUT 1
 #define VIDEO_OUTPUT_SDL    2
@@ -253,20 +254,26 @@ struct app_state_t;
 
 struct input_t {
     void *context;
-    int (*verify_capabilities)(struct app_state_t *app);
     int (*init)(struct app_state_t *app);
-    int (*open)(struct app_state_t *app);
+    int (*start)(struct app_state_t *app);
     int (*get_frame)(struct app_state_t *app);
     char* (*get_buffer)();
-    int (*close)(struct app_state_t *app);
+    int (*stop)(struct app_state_t *app);
+    void (*cleanup)(struct app_state_t *app);
+};
+
+struct filter_t {
+    void *context;
+    int (*init)(struct app_state_t *app);
+    int (*process)(struct app_state_t *app, char *buffer);
+    char* (*get_buffer)();
     void (*cleanup)(struct app_state_t *app);
 };
 
 struct output_t {
     void *context;
     int (*init)(struct app_state_t *app);
-    int (*get_frame)(struct app_state_t *app);
-    int (*render_yuv)(struct app_state_t *app, char *buffer);
+    int (*render)(struct app_state_t *app, char *buffer);
     void (*cleanup)(struct app_state_t *app);
 };
 

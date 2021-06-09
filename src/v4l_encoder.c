@@ -1,10 +1,11 @@
 #include "main.h"
 #include "utils.h"
-#include "v4l.h"
+
+#include "v4l_encoder.h"
 
 #include "linux/videodev2.h"
 
-static struct v4l_state_t v4l = {
+static struct v4l_encoder_state_t v4l = {
     .dev_id = -1,
     .v4l_buf = NULL,
     .v4l_buf_length = -1,
@@ -12,7 +13,8 @@ static struct v4l_state_t v4l = {
     .buffer_length = -1
 };
 
-extern struct input_t input;
+extern struct filter_t filters[MAX_FILTERS];
+
 
 static int ioctl_wait(int fd, int request, void *arg)
 {
@@ -60,7 +62,7 @@ static void v4l_cleanup(struct app_state_t *app)
 static int v4l_init(struct app_state_t *app)
 {
     int res = 0;
-    sprintf(v4l.dev_name, "/dev/video%d", app->camera_num);
+    sprintf(v4l.dev_name, "/dev/nvhost-msenc");
 
     int len = app->video_width * app->video_height * 2;
     char *data = malloc(len);
@@ -93,6 +95,9 @@ static int v4l_init(struct app_state_t *app)
     struct v4l2_capability cap;
     CALL(ioctl_wait(v4l.dev_id, VIDIOC_QUERYCAP, &cap), cleanup);
     strncpy(app->camera_name, (const char *)cap.card, 32);
+    if (app->verbose)
+        DEBUG_INT("cap.capabilities", cap.capabilities);
+
     ASSERT_INT((cap.capabilities & V4L2_CAP_VIDEO_CAPTURE), ==, 0, cleanup);
     ASSERT_INT((cap.capabilities & V4L2_CAP_STREAMING), ==, 0, cleanup);
     //ASSERT_INT((cap.capabilities & V4L2_CAP_READWRITE), ==, 0, cleanup);
@@ -179,7 +184,7 @@ cleanup:
     return -1;
 }
 
-static int v4l_start(struct app_state_t *app)
+/*static int v4l_open(struct app_state_t *app)
 {
     struct v4l2_format fmt;
     memset(&fmt, 0, sizeof(fmt));
@@ -214,9 +219,9 @@ cleanup:
     if (errno == 0)
         errno = EAGAIN;
     return -1;
-}
+}*/
 
-static int v4l_get_frame(struct app_state_t *app)
+static int v4l_process(struct app_state_t *app, char * buffer)
 {
     int res;
     struct timeval tv;
@@ -258,7 +263,7 @@ static char *v4l_get_buffer()
     return v4l.buffer;
 }
 
-static int v4l_stop(struct app_state_t *app)
+/*static int v4l_close(struct app_state_t *app)
 {
     enum v4l2_buf_type type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
     CALL(ioctl_wait(v4l.dev_id, VIDIOC_STREAMOFF, &type), cleanup);
@@ -268,16 +273,20 @@ cleanup:
     if (errno == 0)
         errno = EAGAIN;
     return -1;
-}
+}*/
 
-void v4l_construct(struct app_state_t *app)
+void v4l_encoder_construct(struct app_state_t *app)
 {
-    input.context = &v4l;
-    input.init = v4l_init;
-    input.start = v4l_start;
-    input.get_frame = v4l_get_frame;
-    input.get_buffer = v4l_get_buffer;
-    input.stop = v4l_stop;
-    input.cleanup = v4l_cleanup;
+    int i = 0;
+    while (filters[i].context != NULL && i < MAX_FILTERS)
+        i++;
+
+    if (i != MAX_FILTERS) {
+        filters[i].context = &v4l;
+        filters[i].init = v4l_init;
+        filters[i].process = v4l_process;
+        filters[i].get_buffer = v4l_get_buffer;
+        filters[i].cleanup = v4l_cleanup;
+    }
 }
 

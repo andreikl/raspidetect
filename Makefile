@@ -1,5 +1,6 @@
 V4L = 1
-MMAL = 0 #TODO: to check
+H264_ENCODER_RASPBERRY = 0 #TODO: to check
+H264_ENCODER_JETSON = 1
 CONTROL = 0
 RFB = 0
 SDL = 1
@@ -35,11 +36,18 @@ ifeq ($(V4L), 1)
     OBJ += v4l.o
 endif
 
-ifeq ($(MMAL), 1) 
-    COMMON += -DMMAL
+ifeq ($(H264_ENCODER_RASPBERRY), 1) 
+    COMMON += -DMMAL_ENCODER
     COMMON += `pkg-config --cflags mmal`
     LDFLAGS += `pkg-config --libs mmal`
-    OBJ += mmal.o
+    OBJ += mmal_encoder.o
+endif
+
+ifeq ($(H264_ENCODER_JETSON), 1) 
+    COMMON += -DV4L_ENCODER
+    COMMON += `pkg-config --cflags libv4l2`
+    LDFLAGS += `pkg-config --libs libv4l2`
+    OBJ += v4l_encoder.o
 endif
 
 ifeq ($(CONTROL), 1) 

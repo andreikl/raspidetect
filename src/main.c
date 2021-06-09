@@ -27,7 +27,8 @@ int is_abort = 0;
 static int exit_code = EX_SOFTWARE;
 
 struct input_t input;
-struct output_t outputs[VIDEO_MAX_OUTPUTS];
+struct filter_t filters[MAX_OUTPUTS];
+struct output_t outputs[MAX_OUTPUTS];
 
 void *worker_function(void *data)
 {
@@ -212,7 +213,6 @@ static int main_function()
     }
 
     CALL(input.init(&app), error);
-    CALL(input.verify_capabilities(&app), error);
     if (app.verbose) {
         fprintf(stderr, "INFO: camera_num: %d\n", app.camera_num);
         fprintf(stderr, "INFO: camera_name: %s\n", app.camera_name);
@@ -225,9 +225,12 @@ static int main_function()
         fprintf(stderr, "INFO: window size: %d, %d\n", app.window_width, app.window_height);
         fprintf(stderr, "INFO: worker size: %d, %d\n", app.worker_width, app.worker_height);
     }
-    for (int i = 0; outputs[i].context != NULL && i < VIDEO_MAX_OUTPUTS; i++)
+    for (int i = 0; outputs[i].context != NULL && i < MAX_OUTPUTS; i++)
         CALL(outputs[i].init(&app), error);
-    CALL(input.open(&app), error);
+    for (int i = 0; filters[i].context != NULL && i < MAX_FILTERS; i++)
+        CALL(filters[i].init(&app), error);
+
+    CALL(input.start(&app), error);
 
     //TODO: move to something like camara start
     // if (app.video_output == VIDEO_OUTPUT_STDOUT) {
@@ -247,8 +250,8 @@ static int main_function()
                 goto error;
         }
             
-        for (int i = 0; outputs[i].context != NULL && i < VIDEO_MAX_OUTPUTS; i++)
-            CALL(outputs[i].render_yuv(&app, input.get_buffer()), error);
+        for (int i = 0; outputs[i].context != NULL && i < MAX_OUTPUTS; i++)
+            CALL(outputs[i].render(&app, input.get_buffer()), error);
 
         //----- fps
         static int frame_count = 0;
@@ -370,7 +373,7 @@ static int main_function()
 #endif // CONTROL
     }
     fprintf(stdout, "\n");
-    CALL(input.close(&app), error);
+    CALL(input.stop(&app), error);
 
     exit_code = EX_OK;
 
@@ -382,7 +385,7 @@ error:
     //TODO: move to something like camara start
     // if (app.video_output == VIDEO_OUTPUT_STDOUT) {
     //    CALL(res = utils_camera_cleanup_h264_encoder(&app));
-    for (int i = 0; outputs[i].context != NULL && i < VIDEO_MAX_OUTPUTS; i++) {
+    for (int i = 0; outputs[i].context != NULL && i < MAX_OUTPUTS; i++) {
         outputs[i].cleanup(&app);
     }
     input.cleanup(&app);
