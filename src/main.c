@@ -53,9 +53,8 @@ void *worker_function(void *data)
         frame_count++;
         // -----
 
-        if (sem_wait(&app->worker_semaphore)) {
-            fprintf(stderr, "ERROR: sem_wait failed to wait worker_semaphore with error (%d)\n", errno); 
-        }
+    
+        CALL(sem_wait(&app->worker_semaphore));
 
 #ifdef TENSORFLOW
         tensorflow_process(app);
@@ -131,7 +130,7 @@ void set_default_state(struct app_state_t *app)
 static int main_function()
 {
     int res;
-    char buffer[MAX_STRING];
+    char buffer[MAX_DATA];
     struct app_state_t app;
 
     set_default_state(&app);
@@ -167,36 +166,33 @@ static int main_function()
     }
 #endif
 
-    int wh = app.worker_width * app.worker_height;
-    app.worker_buffer_rgb = malloc((wh << 1) + wh);
-    if (!app.worker_buffer_rgb) {
-	    fprintf(stderr, "ERROR: Failed to allocate memory for worker buffer RGB\n");
-        goto error;
-    }
-
-    app.worker_buffer_565 = malloc(wh << 1);
-    if (!app.worker_buffer_565) {
-	    fprintf(stderr, "ERROR: Failed to allocate memory for worker buffer 565\n");
-        goto error;
-    }
-
-    app.worker_boxes = malloc(app.worker_total_objects * sizeof(float) * 4);
-    if (!app.worker_boxes) {
-	    fprintf(stderr, "ERROR: Failed to allocate memory for image boxes\n");
-        goto error;
-    }
-
-    app.worker_classes = malloc(app.worker_total_objects * sizeof(float));
-    if (!app.worker_classes) {
-	    fprintf(stderr, "ERROR: Failed to allocate memory for image classes\n");
-        goto error;
-    }
-
-    app.worker_scores = malloc(app.worker_total_objects * sizeof(float));
-    if (!app.worker_scores) {
-	    fprintf(stderr, "ERROR: Failed to allocate memory for image scores\n");
-        goto error;
-    }
+    //TODO: cause segmentation fault
+    // int wh = app.worker_width * app.worker_height;
+    // app.worker_buffer_rgb = malloc((wh << 1) + wh);
+    // if (!app.worker_buffer_rgb) {
+    //     fprintf(stderr, "ERROR: Failed to allocate memory for worker buffer RGB\n");
+    //     goto error;
+    // }
+    // app.worker_buffer_565 = malloc(wh << 1);
+    // if (!app.worker_buffer_565) {
+    //     fprintf(stderr, "ERROR: Failed to allocate memory for worker buffer 565\n");
+    //     goto error;
+    // }
+    // app.worker_boxes = malloc(app.worker_total_objects * sizeof(float) * 4);
+    // if (!app.worker_boxes) {
+    //     fprintf(stderr, "ERROR: Failed to allocate memory for image boxes\n");
+    //     goto error;
+    // }
+    // app.worker_classes = malloc(app.worker_total_objects * sizeof(float));
+    // if (!app.worker_classes) {
+    //     fprintf(stderr, "ERROR: Failed to allocate memory for image classes\n");
+    //     goto error;
+    // }
+    // app.worker_scores = malloc(app.worker_total_objects * sizeof(float));
+    // if (!app.worker_scores) {
+	//     fprintf(stderr, "ERROR: Failed to allocate memory for image scores\n");
+    //     goto error;
+    // }
 
     res = pthread_mutex_init(&app.buffer_mutex, NULL);
     if (res) {
@@ -204,17 +200,8 @@ static int main_function()
         goto error;
     }
 
-    res = sem_init(&app.buffer_semaphore, 0, 0);
-    if (res) {
-	    fprintf(stderr, "ERROR: Failed to create buffer semaphore, return code: %d\n", res);
-        goto error;
-    }
-
-    res = sem_init(&app.worker_semaphore, 0, 0);
-    if (res) {
-	    fprintf(stderr, "ERROR: Failed to create worker semaphore, return code: %d\n", res);
-        goto error;
-    }
+    CALL(sem_init(&app.buffer_semaphore, 0, 0), error);
+    CALL(sem_init(&app.worker_semaphore, 0, 0), error);
 
     app.worker_thread_res = pthread_create(&app.worker_thread, NULL, worker_function, &app);
     if (app.worker_thread_res) {
@@ -248,6 +235,10 @@ static int main_function()
     // }
 
     while (!is_abort) {
+        // for debug
+        // usleep(TICK_TIME);
+        // fprintf(stdout, "is_abort: %d\n", is_abort);
+
         CALL(res = input.get_frame(&app));
         if (res != 0) {
             if (errno == ETIME)
@@ -259,7 +250,7 @@ static int main_function()
         for (int i = 0; outputs[i].context != NULL && i < VIDEO_MAX_OUTPUTS; i++)
             CALL(outputs[i].render_yuv(&app, input.get_buffer()), error);
 
-        // ----- fps
+        //----- fps
         static int frame_count = 0;
         static struct timespec t1;
         struct timespec t2;
@@ -377,18 +368,13 @@ static int main_function()
 #ifdef CONTROL
         control_ssh_key(&app);
 #endif // CONTROL
-
-        //usleep(TICK_TIME);
     }
     fprintf(stdout, "\n");
-    fprintf(stderr, "input.close");
     CALL(input.close(&app), error);
 
     exit_code = EX_OK;
 
 error:
-    fprintf(stderr, "control_destroy");
-
 #ifdef CONTROL
     control_destroy(&app);
 #endif //CONTROL
@@ -396,24 +382,22 @@ error:
     //TODO: move to something like camara start
     // if (app.video_output == VIDEO_OUTPUT_STDOUT) {
     //    CALL(res = utils_camera_cleanup_h264_encoder(&app));
-    fprintf(stderr, "outputs[i].cleanup");
-    for (int i = 0; outputs[i].context != NULL && i < VIDEO_MAX_OUTPUTS; i++)
+    for (int i = 0; outputs[i].context != NULL && i < VIDEO_MAX_OUTPUTS; i++) {
         outputs[i].cleanup(&app);
-    fprintf(stderr, "input.cleanup");
+    }
     input.cleanup(&app);
 
+    CALL(sem_post(&app.worker_semaphore));
+    CALL(sem_destroy(&app.worker_semaphore));
 
-    // destroy semaphore and mutex before stop thread to prevent blocking
-    if (sem_destroy(&app.worker_semaphore)) {
-        fprintf(stderr, "ERROR: sem_destroy failed to destroy worker_semaphore with code: %d\n", errno);
-    }
-    if (sem_destroy(&app.buffer_semaphore)) {
-        fprintf(stderr, "ERROR: sem_destroy failed to destroy buffer_semaphore with code: %d\n", errno);
-    }
+    CALL(sem_post(&app.buffer_semaphore));
+    CALL(sem_destroy(&app.buffer_semaphore));
+
     res = pthread_mutex_destroy(&app.buffer_mutex);
-    if (res)
-        fprintf(stderr, "ERROR: pthread_mutex_destroy failed to destroy buffer mutex with code %d\n", res);
-
+    if (res) {
+        errno = res;
+        CALL_MESSAGE(pthread_mutex_destroy(&app.buffer_mutex), -1);
+    }
 
     if (!app.worker_thread_res) {
         res = pthread_join(app.worker_thread, NULL);
@@ -422,25 +406,25 @@ error:
         }
     }
 
-    if (app.worker_buffer_rgb) {
-        free(app.worker_buffer_rgb);
-    }
+    // if (app.worker_buffer_rgb) {
+    //     free(app.worker_buffer_rgb);
+    // }
 
-    if (app.worker_buffer_565) {
-        free(app.worker_buffer_565);
-    }
+    // if (app.worker_buffer_565) {
+    //     free(app.worker_buffer_565);
+    // }
 
-    if (app.worker_boxes) {
-        free(app.worker_boxes);
-    }
+    // if (app.worker_boxes) {
+    //     free(app.worker_boxes);
+    // }
 
-    if (app.worker_classes) {
-        free(app.worker_classes);
-    }
+    // if (app.worker_classes) {
+    //     free(app.worker_classes);
+    // }
 
-    if (app.worker_scores) {
-        free(app.worker_scores);
-    }
+    // if (app.worker_scores) {
+    //     free(app.worker_scores);
+    // }
 
 #ifdef TENSORFLOW
     tensorflow_destroy(&app);
@@ -452,8 +436,6 @@ error:
     openvg_destroy(&app);
     dispmanx_destroy(&app);
 #endif
-    fprintf(stderr, "exit");
-
 
     return exit_code;
 }

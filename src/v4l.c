@@ -234,7 +234,7 @@ static int v4l_get_frame(struct app_state_t *app)
     FD_ZERO(&rfds);
     FD_SET(v4l.dev_id, &rfds);
 
-    tv.tv_sec = 1;
+    tv.tv_sec = 2;
     tv.tv_usec = 0;
     CALL(res = select(v4l.dev_id + 1, &rfds, NULL, NULL, &tv), cleanup);
     if (res == 0) {
