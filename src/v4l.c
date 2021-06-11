@@ -1,3 +1,21 @@
+// Raspidetect
+
+// Copyright (C) 2021 Andrei Klimchuk <andrew.klimchuk@gmail.com>
+
+// This program is free software; you can redistribute it and/or
+// modify it under the terms of the GNU Lesser General Public
+// License as published by the Free Software Foundation; either
+// version 3 of the License, or (at your option) any later version.
+
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+// Lesser General Public License for more details.
+
+// You should have received a copy of the GNU Lesser General Public License
+// along with this program; if not, write to the Free Software Foundation,
+// Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+
 #include "main.h"
 #include "utils.h"
 #include "v4l.h"
@@ -84,11 +102,7 @@ static int v4l_init(struct app_state_t *app)
     struct stat st;
     CALL(stat(v4l.dev_name, &st), cleanup);
     ASSERT_INT(S_ISCHR(st.st_mode), ==, 0, cleanup);
-    v4l.dev_id = open(v4l.dev_name, O_RDWR | O_NONBLOCK, 0);
-    if (v4l.dev_id == -1) {
-        CALL_MESSAGE(open(v4l.dev_name, O_RDWR | O_NONBLOCK, 0), v4l.dev_id);
-        goto cleanup;
-    }
+    CALL(v4l.dev_id = open(v4l.dev_name, O_RDWR | O_NONBLOCK, 0), cleanup);
 
     struct v4l2_capability cap;
     CALL(ioctl_wait(v4l.dev_id, VIDIOC_QUERYCAP, &cap), cleanup);

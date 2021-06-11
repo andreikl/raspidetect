@@ -1,3 +1,21 @@
+// Raspidetect
+
+// Copyright (C) 2021 Andrei Klimchuk <andrew.klimchuk@gmail.com>
+
+// This program is free software; you can redistribute it and/or
+// modify it under the terms of the GNU Lesser General Public
+// License as published by the Free Software Foundation; either
+// version 3 of the License, or (at your option) any later version.
+
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+// Lesser General Public License for more details.
+
+// You should have received a copy of the GNU Lesser General Public License
+// along with this program; if not, write to the Free Software Foundation,
+// Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+
 #include <sysexits.h>// exit codes
 
 #include "khash.h"
@@ -378,6 +396,8 @@ static int main_function()
     exit_code = EX_OK;
 
 error:
+    is_abort = 1;
+
 #ifdef CONTROL
     control_destroy(&app);
 #endif //CONTROL
@@ -390,9 +410,11 @@ error:
     }
     input.cleanup(&app);
 
+    fprintf(stderr, "worker_semaphore\n");
     CALL(sem_post(&app.worker_semaphore));
     CALL(sem_destroy(&app.worker_semaphore));
 
+    fprintf(stderr, "buffer_semaphore\n");
     CALL(sem_post(&app.buffer_semaphore));
     CALL(sem_destroy(&app.buffer_semaphore));
 
@@ -402,6 +424,7 @@ error:
         CALL_MESSAGE(pthread_mutex_destroy(&app.buffer_mutex), -1);
     }
 
+    fprintf(stderr, "worker_thread\n");
     if (!app.worker_thread_res) {
         res = pthread_join(app.worker_thread, NULL);
         if (res != 0) {
@@ -439,6 +462,7 @@ error:
     openvg_destroy(&app);
     dispmanx_destroy(&app);
 #endif
+    fprintf(stderr, "exit\n");
 
     return exit_code;
 }
