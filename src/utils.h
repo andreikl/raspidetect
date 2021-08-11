@@ -56,6 +56,7 @@ const char* utils_get_video_output_str(int format);
 int utils_get_video_output_int(const char* format);
 
 void utils_construct(struct app_state_t *app);
+int utils_init(struct app_state_t *app);
 
 int utils_fill_buffer(const char *path, char *buffer, int buffer_size, size_t *read);
 void *utils_read_file(const char *path, size_t *len);
