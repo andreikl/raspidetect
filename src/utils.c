@@ -28,6 +28,10 @@
 KHASH_MAP_INIT_STR(map_str, char *)
 extern khash_t(map_str) *h;
 
+extern struct input_t input;
+extern struct filter_t filters[MAX_OUTPUTS];
+extern struct output_t outputs[MAX_OUTPUTS];
+
 void utils_parse_args(int argc, char** argv)
 {
     int ret;
@@ -158,6 +162,33 @@ void utils_construct(struct app_state_t *app)
     if ((app->video_output & VIDEO_OUTPUT_RFB) == VIDEO_OUTPUT_RFB)
         return rfb_construct(&app);
 #endif //RFB
+}
+
+int utils_init(struct app_state_t *app)
+{
+    CALL(input.init(), error);
+    for (int i = 0; outputs[i].context != NULL && i < MAX_OUTPUTS; i++)
+        CALL(outputs[i].init(&app), error);
+
+    for (int i = 0; filters[i].context != NULL && i < MAX_FILTERS; i++)
+        CALL(filters[i].init(&app), error);
+
+    for (int i = 0; outputs[i].context != NULL && i < MAX_OUTPUTS; i++) {
+        const struct format_mapping_t* in_fs = NULL;
+        int in_fs_len = input.get_formats(&in_fs);
+
+        const struct format_mapping_t* out_fs = NULL;
+        int out_fs_len = outputs[i].get_formats(&out_fs);
+
+        //int formats_len = ARRAY_SIZE(in_fs);
+        //fprintf(stderr, "INFO: formats_len %d\n", formats_len);
+    }
+
+    return 0;
+error:
+    if (errno == 0)
+        errno = EAGAIN;
+    return -1;
 }
 
 int utils_fill_buffer(const char *path, char *buffer, int buffer_size, size_t *read)

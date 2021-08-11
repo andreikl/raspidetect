@@ -5,6 +5,8 @@
 #define VIDEO_FORMAT_YUV422_STR  "YUV422"
 #define VIDEO_FORMAT_UNKNOWN 0
 #define VIDEO_FORMAT_YUV422  1
+#define VIDEO_FORMAT_YUV444M 2 //three separate planes - Y, Cb, Cr
+#define VIDEO_FORMAT_H264    3
 
 #define VIDEO_OUTPUT_NULL_STR   "null"
 #define VIDEO_OUTPUT_STDOUT_STR "stdout"
@@ -250,31 +252,45 @@ struct rfb_state_t {
 };
 #endif //RFB
 
-struct app_state_t;
+struct format_mapping_t {
+    int format;
+    int internal_format;
+    int is_supported;
+};
 
 struct input_t {
     void *context;
-    int (*init)(struct app_state_t *app);
-    int (*start)(struct app_state_t *app);
-    int (*get_frame)(struct app_state_t *app);
+
+    int (*init)();
+    int (*start)(int format);
+    int (*process_frame)();
+    int (*stop)();
+    void (*cleanup)();
+
     char* (*get_buffer)();
-    int (*stop)(struct app_state_t *app);
-    void (*cleanup)(struct app_state_t *app);
+    int (*get_formats)(const struct format_mapping_t *formats[]);
 };
 
 struct filter_t {
     void *context;
-    int (*init)(struct app_state_t *app);
-    int (*process)(struct app_state_t *app, char *buffer);
+    int (*init)();
+    int (*start)(int input_format, int output_format);
+    int (*process)(char *buffer);
+    int (*stop)();    
+    void (*cleanup)();
+
     char* (*get_buffer)();
-    void (*cleanup)(struct app_state_t *app);
+    const struct format_mapping_t *(*get_input_formats)();
+    const struct format_mapping_t *(*get_output_formats)();
 };
 
 struct output_t {
     void *context;
-    int (*init)(struct app_state_t *app);
-    int (*render)(struct app_state_t *app, char *buffer);
-    void (*cleanup)(struct app_state_t *app);
+    int (*init)();
+    int (*render)(char *buffer);
+    void (*cleanup)();
+
+    int (*get_formats)(const struct format_mapping_t *formats[]);
 };
 
 struct app_state_t {

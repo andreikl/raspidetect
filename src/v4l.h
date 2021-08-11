@@ -2,6 +2,8 @@
 #define v4l_h
 
 struct v4l_state_t {
+    struct app_state_t *app;
+
     char dev_name[20];
     int dev_id;
 

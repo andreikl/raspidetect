@@ -22,12 +22,23 @@
 
 #include "linux/videodev2.h"
 
+static struct format_mapping_t v4l_formats[] = {
+    {
+        .format = VIDEO_FORMAT_YUV422,
+        .internal_format = V4L2_PIX_FMT_YUYV,
+        .is_supported = 0
+    }
+};
+
+static struct format_mapping_t *v4l_format = NULL;
+
 static struct v4l_state_t v4l = {
+    .app = NULL,
     .dev_id = -1,
     .v4l_buf = NULL,
     .v4l_buf_length = -1,
     .buffer = NULL,
-    .buffer_length = -1
+    .buffer_length = -1,
 };
 
 extern struct input_t input;
@@ -59,7 +70,7 @@ static int ioctl_enum(int fd, int request, void *arg)
     return res;
 }
 
-static void v4l_cleanup(struct app_state_t *app)
+static void v4l_cleanup()
 {
     if (v4l.dev_id != -1) {
         CALL(close(v4l.dev_id));
@@ -75,12 +86,77 @@ static void v4l_cleanup(struct app_state_t *app)
     }
 }
 
-static int v4l_init(struct app_state_t *app)
+static int v4l_is_supported_resolution(int format)
 {
-    int res = 0;
-    sprintf(v4l.dev_name, "/dev/video%d", app->camera_num);
+    int res = 0, is_found = 1;
+    struct v4l2_frmsizeenum frmsize = {
+        .pixel_format = format, .index = 0
+    };
 
-    int len = app->video_width * app->video_height * 2;
+    CALL(res = ioctl_enum(v4l.dev_id, VIDIOC_ENUM_FRAMESIZES, &frmsize), cleanup);
+    while (res >= 0) {
+        if (frmsize.type == V4L2_FRMSIZE_TYPE_DISCRETE) {
+            if (
+                frmsize.discrete.width == v4l.app->video_width &&
+                frmsize.discrete.height == v4l.app->video_height
+            ) {
+                is_found = 1;
+            }
+            if (
+                frmsize.discrete.width > v4l.app->camera_max_width || 
+                frmsize.discrete.height > v4l.app->camera_max_height
+            ) {
+                v4l.app->camera_max_width = frmsize.discrete.width;
+                v4l.app->camera_max_height = frmsize.discrete.height;
+            }
+            if (v4l.app->verbose)
+                fprintf(stderr, "INFO: V4L2_FRMSIZE_TYPE_DISCRETE %dx%d\n",
+                    frmsize.discrete.width, frmsize.discrete.height);
+        }
+        else if (
+            frmsize.type == V4L2_FRMSIZE_TYPE_STEPWISE ||
+            frmsize.type == V4L2_FRMSIZE_TYPE_CONTINUOUS
+        ) {
+            if (
+                v4l.app->video_width % frmsize.stepwise.step_width == 0 &&
+                v4l.app->video_height % frmsize.stepwise.step_height == 0 &&
+                v4l.app->video_width >= frmsize.stepwise.min_width &&
+                v4l.app->video_height >= frmsize.stepwise.min_height &&
+                v4l.app->video_width <= frmsize.stepwise.max_width &&
+                v4l.app->video_height <= frmsize.stepwise.max_height
+            ) {
+                is_found = 1;
+            }
+            if (
+                frmsize.stepwise.max_width > v4l.app->camera_max_width || 
+                frmsize.stepwise.max_height > v4l.app->camera_max_height
+            ) {
+                v4l.app->camera_max_width = frmsize.stepwise.max_width;
+                v4l.app->camera_max_height = frmsize.stepwise.max_height;
+            }
+            if (v4l.app->verbose)
+                fprintf(stderr, "INFO: V4L2_FRMSIZE_TYPE_STEPWISE %dx%d\n",
+                    frmsize.stepwise.max_width, frmsize.stepwise.max_height);
+        }
+        frmsize.index++;
+        CALL(res = ioctl_enum(v4l.dev_id, VIDIOC_ENUM_FRAMESIZES, &frmsize), cleanup);
+    }
+    return is_found;
+
+cleanup:
+    if (errno == 0)
+        errno = EAGAIN;
+    return -1;
+}
+
+static int v4l_init()
+{
+    ASSERT_INT(v4l.dev_id, !=, -1, cleanup);
+
+    int res = 0;
+    sprintf(v4l.dev_name, "/dev/video%d", v4l.app->camera_num);
+
+    int len = v4l.app->video_width * v4l.app->video_height * 2;
     char *data = malloc(len);
     if (data == NULL) {
         errno = ENOMEM;
@@ -106,73 +182,34 @@ static int v4l_init(struct app_state_t *app)
 
     struct v4l2_capability cap;
     CALL(ioctl_wait(v4l.dev_id, VIDIOC_QUERYCAP, &cap), cleanup);
-    strncpy(app->camera_name, (const char *)cap.card, 32);
+    strncpy(v4l.app->camera_name, (const char *)cap.card, 32);
     ASSERT_INT((cap.capabilities & V4L2_CAP_VIDEO_CAPTURE), ==, 0, cleanup);
     ASSERT_INT((cap.capabilities & V4L2_CAP_STREAMING), ==, 0, cleanup);
     //ASSERT_INT((cap.capabilities & V4L2_CAP_READWRITE), ==, 0, cleanup);
 
     int is_found = 0;
+    int formats_len = ARRAY_SIZE(v4l_formats);
     enum v4l2_buf_type type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
     struct v4l2_fmtdesc fmt = {
         .index = 0, .type = type
     };
     CALL(res = ioctl_enum(v4l.dev_id, VIDIOC_ENUM_FMT, &fmt), cleanup);
     while (res >= 0 && !is_found) {
-        if (app->verbose)
+        if (v4l.app->verbose)
             fprintf(stderr, "INFO: pixelformat %c %c %c %c\n", GET_B(fmt.pixelformat),
                 GET_G(fmt.pixelformat), GET_R(fmt.pixelformat), GET_A(fmt.pixelformat));
 
-        if (app->video_format == VIDEO_FORMAT_YUV422 && fmt.pixelformat == V4L2_PIX_FMT_YUYV) {
-            struct v4l2_frmsizeenum frmsize = {
-                .pixel_format = fmt.pixelformat, .index = 0
-            };
-            CALL(res = ioctl_enum(v4l.dev_id, VIDIOC_ENUM_FRAMESIZES, &frmsize), cleanup);
-            while (res >= 0) {
-                if (frmsize.type == V4L2_FRMSIZE_TYPE_DISCRETE) {
-                    if (
-                        frmsize.discrete.width == app->video_width &&
-                        frmsize.discrete.height == app->video_height
-                    ) {
-                        is_found = 1;
-                    }
-                    if (
-                        frmsize.discrete.width > app->camera_max_width || 
-                        frmsize.discrete.height > app->camera_max_height
-                    ) {
-                        app->camera_max_width = frmsize.discrete.width;
-                        app->camera_max_height = frmsize.discrete.height;
-                    }
-                    if (app->verbose)
-                        fprintf(stderr, "INFO: V4L2_FRMSIZE_TYPE_DISCRETE %dx%d\n",
-                            frmsize.discrete.width, frmsize.discrete.height);
+        for (int i = 0; i < formats_len; i++) {
+            struct format_mapping_t *f = v4l_formats + i;
+            if (f->internal_format == fmt.pixelformat) {
+                CALL(
+                    f->is_supported = v4l_is_supported_resolution(fmt.pixelformat),
+                    cleanup);
+
+                if (f->is_supported) {
+                    is_found = 1;
                 }
-                else if (
-                    frmsize.type == V4L2_FRMSIZE_TYPE_STEPWISE ||
-                    frmsize.type == V4L2_FRMSIZE_TYPE_CONTINUOUS
-                ) {
-                    if (
-                        app->video_width % frmsize.stepwise.step_width == 0 &&
-                        app->video_height % frmsize.stepwise.step_height == 0 &&
-                        app->video_width >= frmsize.stepwise.min_width &&
-                        app->video_height >= frmsize.stepwise.min_height &&
-                        app->video_width <= frmsize.stepwise.max_width &&
-                        app->video_height <= frmsize.stepwise.max_height
-                    ) {
-                        is_found = 1;
-                    }
-                    if (
-                        frmsize.stepwise.max_width > app->camera_max_width || 
-                        frmsize.stepwise.max_height > app->camera_max_height
-                    ) {
-                        app->camera_max_width = frmsize.stepwise.max_width;
-                        app->camera_max_height = frmsize.stepwise.max_height;
-                    }
-                    if (app->verbose)
-                        fprintf(stderr, "INFO: V4L2_FRMSIZE_TYPE_STEPWISE %dx%d\n",
-                            frmsize.stepwise.max_width, frmsize.stepwise.max_height);
-                }
-                frmsize.index++;
-                CALL(res = ioctl_enum(v4l.dev_id, VIDIOC_ENUM_FRAMESIZES, &frmsize), cleanup);
+                break;
             }
         }
 
@@ -187,19 +224,30 @@ static int v4l_init(struct app_state_t *app)
     return 0;
 cleanup:
 
-    v4l_cleanup(app);
+    v4l_cleanup();
     if (errno == 0)
         errno = EAGAIN;
     return -1;
 }
 
-static int v4l_start(struct app_state_t *app)
+static int v4l_start(int format)
 {
+    ASSERT_PTR(v4l_format, !=, NULL, cleanup);
+    int formats_len = ARRAY_SIZE(v4l_formats);
+    for (int i = 0; i < formats_len; i++) {
+        struct format_mapping_t *f = v4l_formats + i;
+        if (f->format == format && f->is_supported) {
+            v4l_format = f;
+            break;
+        }
+    }
+    ASSERT_PTR(v4l_format, ==, NULL, cleanup);
+
     struct v4l2_format fmt;
     memset(&fmt, 0, sizeof(fmt));
-    fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-    fmt.fmt.pix.width = app->video_width;
-    fmt.fmt.pix.height = app->video_height;
+    fmt.type = v4l_format->internal_format;
+    fmt.fmt.pix.width = v4l.app->video_width;
+    fmt.fmt.pix.height = v4l.app->video_height;
     fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_YUYV;
     fmt.fmt.pix.field = V4L2_FIELD_INTERLACED;
     CALL(ioctl_enum(v4l.dev_id, VIDIOC_S_FMT, &fmt), cleanup);
@@ -225,13 +273,16 @@ static int v4l_start(struct app_state_t *app)
 
     return 0;
 cleanup:
+    v4l_format = NULL;
     if (errno == 0)
         errno = EAGAIN;
     return -1;
 }
 
-static int v4l_get_frame(struct app_state_t *app)
+static int v4l_process_frame()
 {
+    ASSERT_PTR(v4l_format, ==, NULL, cleanup);
+
     int res;
     struct timeval tv;
     fd_set rfds;
@@ -267,15 +318,12 @@ cleanup:
     return -1;
 }
 
-static char *v4l_get_buffer()
-{
-    return v4l.buffer;
-}
-
-static int v4l_stop(struct app_state_t *app)
+static int v4l_stop()
 {
     enum v4l2_buf_type type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
     CALL(ioctl_wait(v4l.dev_id, VIDIOC_STREAMOFF, &type), cleanup);
+
+    v4l_format = NULL;
 
     return 0;
 cleanup:
@@ -284,14 +332,36 @@ cleanup:
     return -1;
 }
 
+static char *v4l_get_buffer(int *format)
+{
+    ASSERT_PTR(v4l_format, ==, NULL, cleanup);
+    *format = v4l_format->format;
+    return v4l.buffer;
+
+cleanup:
+    if (errno == 0)
+        errno = EOPNOTSUPP;
+    return (char *)-1;
+}
+
+static int v4l_get_formats(const struct format_mapping_t *formats[])
+{
+    if (formats != NULL)
+        *formats = v4l_formats;
+    return ARRAY_SIZE(v4l_formats);
+}
+
 void v4l_construct(struct app_state_t *app)
 {
+    v4l.app = app;
     input.context = &v4l;
     input.init = v4l_init;
     input.start = v4l_start;
-    input.get_frame = v4l_get_frame;
-    input.get_buffer = v4l_get_buffer;
+    input.process_frame = v4l_process_frame;
     input.stop = v4l_stop;
     input.cleanup = v4l_cleanup;
+
+    input.get_buffer = v4l_get_buffer;
+    input.get_formats = v4l_get_formats;
 }
 

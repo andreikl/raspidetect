@@ -23,7 +23,16 @@
 
 #include "sdl.h"
 
+static struct format_mapping_t sdl_formats[] = {
+    {
+        .format = VIDEO_FORMAT_YUV422,
+        .internal_format = VIDEO_FORMAT_YUV422,
+        .is_supported = 1
+    }
+};
+
 static struct sdl_state_t sdl = {
+    .app = NULL,
     .buffer = NULL,
     .buffer_length = 0,
     .window = NULL,
@@ -105,7 +114,7 @@ static int filter(void* data, union SDL_Event *event)
     return event->type == SDL_QUIT;
 }
 
-static int sdl_init(struct app_state_t *app)
+static int sdl_init()
 {
 #ifdef YUV_MEMORY_OPTIMIZATION
     generate_yuv422_lookup();
@@ -117,7 +126,7 @@ static int sdl_init(struct app_state_t *app)
         "SDL Video viewer",
         SDL_WINDOWPOS_UNDEFINED,
         SDL_WINDOWPOS_UNDEFINED,
-        app->video_width, app->video_height,
+        sdl.app->video_width, sdl.app->video_height,
         0 //TODO: SDL_WINDOW_OPENGL
     ), cleanup);
 
@@ -127,7 +136,7 @@ static int sdl_init(struct app_state_t *app)
     //     SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC
     // ), cleanup);
 
-    int len = app->video_width * app->video_height * 3;
+    int len = sdl.app->video_width * sdl.app->video_height * 3;
     char *data = malloc(len);
     if (data == NULL) {
         errno = ENOMEM;
@@ -137,10 +146,10 @@ static int sdl_init(struct app_state_t *app)
     sdl.buffer = data;
     sdl.buffer_length = len;
     SDL_CALL(sdl.surface = SDL_CreateRGBSurfaceFrom(data,
-        app->video_width,
-        app->video_height,
+        sdl.app->video_width,
+        sdl.app->video_height,
         24,
-        app->video_width * 3,
+        sdl.app->video_width * 3,
         R_888_MASK, G_888_MASK, B_888_MASK, 0
     ), cleanup);
 
@@ -152,7 +161,7 @@ cleanup:
     return -1;
 }
 
-static int sdl_render(struct app_state_t *app)
+static int sdl_render()
 {
     struct SDL_Surface *surface;
     SDL_CALL(surface = SDL_GetWindowSurface(sdl.window), cleanup);
@@ -174,10 +183,10 @@ cleanup:
     return -1;
 }
 
-static int sdl_render_yuv(struct app_state_t *app, char *buffer)
+static int sdl_render_yuv(char *buffer)
 {
-    int w = app->video_width;
-    int h = app->video_height;
+    int w = sdl.app->video_width;
+    int h = sdl.app->video_height;
     int size = w * h;
     for (int i = 0; i < size; i += w)
         for (int x = 0; x < w; x += 2) {
@@ -185,10 +194,10 @@ static int sdl_render_yuv(struct app_state_t *app, char *buffer)
             yuv422_to_rgb(buffer + (j << 1), sdl.buffer + j + (j << 1));
         }
 
-    return sdl_render(app);
+    return sdl_render();
 }
 
-static void sdl_cleanup(struct app_state_t *app)
+static void sdl_cleanup()
 {
     if (sdl.surface) {
         SDL_FreeSurface(sdl.surface);
@@ -209,6 +218,13 @@ static void sdl_cleanup(struct app_state_t *app)
     SDL_Quit();
 }
 
+static int sdl_get_formats(const struct format_mapping_t *formats[])
+{
+    if (formats != NULL)
+        *formats = sdl_formats;
+    return ARRAY_SIZE(sdl_formats);
+}
+
 void sdl_construct(struct app_state_t *app)
 {
     int i = 0;
@@ -216,9 +232,11 @@ void sdl_construct(struct app_state_t *app)
         i++;
 
     if (i != MAX_OUTPUTS) {
+        sdl.app = app;
         outputs[i].context = &sdl;
         outputs[i].init = sdl_init;
         outputs[i].render = sdl_render_yuv;
         outputs[i].cleanup = sdl_cleanup;
+        outputs[i].get_formats = v4l_get_formats;
     }
 }

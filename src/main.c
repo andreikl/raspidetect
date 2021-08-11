@@ -154,6 +154,20 @@ static int main_function()
 
     set_default_state(&app);
     utils_construct(&app);
+    CALL(utils_init(&app), error);
+
+    if (app.verbose) {
+        fprintf(stderr, "INFO: camera_num: %d\n", app.camera_num);
+        fprintf(stderr, "INFO: camera_name: %s\n", app.camera_name);
+        fprintf(stderr, "INFO: camera max size: %d, %d\n", app.camera_max_width,
+            app.camera_max_height);
+        fprintf(stderr, "INFO: video size: %d, %d\n", app.video_width, app.video_height);
+        fprintf(stderr, "INFO: video format: %s\n", utils_get_video_format_str(app.video_format));
+        fprintf(stderr, "INFO: video output: %s\n", utils_get_video_output_str(app.video_output));
+
+        fprintf(stderr, "INFO: window size: %d, %d\n", app.window_width, app.window_height);
+        fprintf(stderr, "INFO: worker size: %d, %d\n", app.worker_width, app.worker_height);
+    }
 
 #ifdef CONTROL
     if (control_init(&app)) {
@@ -230,25 +244,7 @@ static int main_function()
         goto error;
     }
 
-    CALL(input.init(&app), error);
-    if (app.verbose) {
-        fprintf(stderr, "INFO: camera_num: %d\n", app.camera_num);
-        fprintf(stderr, "INFO: camera_name: %s\n", app.camera_name);
-        fprintf(stderr, "INFO: camera max size: %d, %d\n", app.camera_max_width,
-            app.camera_max_height);
-        fprintf(stderr, "INFO: video size: %d, %d\n", app.video_width, app.video_height);
-        fprintf(stderr, "INFO: video format: %s\n", utils_get_video_format_str(app.video_format));
-        fprintf(stderr, "INFO: video output: %s\n", utils_get_video_output_str(app.video_output));
-
-        fprintf(stderr, "INFO: window size: %d, %d\n", app.window_width, app.window_height);
-        fprintf(stderr, "INFO: worker size: %d, %d\n", app.worker_width, app.worker_height);
-    }
-    for (int i = 0; outputs[i].context != NULL && i < MAX_OUTPUTS; i++)
-        CALL(outputs[i].init(&app), error);
-    for (int i = 0; filters[i].context != NULL && i < MAX_FILTERS; i++)
-        CALL(filters[i].init(&app), error);
-
-    CALL(input.start(&app), error);
+    //CALL(input.start(), error);
 
     //TODO: move to something like camara start
     // if (app.video_output == VIDEO_OUTPUT_STDOUT) {
@@ -260,16 +256,15 @@ static int main_function()
         // usleep(TICK_TIME);
         // fprintf(stdout, "is_abort: %d\n", is_abort);
 
-        CALL(res = input.get_frame(&app));
+        CALL(res = input.process_frame());
         if (res != 0) {
             if (errno == ETIME)
                 continue;
             else
                 goto error;
         }
-            
         for (int i = 0; outputs[i].context != NULL && i < MAX_OUTPUTS; i++)
-            CALL(outputs[i].render(&app, input.get_buffer()), error);
+            CALL(outputs[i].render(input.get_buffer()), error);
 
         //----- fps
         static int frame_count = 0;

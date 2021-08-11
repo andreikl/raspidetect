@@ -11,8 +11,13 @@ TENSORFLOW = 0
 DARKNET = 0
 
 EXEC = raspidetect
-OBJDIR = ./obj/
-SRCDIR = ./src/
+export SRC_DIR ?= ./src
+export TEST_DIR ?= ./test
+export BUILD_DIR ?= ./build
+export CMOCK_DIR ?= ~/cmock
+OBJ_DIR = ${BUILD_DIR}/obj
+TEST_MAKEFILE = ${BUILD_DIR}/test/MakefileTestSupport
+
 #                                                          execution time|code size|memory usage|compile time
 #-O0 		optimization for compilation time (default) 		+ 	+ 	- 	-
 #-O1 or -O 	optimization for code size and execution time 		- 	- 	+ 	+
@@ -93,19 +98,24 @@ endif
 
 OBJ += utils.o main.o
 
-OBJS = $(addprefix $(OBJDIR), $(OBJ))
+OBJS = $(addprefix $(OBJ_DIR)/, $(OBJ))
 
-all: clean obj $(EXEC)
+all: clean setup $(BUILD_DIR)/$(EXEC)
 
-$(EXEC): $(OBJS)
+$(BUILD_DIR)/$(EXEC): $(OBJS)
 	$(CC) $(COMMON) $(CFLAGS) $^ -o $@ $(LDFLAGS)
 
-$(OBJDIR)%.o: $(SRCDIR)%.c
+$(OBJ_DIR)/%.o: $(SRC_DIR)/%.c
 	$(CC) $(COMMON) $(CFLAGS) -c $< -o $@
 
-obj:
-	mkdir -p obj
+.PHONY: setup
+setup:
+	mkdir -p ${BUILD_DIR}
+    mkdir -p ${OBJ_DIR}
+	ruby $(CMOCK_DIR)/scripts/create_makefile.rb
 
 .PHONY: clean
 clean:
-	rm -rf $(OBJDIR)
+	rm -rf $(BUILD_DIR)
+
+-include ${TEST_MAKEFILE}
