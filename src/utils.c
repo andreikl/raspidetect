@@ -141,6 +141,33 @@ error:
     return -1;
 }
 
+void utils_set_default_state(struct app_state_t *app)
+{
+    memset(app, 0, sizeof(struct app_state_t));
+    app->video_width = utils_read_int_value(VIDEO_WIDTH, VIDEO_WIDTH_DEF);
+    app->video_height = utils_read_int_value(VIDEO_HEIGHT, VIDEO_HEIGHT_DEF);
+    const char* format = utils_read_str_value(VIDEO_FORMAT, VIDEO_FORMAT_DEF);
+    app->video_format = utils_get_video_format_int(format);
+    const char *output = utils_read_str_value(VIDEO_OUTPUT, VIDEO_OUTPUT_DEF);
+    app->video_output = utils_get_video_output_int(output);
+
+    app->port = utils_read_int_value(PORT, PORT_DEF);
+    app->worker_width = utils_read_int_value(WORKER_WIDTH, WORKER_WIDTH_DEF);
+    app->worker_height = utils_read_int_value(WORKER_HEIGHT, WORKER_HEIGHT_DEF);
+    app->worker_total_objects = 10;
+    app->worker_thread_res = -1;
+    app->verbose = utils_read_int_value(VERBOSE, VERBOSE_DEF);
+#ifdef RFB
+    app->rfb.thread_res = -1;
+#endif
+#ifdef TENSORFLOW
+    app->model_path = utils_read_str_value(TFL_MODEL_PATH, TFL_MODEL_PATH_DEF);
+#elif DARKNET
+    app->model_path = utils_read_str_value(DN_MODEL_PATH, DN_MODEL_PATH_DEF);
+    app->config_path = utils_read_str_value(DN_CONFIG_PATH, DN_CONFIG_PATH_DEF);
+#endif
+}
+
 void utils_construct(struct app_state_t *app)
 {
 #ifdef V4L
@@ -176,9 +203,11 @@ int utils_init(struct app_state_t *app)
     for (int i = 0; outputs[i].context != NULL && i < MAX_OUTPUTS; i++) {
         const struct format_mapping_t* in_fs = NULL;
         int in_fs_len = input.get_formats(&in_fs);
+        DEBUG_INT("in_fs_len", in_fs_len);
 
         const struct format_mapping_t* out_fs = NULL;
         int out_fs_len = outputs[i].get_formats(&out_fs);
+        DEBUG_INT("out_fs_len", out_fs_len);
 
         //int formats_len = ARRAY_SIZE(in_fs);
         //fprintf(stderr, "INFO: formats_len %d\n", formats_len);

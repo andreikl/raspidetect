@@ -119,40 +119,13 @@ static void print_help()
     exit(0);
 }
 
-void set_default_state(struct app_state_t *app)
-{
-    memset(app, 0, sizeof(struct app_state_t));
-    app->video_width = utils_read_int_value(VIDEO_WIDTH, VIDEO_WIDTH_DEF);
-    app->video_height = utils_read_int_value(VIDEO_HEIGHT, VIDEO_HEIGHT_DEF);
-    const char* format = utils_read_str_value(VIDEO_FORMAT, VIDEO_FORMAT_DEF);
-    app->video_format = utils_get_video_format_int(format);
-    const char *output = utils_read_str_value(VIDEO_OUTPUT, VIDEO_OUTPUT_DEF);
-    app->video_output = utils_get_video_output_int(output);
-
-    app->port = utils_read_int_value(PORT, PORT_DEF);
-    app->worker_width = utils_read_int_value(WORKER_WIDTH, WORKER_WIDTH_DEF);
-    app->worker_height = utils_read_int_value(WORKER_HEIGHT, WORKER_HEIGHT_DEF);
-    app->worker_total_objects = 10;
-    app->worker_thread_res = -1;
-    app->verbose = utils_read_int_value(VERBOSE, VERBOSE_DEF);
-#ifdef RFB
-    app->rfb.thread_res = -1;
-#endif
-#ifdef TENSORFLOW
-    app->model_path = utils_read_str_value(TFL_MODEL_PATH, TFL_MODEL_PATH_DEF);
-#elif DARKNET
-    app->model_path = utils_read_str_value(DN_MODEL_PATH, DN_MODEL_PATH_DEF);
-    app->config_path = utils_read_str_value(DN_CONFIG_PATH, DN_CONFIG_PATH_DEF);
-#endif
-}
-
 static int main_function()
 {
     int res;
     char buffer[MAX_DATA];
     struct app_state_t app;
 
-    set_default_state(&app);
+    utils_set_default_state(&app);
     utils_construct(&app);
     CALL(utils_init(&app), error);
 
@@ -400,9 +373,8 @@ error:
     //TODO: move to something like camara start
     // if (app.video_output == VIDEO_OUTPUT_STDOUT) {
     //    CALL(res = utils_camera_cleanup_h264_encoder(&app));
-    for (int i = 0; outputs[i].context != NULL && i < MAX_OUTPUTS; i++) {
+    for (int i = 0; outputs[i].context != NULL && i < MAX_OUTPUTS; i++)
         outputs[i].cleanup(&app);
-    }
     input.cleanup(&app);
 
     fprintf(stderr, "worker_semaphore\n");

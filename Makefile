@@ -25,10 +25,11 @@ export BUILD_DIR ?= ./build
 
 #CC = arm-linux-gnueabihf-gcc
 #-mcpu=arm6 -mfpu=vfp
-CC = cc
+CC = gcc
 LDFLAGS = -lm
 COMMON = -Iexternal/klib -Isrc/
 #-D_POSIX_C_SOURCE=199309L fixes CLOCK_REALTIME error on pi zero 
+#CFLAGS = -pthread -O3 -fPIC -Wall -Wno-implicit-function-declaration -Wno-unused-function -DNDEBUG -std=c11 -D_POSIX_C_SOURCE=199309L
 CFLAGS = -pthread -O3 -fPIC -Wall -Wno-implicit-function-declaration -Wno-unused-function -DNDEBUG -std=c11 -D_POSIX_C_SOURCE=199309L
 
 ifeq ($(V4L), 1) 
@@ -95,7 +96,12 @@ endif
 
 ifeq ($(CMOCKA), 1) 
 	TEST_COMMON = $(COMMON) -DCMOCKA `pkg-config --cflags cmocka`
-	TEST_LDFLAGS = $(LDFLAGS) `pkg-config --libs cmocka`
+	TEST_LDFLAGS = $(LDFLAGS) `pkg-config --libs cmocka` 
+	TEST_LDFLAGS += -Wl,--wrap=__xstat
+	TEST_LDFLAGS += -Wl,--wrap=open
+	TEST_LDFLAGS += -Wl,--wrap=ioctl
+	TEST_LDFLAGS += -Wl,--wrap=v4l2_open
+	TEST_LDFLAGS += -Wl,--wrap=v4l2_ioctl
 	TEST_OBJ = test.o
 	TESTS = $(addprefix ${BUILD_DIR}/obj/, $(TEST_OBJ))
 endif
