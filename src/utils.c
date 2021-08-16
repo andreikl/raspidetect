@@ -17,6 +17,7 @@
 // Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 #include "khash.h"
+#include "klist.h"
 
 #include "main.h"
 #include "utils.h"
@@ -29,7 +30,7 @@ KHASH_MAP_INIT_STR(map_str, char *)
 extern khash_t(map_str) *h;
 
 extern struct input_t input;
-extern struct filter_t filters[MAX_OUTPUTS];
+extern struct filter_t filters[MAX_FILTERS];
 extern struct output_t outputs[MAX_OUTPUTS];
 
 void utils_parse_args(int argc, char** argv)
@@ -191,26 +192,161 @@ void utils_construct(struct app_state_t *app)
 #endif //RFB
 }
 
+#define BFS_NODE_FREE(x)
+struct bfs_node_t {
+    int index;
+    int distance;
+};
+KLIST_INIT(bfs_qeue_t, struct bfs_node_t, BFS_NODE_FREE)
+
+static int find_path(
+    const struct format_mapping_t* in_f,
+    const struct format_mapping_t* out_f,
+    int filters_len)
+{
+    int matrix_len = filters_len + 2;
+    int bfs_adjacency_matrix[MAX_FILTERS + 2][MAX_FILTERS + 2];
+    memset(*bfs_adjacency_matrix, 0, sizeof(bfs_adjacency_matrix));
+    printf("bfs_adjacency_matrix: %lu", sizeof(bfs_adjacency_matrix));
+
+    if (in_f->format == out_f->format) {
+        bfs_adjacency_matrix[0][matrix_len - 1] = in_f->format;
+    }
+
+    for (int i = 0; filters[i].context != NULL && i < MAX_FILTERS; i++) {
+        const struct format_mapping_t* fin_fs = NULL;
+        int fin_fs_len = filters[i].get_in_formats(&fin_fs);
+        const struct format_mapping_t* fout_fs = NULL;
+        int fout_fs_len = filters[i].get_out_formats(&fout_fs);
+
+        for (int ii = 0; ii < fin_fs_len; ii++) {
+            const struct format_mapping_t* fin_f = fin_fs + ii;
+            if (!fin_f->is_supported)
+                continue;
+            if (fin_f->format == in_f->format) {
+                bfs_adjacency_matrix[0][i + 1] = in_f->format;
+            }
+
+            //try to connect another output format of filter(j) to current input format of filter(i)
+            for (int j = 0; filters[j].context != NULL && j < MAX_FILTERS; j++) {
+                if (j == i)
+                    continue; //skip current filter
+                const struct format_mapping_t* ffout_fs = NULL;
+                int ffout_fs_len = filters[i].get_out_formats(&ffout_fs);
+                for (int jj = 0; jj < ffout_fs_len; jj++) {
+                    const struct format_mapping_t* ffout_f = ffout_fs + jj;
+                    if (!ffout_f->is_supported)
+                        continue;
+
+                    if (fin_f->format == ffout_f->format) {
+                        bfs_adjacency_matrix[j + 1][i + 1] = ffout_f->format;
+                    }
+                }
+            }
+        }
+
+        for (int ii = 0; ii < fout_fs_len; ii++) {
+            const struct format_mapping_t* fout_f = fout_fs + ii;
+            if (!fout_f->is_supported)
+                continue;
+            if (out_f->format == fout_f->format) {
+                bfs_adjacency_matrix[i + 1][matrix_len - 1] = out_f->format;
+            }
+
+            //try to connect current output format of filter(i) to another input format of filter(j)
+            for (int j = 0; filters[j].context != NULL && j < MAX_FILTERS; j++) {
+                if (j == i)
+                    continue; //skip current filter
+                const struct format_mapping_t* ffin_fs = NULL;
+                int ffin_fs_len = filters[i].get_in_formats(&ffin_fs);
+                for (int jj = 0; jj < ffin_fs_len; jj++) {
+                    const struct format_mapping_t* ffin_f = ffin_fs + jj;
+                    if (!ffin_fs->is_supported)
+                        continue;
+
+                    if (fout_f->format == ffin_f->format) {
+                        bfs_adjacency_matrix[i + 1][j + 1] = fout_f->format;
+                    }
+                }
+            }
+        }
+    }
+
+    //Breadth-First-Search (BFS)
+    int distance = -1;
+
+    klist_t(bfs_qeue_t) *bfs_qeue = kl_init(bfs_qeue_t);
+    struct bfs_node_t node = {
+        .index = 0,
+        .distance = 0
+    };
+    *kl_pushp(bfs_qeue_t, bfs_qeue) = node;
+
+    int bfs_path[MAX_FILTERS + 2];
+    memset(bfs_path, 0, sizeof(bfs_path));
+    bfs_path[node.index] = 1;
+
+    while(bfs_qeue->size > 0 && distance < 0) {
+        kl_shift(bfs_qeue_t, bfs_qeue, &node);
+        for (int i = 0; i < matrix_len; i++) {
+            if (i == matrix_len - 1) {
+                distance = node.distance;
+                break;
+            }
+            if (bfs_adjacency_matrix[node.index][i] > 0) {
+                if (bfs_path[i])
+                    continue;
+                struct bfs_node_t next = {
+                    .index = i,
+                    .distance = node.distance + 1
+                };
+                *kl_pushp(bfs_qeue_t, bfs_qeue) = next;
+            }
+        }
+    }
+
+    DEBUG_INT("distance", distance);
+    kl_destroy(bfs_qeue_t, bfs_qeue);
+    return distance;
+}
+
 int utils_init(struct app_state_t *app)
 {
     CALL(input.init(), error);
     for (int i = 0; outputs[i].context != NULL && i < MAX_OUTPUTS; i++)
         CALL(outputs[i].init(&app), error);
 
-    for (int i = 0; filters[i].context != NULL && i < MAX_FILTERS; i++)
+    int filters_len = 0;
+    for (int i = 0; filters[i].context != NULL && i < MAX_FILTERS; i++) {
         CALL(filters[i].init(&app), error);
+        filters_len++;
+    }
+    DEBUG_INT("filters count", filters_len);
 
+    const struct format_mapping_t* in_fs = NULL;
+    int in_fs_len = input.get_formats(&in_fs);
+    DEBUG_INT("input formats count", in_fs_len);
     for (int i = 0; outputs[i].context != NULL && i < MAX_OUTPUTS; i++) {
-        const struct format_mapping_t* in_fs = NULL;
-        int in_fs_len = input.get_formats(&in_fs);
-        DEBUG_INT("in_fs_len", in_fs_len);
-
         const struct format_mapping_t* out_fs = NULL;
         int out_fs_len = outputs[i].get_formats(&out_fs);
-        DEBUG_INT("out_fs_len", out_fs_len);
+        DEBUG_INT("output formats count", out_fs_len);
+        
+        for (int ii = 0; ii < out_fs_len; ii++) {
+            const struct format_mapping_t* out_f = out_fs + ii;
+            if (!out_f->is_supported)
+                continue;
 
-        //int formats_len = ARRAY_SIZE(in_fs);
-        //fprintf(stderr, "INFO: formats_len %d\n", formats_len);
+            for (int jj = 0; jj < in_fs_len; jj++) {
+                const struct format_mapping_t* in_f = in_fs + jj;
+
+                if (!out_f->is_supported)
+                    continue;
+
+                if (find_path(in_f, out_f, filters_len) >= 0) {
+                    fprintf(stderr, "INFO: path found: %d -> %d\n", in_f->format, out_f->format);
+                }
+            }
+        }
     }
 
     return 0;

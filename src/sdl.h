@@ -41,8 +41,10 @@
 #include <SDL.h>
 
 struct sdl_state_t {
+    struct app_state_t *app;
+
     char* buffer;
-    int buffer_length;
+    int buffer_len;
     SDL_Window *window;
     //SDL_Renderer *renderer;
     SDL_Surface *surface;

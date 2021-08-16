@@ -36,9 +36,9 @@ static struct v4l_state_t v4l = {
     .app = NULL,
     .dev_id = -1,
     .v4l_buf = NULL,
-    .v4l_buf_length = -1,
+    .v4l_buf_len = -1,
     .buffer = NULL,
-    .buffer_length = -1,
+    .buffer_len = -1,
 };
 
 extern struct input_t input;
@@ -72,6 +72,7 @@ static int ioctl_enum(int fd, int request, void *arg)
 
 static void v4l_cleanup()
 {
+    
     if (v4l.dev_id != -1) {
         CALL(close(v4l.dev_id));
         v4l.dev_id = -1;
@@ -164,7 +165,7 @@ static int v4l_init()
         goto cleanup;
     }
     v4l.v4l_buf = data;
-    v4l.v4l_buf_length = len;
+    v4l.v4l_buf_len = len;
 
     data = malloc(len);
     if (data == NULL) {
@@ -173,10 +174,13 @@ static int v4l_init()
         goto cleanup;
     }
     v4l.buffer = data;
-    v4l.buffer_length = len;
+    v4l.buffer_len = len;
 
-    struct stat st;
+    struct stat st = {
+        .st_mode = 1
+    };
     CALL(stat(v4l.dev_name, &st), cleanup);
+
     ASSERT_INT(S_ISCHR(st.st_mode), ==, 0, cleanup);
     CALL(v4l.dev_id = open(v4l.dev_name, O_RDWR | O_NONBLOCK, 0), cleanup);
 
@@ -220,7 +224,6 @@ static int v4l_init()
         errno = EOPNOTSUPP;
         return -1;
     }
-
     return 0;
 cleanup:
 
@@ -265,7 +268,7 @@ static int v4l_start(int format)
     buf.memory = V4L2_MEMORY_USERPTR;
     buf.index = 0;
     buf.m.userptr = (unsigned long)v4l.v4l_buf;
-    buf.length = v4l.v4l_buf_length;
+    buf.length = v4l.v4l_buf_len;
     CALL(ioctl_wait(v4l.dev_id, VIDIOC_QBUF, &buf), cleanup);
 
     enum v4l2_buf_type type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
@@ -304,11 +307,11 @@ static int v4l_process_frame()
     buf.memory = V4L2_MEMORY_USERPTR;
     CALL(ioctl_wait(v4l.dev_id, VIDIOC_DQBUF, &buf), cleanup);
 
-    memcpy(v4l.buffer, v4l.v4l_buf, v4l.v4l_buf_length);
+    memcpy(v4l.buffer, v4l.v4l_buf, v4l.v4l_buf_len);
 
     buf.index = 0;
     buf.m.userptr = (unsigned long)v4l.v4l_buf;
-    buf.length = v4l.v4l_buf_length;
+    buf.length = v4l.v4l_buf_len;
     CALL(ioctl_wait(v4l.dev_id, VIDIOC_QBUF, &buf), cleanup);
     return 0;
 

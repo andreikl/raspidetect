@@ -113,7 +113,7 @@
         value); \
 }
 
-#define DEBUG_POINTER(text, value) \
+#define DEBUG_PTR(text, value) \
 { \
     fprintf(stderr, "INFO: %s, "#text": %p\n", \
         __FUNCTION__, \
@@ -154,6 +154,14 @@
 
 #define CALL(...) CALL_X(__VA_ARGS__)(__VA_ARGS__)
 
+#define LAMBDA(LAMBDA$_ret, LAMBDA$_args, LAMBDA$_body) \
+({ \
+    LAMBDA$_ret LAMBDA$__anon$ LAMBDA$_args \
+    LAMBDA$_body \
+    LAMBDA$__anon$; \
+})
+
+#include <stdint.h>    //uint32_t
 #include <stdio.h>     // fprintf
 #include <stdlib.h>    // malloc, free
 #include <unistd.h>    // STDIN_FILENO
@@ -280,8 +288,8 @@ struct filter_t {
     void (*cleanup)();
 
     char* (*get_buffer)();
-    const struct format_mapping_t *(*get_input_formats)();
-    const struct format_mapping_t *(*get_output_formats)();
+    int (*get_in_formats)(const struct format_mapping_t *formats[]);
+    int (*get_out_formats)(const struct format_mapping_t *formats[]);
 };
 
 struct output_t {

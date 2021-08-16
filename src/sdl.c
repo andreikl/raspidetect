@@ -34,7 +34,7 @@ static struct format_mapping_t sdl_formats[] = {
 static struct sdl_state_t sdl = {
     .app = NULL,
     .buffer = NULL,
-    .buffer_length = 0,
+    .buffer_len = 0,
     .window = NULL,
     //.renderer = NULL,
     .surface = NULL
@@ -144,7 +144,7 @@ static int sdl_init()
         goto cleanup;
     }
     sdl.buffer = data;
-    sdl.buffer_length = len;
+    sdl.buffer_len = len;
     SDL_CALL(sdl.surface = SDL_CreateRGBSurfaceFrom(data,
         sdl.app->video_width,
         sdl.app->video_height,
@@ -237,6 +237,6 @@ void sdl_construct(struct app_state_t *app)
         outputs[i].init = sdl_init;
         outputs[i].render = sdl_render_yuv;
         outputs[i].cleanup = sdl_cleanup;
-        outputs[i].get_formats = v4l_get_formats;
+        outputs[i].get_formats = sdl_get_formats;
     }
 }

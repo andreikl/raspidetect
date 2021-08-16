@@ -3,7 +3,7 @@ H264_ENCODER_RASPBERRY = 0 #TODO: to check
 H264_ENCODER_JETSON = 1
 CONTROL = 0
 RFB = 0
-SDL = 0
+SDL = 1
 CMOCKA = 1
 
 OPENCV = 0
@@ -99,9 +99,13 @@ ifeq ($(CMOCKA), 1)
 	TEST_LDFLAGS = $(LDFLAGS) `pkg-config --libs cmocka` 
 	TEST_LDFLAGS += -Wl,--wrap=__xstat
 	TEST_LDFLAGS += -Wl,--wrap=open
+	TEST_LDFLAGS += -Wl,--wrap=close
 	TEST_LDFLAGS += -Wl,--wrap=ioctl
 	TEST_LDFLAGS += -Wl,--wrap=v4l2_open
 	TEST_LDFLAGS += -Wl,--wrap=v4l2_ioctl
+	TEST_LDFLAGS += -Wl,--wrap=SDL_Init
+	TEST_LDFLAGS += -Wl,--wrap=SDL_CreateWindow
+	TEST_LDFLAGS += -Wl,--wrap=SDL_DestroyWindow
 	TEST_OBJ = test.o
 	TESTS = $(addprefix ${BUILD_DIR}/obj/, $(TEST_OBJ))
 endif

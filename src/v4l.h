@@ -8,10 +8,10 @@ struct v4l_state_t {
     int dev_id;
 
     char *v4l_buf;
-    int v4l_buf_length;
+    int v4l_buf_len;
 
     char *buffer;
-    int buffer_length;
+    int buffer_len;
 };
 
 void v4l_construct(struct app_state_t *app);

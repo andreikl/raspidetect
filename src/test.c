@@ -24,130 +24,165 @@
 #include <setjmp.h> //jmp_buf
 #include <cmocka.h>
 
-#include "linux/videodev2.h"
+#ifdef V4L
+    #include "linux/videodev2.h"
 
-KHASH_MAP_INIT_STR(map_str, char*)
-khash_t(map_str) *h;
+    KHASH_MAP_INIT_STR(map_str, char*)
+    khash_t(map_str) *h;
 
-int is_abort = 0;
+    int is_abort;
 
-struct input_t input;
-struct filter_t filters[MAX_OUTPUTS];
-struct output_t outputs[MAX_OUTPUTS];
+    struct input_t input;
+    struct filter_t filters[MAX_FILTERS];
+    struct output_t outputs[MAX_OUTPUTS];
 
-int __wrap___xstat(const char *pathname, struct stat *statbuf)
+    int __wrap___xstat(int __ver, const char *__filename, struct stat *__stat_buf)
+    {
+        DEBUG_INT("stat", 1);
+        __stat_buf->st_mode = __S_IFCHR;
+        return 0;
+    }
+
+    int __wrap_open(const char *__file, int __oflag, ...)
+    {
+        DEBUG_INT("open", 1);
+        return 1;
+    }
+
+    int __wrap_close(int fd)
+    {
+        DEBUG_INT("close", 1);
+        return 0;
+    }
+
+    int __wrap_ioctl(int fd, int request, void *arg)
+    {
+        if (request == (int)VIDIOC_QUERYCAP) {
+            DEBUG_STR("request", "VIDIOC_QUERYCAP");
+            struct v4l2_capability *cap = arg;
+            strncpy((char *)cap->card, "test", 32);
+            cap->capabilities = V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_STREAMING;
+            return 0;
+        }
+        else if (request == (int)VIDIOC_ENUM_FMT) {
+            DEBUG_STR("request", "VIDIOC_ENUM_FMT");
+            struct v4l2_fmtdesc *fmt = arg;
+            if (fmt->index == 0) {
+                fmt->pixelformat = V4L2_PIX_FMT_YUYV;
+                return 0;
+            }
+            else {
+                errno = EINVAL;
+                return -1;
+            }
+        }
+        else if (request == (int)VIDIOC_ENUM_FRAMESIZES) {
+            DEBUG_STR("request", "VIDIOC_ENUM_FRAMESIZES");
+            struct v4l2_frmsizeenum *frmsize = arg;
+            if (frmsize->index == 0) {
+                frmsize->type = V4L2_FRMSIZE_TYPE_STEPWISE;
+                frmsize->stepwise.step_width = 16;
+                frmsize->stepwise.step_height = 16;
+                frmsize->stepwise.min_width = 320;
+                frmsize->stepwise.min_height = 256;
+                frmsize->stepwise.max_width = 1024;
+                frmsize->stepwise.max_height = 768;
+                return 0;
+            }
+            else {
+                errno = EINVAL;
+                return -1;
+            }
+        }
+        else {
+            DEBUG_INT("request", request);
+        }
+        errno = EAGAIN;
+        return -1;
+    }
+
+    int __wrap_v4l2_open(const char *__file, int __oflag, ...)
+    {
+        DEBUG_INT("v4l2_open", 1);
+        return 1;
+    }
+
+    int __wrap_v4l2_ioctl(int fd, int request, void *arg)
+    {
+        if (request == (int)VIDIOC_QUERYCAP) {
+            DEBUG_STR("request", "VIDIOC_QUERYCAP");
+            struct v4l2_capability *cap = arg;
+            strncpy((char *)cap->card, "test_encoder", 32);
+            cap->capabilities = V4L2_CAP_VIDEO_M2M_MPLANE | V4L2_CAP_STREAMING;
+            return 0;
+        }
+        else if (request == (int)VIDIOC_ENUM_FMT) {
+            DEBUG_STR("request", "VIDIOC_ENUM_FMT");
+            struct v4l2_fmtdesc *fmt = arg;
+            if (fmt->index == 0 && fmt->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) {
+                fmt->pixelformat = V4L2_PIX_FMT_YUYV;
+                return 0;
+            }
+            if (fmt->index == 0 && fmt->type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE) {
+                fmt->pixelformat = V4L2_PIX_FMT_H264;
+                return 0;
+            }
+            else {
+                errno = EINVAL;
+                return -1;
+            }
+        }
+        else if (request == (int)VIDIOC_ENUM_FRAMESIZES) {
+            DEBUG_STR("request", "VIDIOC_ENUM_FRAMESIZES");
+            struct v4l2_frmsizeenum *frmsize = arg;
+            if (frmsize->index == 0) {
+                frmsize->type = V4L2_FRMSIZE_TYPE_STEPWISE;
+                frmsize->stepwise.step_width = 16;
+                frmsize->stepwise.step_height = 16;
+                frmsize->stepwise.min_width = 320;
+                frmsize->stepwise.min_height = 256;
+                frmsize->stepwise.max_width = 1024;
+                frmsize->stepwise.max_height = 768;
+                return 0;
+            }
+            else {
+                errno = EINVAL;
+                return -1;
+            }
+        }
+        else {
+            DEBUG_INT("request", request);
+        }
+        errno = EAGAIN;
+        return -1;
+    }
+#endif
+
+
+#ifdef SDL
+#include <SDL.h>
+static SDL_Window *sdl_window = (SDL_Window *)1;
+int __wrap_SDL_Init(uint32_t flags)
 {
-    DEBUG_INT("stat", 1);
+    DEBUG_INT("SDL_Init", 1);
     return 0;
 }
 
-int __wrap_open(const char *__file, int __oflag, ...)
+SDL_Window *__wrap_SDL_CreateWindow(
+    const char *title,
+    int x, int y, int w,
+    int h, uint32_t flags)
 {
-    DEBUG_INT("open", 1);
-    return 1;
+    DEBUG_INT("__wrap_SDL_CreateWindow", 1);
+    return sdl_window;
 }
 
-int __wrap_ioctl(int fd, int request, void *arg)
+void __wrap_SDL_DestroyWindow(uint32_t flags)
 {
-    if (request == (int)VIDIOC_QUERYCAP) {
-        DEBUG_STR("request", "VIDIOC_QUERYCAP");
-        struct v4l2_capability *cap = arg;
-        strncpy((char *)cap->card, "test", 32);
-        cap->capabilities = V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_STREAMING;
-        return 0;
-    }
-    else if (request == (int)VIDIOC_ENUM_FMT) {
-        DEBUG_STR("request", "VIDIOC_ENUM_FMT");
-        struct v4l2_fmtdesc *fmt = arg;
-        if (fmt->index == 0) {
-            fmt->pixelformat = V4L2_PIX_FMT_YUYV;
-            return 0;
-        }
-        else {
-            errno = EINVAL;
-            return -1;
-        }
-    }
-    else if (request == (int)VIDIOC_ENUM_FRAMESIZES) {
-        DEBUG_STR("request", "VIDIOC_ENUM_FRAMESIZES");
-        struct v4l2_frmsizeenum *frmsize = arg;
-        if (frmsize->index == 0) {
-            frmsize->type = V4L2_FRMSIZE_TYPE_STEPWISE;
-            frmsize->stepwise.step_width = 16;
-            frmsize->stepwise.step_height = 16;
-            frmsize->stepwise.min_width = 320;
-            frmsize->stepwise.min_height = 256;
-            frmsize->stepwise.max_width = 1024;
-            frmsize->stepwise.max_height = 768;
-            return 0;
-        }
-        else {
-            errno = EINVAL;
-            return -1;
-        }
-    }
-    else {
-        DEBUG_INT("request", request);
-    }
-    errno = EAGAIN;
-    return -1;
+    DEBUG_INT("__wrap_SDL_DestroyWindow", 1);
 }
 
-int __wrap_v4l2_open(const char *__file, int __oflag, ...)
-{
-    DEBUG_INT("v4l2_open", 1);
-    return 1;
-}
-
-int __wrap_v4l2_ioctl(int fd, int request, void *arg)
-{
-    if (request == (int)VIDIOC_QUERYCAP) {
-        DEBUG_STR("request", "VIDIOC_QUERYCAP");
-        struct v4l2_capability *cap = arg;
-        strncpy((char *)cap->card, "test_encoder", 32);
-        cap->capabilities = V4L2_CAP_VIDEO_M2M_MPLANE | V4L2_CAP_STREAMING;
-        return 0;
-    }
-    else if (request == (int)VIDIOC_ENUM_FMT) {
-        DEBUG_STR("request", "VIDIOC_ENUM_FMT");
-        struct v4l2_fmtdesc *fmt = arg;
-        if (fmt->index == 0 && fmt->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) {
-            fmt->pixelformat = V4L2_PIX_FMT_YUYV;
-            return 0;
-        }
-        if (fmt->index == 0 && fmt->type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE) {
-            fmt->pixelformat = V4L2_PIX_FMT_H264;
-            return 0;
-        }
-        else {
-            errno = EINVAL;
-            return -1;
-        }
-    }
-    else if (request == (int)VIDIOC_ENUM_FRAMESIZES) {
-        DEBUG_STR("request", "VIDIOC_ENUM_FRAMESIZES");
-        struct v4l2_frmsizeenum *frmsize = arg;
-        if (frmsize->index == 0) {
-            frmsize->type = V4L2_FRMSIZE_TYPE_STEPWISE;
-            frmsize->stepwise.step_width = 16;
-            frmsize->stepwise.step_height = 16;
-            frmsize->stepwise.min_width = 320;
-            frmsize->stepwise.min_height = 256;
-            frmsize->stepwise.max_width = 1024;
-            frmsize->stepwise.max_height = 768;
-            return 0;
-        }
-        else {
-            errno = EINVAL;
-            return -1;
-        }
-    }
-    else {
-        DEBUG_INT("request", request);
-    }
-    errno = EAGAIN;
-    return -1;
-}
+#endif
 
 static void test_utils_init(void **state)
 {
@@ -171,11 +206,16 @@ static void test_utils_init(void **state)
     utils_construct(&app);
 
     int res = utils_init(&app);
+
+    DEBUG_INT("utils_init", res);
+
     assert_int_not_equal(res, -1);
 
+    input.cleanup(&app);
+    for (int i = 0; filters[i].context != NULL && i < MAX_FILTERS; i++)
+        filters[i].cleanup(&app);
     for (int i = 0; outputs[i].context != NULL && i < MAX_OUTPUTS; i++)
         outputs[i].cleanup(&app);
-    input.cleanup(&app);
 }
 
 int main(int argc, char **argv)

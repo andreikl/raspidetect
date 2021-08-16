@@ -45,7 +45,7 @@ int is_abort = 0;
 static int exit_code = EX_SOFTWARE;
 
 struct input_t input;
-struct filter_t filters[MAX_OUTPUTS];
+struct filter_t filters[MAX_FILTERS];
 struct output_t outputs[MAX_OUTPUTS];
 
 void *worker_function(void *data)
@@ -373,9 +373,11 @@ error:
     //TODO: move to something like camara start
     // if (app.video_output == VIDEO_OUTPUT_STDOUT) {
     //    CALL(res = utils_camera_cleanup_h264_encoder(&app));
+    input.cleanup(&app);
+    for (int i = 0; filters[i].context != NULL && i < MAX_FILTERS; i++)
+        filters[i].cleanup(&app);
     for (int i = 0; outputs[i].context != NULL && i < MAX_OUTPUTS; i++)
         outputs[i].cleanup(&app);
-    input.cleanup(&app);
 
     fprintf(stderr, "worker_semaphore\n");
     CALL(sem_post(&app.worker_semaphore));

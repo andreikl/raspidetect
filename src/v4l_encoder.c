@@ -341,14 +341,18 @@ cleanup:
     return (char *)-1;
 }
 
-static const struct format_mapping_t *v4l_get_input_formats()
+static int v4l_get_in_formats(const struct format_mapping_t *formats[])
 {
-    return v4l_input_formats;
+    if (v4l_input_formats != NULL)
+        *formats = v4l_input_formats;
+    return ARRAY_SIZE(v4l_input_formats);
 }
 
-static const struct format_mapping_t *v4l_get_output_formats()
+static int v4l_get_out_formats(const struct format_mapping_t *formats[])
 {
-    return v4l_output_formats;
+    if (v4l_output_formats != NULL)
+        *formats = v4l_output_formats;
+    return ARRAY_SIZE(v4l_output_formats);
 }
 
 void v4l_encoder_construct(struct app_state_t *app)
@@ -368,8 +372,8 @@ void v4l_encoder_construct(struct app_state_t *app)
         filters[i].cleanup = v4l_cleanup;
 
         filters[i].get_buffer = v4l_get_buffer;
-        filters[i].get_input_formats = v4l_get_input_formats;
-        filters[i].get_output_formats = v4l_get_output_formats;
+        filters[i].get_in_formats = v4l_get_in_formats;
+        filters[i].get_out_formats = v4l_get_out_formats;
     }
 }
 
