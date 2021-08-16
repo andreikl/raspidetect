@@ -120,16 +120,16 @@
 #define KLIST_INIT(name, kltype_t, kmpfree_t)							\
 	KLIST_INIT2(static inline klib_unused, name, kltype_t, kmpfree_t)
 
-#define kliter_t(name) kl1_##name
-#define klist_t(name) kl_##name##_t
-#define kl_val(iter) ((iter)->data)
-#define kl_next(iter) ((iter)->next)
-#define kl_begin(kl) ((kl)->head)
-#define kl_end(kl) ((kl)->tail)
+#define KLISTER_T(name) kl1_##name
+#define KLIST_T(name) kl_##name##_t
+#define KL_VAL(iter) ((iter)->data)
+#define KL_NEXT(iter) ((iter)->next)
+#define KL_BEGIN(kl) ((kl)->head)
+#define KL_END(kl) ((kl)->tail)
 
-#define kl_init(name) kl_init_##name()
-#define kl_destroy(name, kl) kl_destroy_##name(kl)
-#define kl_pushp(name, kl) kl_pushp_##name(kl)
-#define kl_shift(name, kl, d) kl_shift_##name(kl, d)
+#define KL_INIT(name) kl_init_##name()
+#define KL_DESTROY(name, kl) kl_destroy_##name(kl)
+#define KL_PUSHP(name, kl) kl_pushp_##name(kl)
+#define KL_SHIFT(name, kl, d) kl_shift_##name(kl, d)
 
 #endif

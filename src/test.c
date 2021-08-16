@@ -27,8 +27,8 @@
 #ifdef V4L
     #include "linux/videodev2.h"
 
-    KHASH_MAP_INIT_STR(map_str, char*)
-    khash_t(map_str) *h;
+    KHASH_MAP_INIT_STR(argvs_hash_t, char*)
+    KHASH_T(argvs_hash_t) *h;
 
     int is_abort;
 
@@ -220,7 +220,7 @@ static void test_utils_init(void **state)
 
 int main(int argc, char **argv)
 {
-    h = kh_init(map_str);
+    h = KH_INIT(argvs_hash_t);
     utils_parse_args(argc, argv);
 
     const struct CMUnitTest tests[] = {
@@ -228,6 +228,6 @@ int main(int argc, char **argv)
     };
     int res = cmocka_run_group_tests(tests, NULL, NULL);
 
-    kh_destroy(map_str, h);
+    KH_DESTROY(argvs_hash_t, h);
     return res;
 }

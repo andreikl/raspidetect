@@ -38,8 +38,8 @@
 
 #define TICK_TIME 500000 //500 miliseconds
 
-KHASH_MAP_INIT_STR(map_str, char*)
-khash_t(map_str) *h;
+KHASH_MAP_INIT_STR(argvs_hash_t, char*)
+KHASH_T(argvs_hash_t) *h;
 
 int is_abort = 0;
 static int exit_code = EX_SOFTWARE;
@@ -440,17 +440,17 @@ int main(int argc, char** argv)
 {
     signal(SIGINT, signal_handler);
 
-    h = kh_init(map_str);
+    h = KH_INIT(argvs_hash_t);
     utils_parse_args(argc, argv);
 
-    unsigned k = kh_get(map_str, h, HELP);
-    if (k != kh_end(h)) {
+    unsigned k = KH_GET(argvs_hash_t, h, HELP);
+    if (k != KH_END(h)) {
         print_help();
     }
     else {
         main_function();
     }
 
-    kh_destroy(map_str, h);
+    KH_DESTROY(argvs_hash_t, h);
     return exit_code;
 }

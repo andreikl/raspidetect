@@ -266,6 +266,11 @@ struct format_mapping_t {
     int is_supported;
 };
 
+struct filter_reference_t {
+    int out_format;
+    int index;
+};
+
 struct input_t {
     void *context;
 
@@ -280,6 +285,7 @@ struct input_t {
 };
 
 struct filter_t {
+    char* name;
     void *context;
     int (*init)();
     int (*start)(int input_format, int output_format);
@@ -293,11 +299,13 @@ struct filter_t {
 };
 
 struct output_t {
+    int start_format;
+    struct filter_reference_t filters[MAX_FILTERS];
     void *context;
+
     int (*init)();
     int (*render)(char *buffer);
     void (*cleanup)();
-
     int (*get_formats)(const struct format_mapping_t *formats[]);
 };
 

@@ -26,8 +26,8 @@
 #include "opencv2/imgproc/imgproc_c.h"
 #endif
 
-KHASH_MAP_INIT_STR(map_str, char *)
-extern khash_t(map_str) *h;
+KHASH_MAP_INIT_STR(argvs_hash_t, char *)
+extern KHASH_T(argvs_hash_t) *h;
 
 extern struct input_t input;
 extern struct filter_t filters[MAX_FILTERS];
@@ -40,26 +40,26 @@ void utils_parse_args(int argc, char** argv)
 
     for (int i = 0; i < argc; i++) {
         if (argv[i][0] == '-') {
-            k = kh_put(map_str, h, argv[i], &ret);
-            kh_val(h, k) = (i + 1 < argc) ? argv[i + 1] : NULL;
+            k = KH_PUT(argvs_hash_t, h, argv[i], &ret);
+            KH_VAL(h, k) = (i + 1 < argc) ? argv[i + 1] : NULL;
         }
     }
 }
 
 const char *utils_read_str_value(const char *name, char *def_value)
 {
-    unsigned k = kh_get(map_str, h, name);
-    if (k != kh_end(h)) {
-        return kh_val(h, k);
+    unsigned k = KH_GET(argvs_hash_t, h, name);
+    if (k != KH_END(h)) {
+        return KH_VAL(h, k);
     }
     return def_value;
 }
 
 int utils_read_int_value(const char name[], int def_value)
 {
-    unsigned k = kh_get(map_str, h, name);
-    if (k != kh_end(h)) {
-        const char* value = kh_val(h, k);
+    unsigned k = KH_GET(argvs_hash_t, h, name);
+    if (k != KH_END(h)) {
+        const char* value = KH_VAL(h, k);
         return atoi(value);
     }
     return def_value;
@@ -202,7 +202,8 @@ KLIST_INIT(bfs_qeue_t, struct bfs_node_t, BFS_NODE_FREE)
 static int find_path(
     const struct format_mapping_t* in_f,
     const struct format_mapping_t* out_f,
-    int filters_len)
+    int filters_len,
+    struct output_t* output)
 {
     int matrix_len = filters_len + 2;
     int bfs_adjacency_matrix[MAX_FILTERS + 2][MAX_FILTERS + 2];
@@ -274,39 +275,58 @@ static int find_path(
 
     //Breadth-First-Search (BFS)
     int distance = -1;
-
-    klist_t(bfs_qeue_t) *bfs_qeue = kl_init(bfs_qeue_t);
+    KLIST_T(bfs_qeue_t) *bfs_qeue = KL_INIT(bfs_qeue_t);
     struct bfs_node_t node = {
         .index = 0,
         .distance = 0
     };
-    *kl_pushp(bfs_qeue_t, bfs_qeue) = node;
-
+    *KL_PUSHP(bfs_qeue_t, bfs_qeue) = node;
     int bfs_path[MAX_FILTERS + 2];
     memset(bfs_path, 0, sizeof(bfs_path));
-    bfs_path[node.index] = 1;
+    bfs_path[node.index] = distance;
 
-    while(bfs_qeue->size > 0 && distance < 0) {
-        kl_shift(bfs_qeue_t, bfs_qeue, &node);
+    while (bfs_qeue->size > 0 && distance < 0) {
+        KL_SHIFT(bfs_qeue_t, bfs_qeue, &node);
         for (int i = 0; i < matrix_len; i++) {
-            if (i == matrix_len - 1) {
-                distance = node.distance;
-                break;
-            }
             if (bfs_adjacency_matrix[node.index][i] > 0) {
                 if (bfs_path[i])
                     continue;
+
+                if (i == matrix_len - 1) {
+                    int d = distance = node.distance;
+                    if (d > 0) {
+                        d--;
+                        output->filters[d].out_format = bfs_adjacency_matrix[node.index][i];
+                        output->filters[d].index = node.index - 1;
+                    }
+                    while (d > 0) {
+                        // find previous filter
+                        for (int j = 1; j < ARRAY_SIZE(bfs_path); j++) {
+                            if (bfs_path[j] == d + 1) {
+                                output->filters[d - 1].out_format
+                                    = bfs_adjacency_matrix[node.index][i];
+                                output->filters[d-1].index = j - 1;
+                                break;
+                            }
+                        }
+                        d--;
+                    }
+                    output->start_format = in_f->format;
+                    break;
+                }
+
                 struct bfs_node_t next = {
                     .index = i,
                     .distance = node.distance + 1
                 };
-                *kl_pushp(bfs_qeue_t, bfs_qeue) = next;
+                *KL_PUSHP(bfs_qeue_t, bfs_qeue) = next;
+                bfs_path[i] = next.distance;
             }
         }
     }
 
     DEBUG_INT("distance", distance);
-    kl_destroy(bfs_qeue_t, bfs_qeue);
+    KL_DESTROY(bfs_qeue_t, bfs_qeue);
     return distance;
 }
 
@@ -342,8 +362,17 @@ int utils_init(struct app_state_t *app)
                 if (!out_f->is_supported)
                     continue;
 
-                if (find_path(in_f, out_f, filters_len) >= 0) {
-                    fprintf(stderr, "INFO: path found: %d -> %d\n", in_f->format, out_f->format);
+                if (find_path(in_f, out_f, filters_len, outputs + i) >= 0) {
+                    fprintf(stderr,
+                        "INFO: input -> %d\n",
+                        outputs[i].start_format);
+                    for (int k = 0; k < MAX_FILTERS && outputs[i].filters[k].out_format; k++) {
+                        int index = outputs[i].filters[k].index;
+                        fprintf(stderr,
+                            "INFO: filter(%s) -> %d\n",
+                            filters[index].name,
+                            outputs[i].filters[k].out_format);
+                    }
                 }
             }
         }

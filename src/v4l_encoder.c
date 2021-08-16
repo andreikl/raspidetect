@@ -364,6 +364,7 @@ void v4l_encoder_construct(struct app_state_t *app)
     if (i != MAX_FILTERS) {
         v4l.app = app;
 
+        filters[i].name = "v4l_encoder";
         filters[i].context = &v4l;
         filters[i].init = v4l_init;
         filters[i].start = v4l_start;
