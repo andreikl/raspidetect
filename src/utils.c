@@ -158,9 +158,6 @@ void utils_set_default_state(struct app_state_t *app)
     app->worker_total_objects = 10;
     app->worker_thread_res = -1;
     app->verbose = utils_read_int_value(VERBOSE, VERBOSE_DEF);
-#ifdef RFB
-    app->rfb.thread_res = -1;
-#endif
 #ifdef TENSORFLOW
     app->model_path = utils_read_str_value(TFL_MODEL_PATH, TFL_MODEL_PATH_DEF);
 #elif DARKNET
@@ -188,7 +185,7 @@ void utils_construct(struct app_state_t *app)
 
 #ifdef RFB
     if ((app->video_output & VIDEO_OUTPUT_RFB) == VIDEO_OUTPUT_RFB)
-        return rfb_construct(&app);
+        rfb_construct(&app);
 #endif //RFB
 }
 

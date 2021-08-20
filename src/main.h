@@ -133,6 +133,12 @@
         strerror(errno), errno, __FILE__, __LINE__, __FUNCTION__); \
 }
 
+#define CALL_CUSTOM_MESSAGE(call, res) \
+{ \
+    fprintf(stderr, "ERROR: "#call" returned error: (%d)\n%s:%d - %s\n", \
+        res, __FILE__, __LINE__, __FUNCTION__); \
+}
+
 #define CALL_2(call, error) \
 { \
     int __res = call; \
@@ -251,15 +257,6 @@ struct control_state_t {
 };
 #endif //CONTROL
 
-#ifdef RFB
-struct rfb_state_t {
-    pthread_t thread;
-    int thread_res;
-    int serv_socket;
-    int client_socket;
-};
-#endif //RFB
-
 struct format_mapping_t {
     int format;
     int internal_format;
@@ -366,10 +363,6 @@ struct app_state_t {
 
 #ifdef OPENVG
     struct openvg_state_t openvg;
-#endif
-
-#ifdef RFB
-    struct rfb_state_t rfb;
 #endif
 
     struct temperature_state_t temperature;

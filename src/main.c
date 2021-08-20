@@ -32,10 +32,6 @@
 #include "control.h"
 #endif //CONTROL
 
-#ifdef RFB
-#include "rfb.h"
-#endif //RFB
-
 #define TICK_TIME 500000 //500 miliseconds
 
 KHASH_MAP_INIT_STR(argvs_hash_t, char*)

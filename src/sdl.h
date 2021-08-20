@@ -52,4 +52,4 @@ struct sdl_state_t {
 
 void sdl_construct(struct app_state_t *app);
 
-#endif // main_h
+#endif // sdl_h
