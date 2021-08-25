@@ -111,7 +111,7 @@ ifeq ($(CMOCKA), 1)
 endif
 
 
-OBJ += utils.o
+OBJ += utils.o app.o
 OBJS = $(addprefix ${BUILD_DIR}/obj/, $(OBJ))
 
 

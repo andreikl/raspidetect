@@ -480,8 +480,8 @@ int openvg_init(app_state_t *state)
     }
 
     if (state->verbose) {
-        fprintf(stderr, "INFO: Supported EGL APIS: %s\n", eglQueryString(state->openvg.display, EGL_CLIENT_APIS));
-        fprintf(stderr, "INFO: EGL API %d.%d\n", state->openvg.egl_maj, state->openvg.egl_min);
+        DEBUG("Supported EGL APIS: %s", eglQueryString(state->openvg.display, EGL_CLIENT_APIS));
+        DEBUG("EGL API %d.%d", state->openvg.egl_maj, state->openvg.egl_min);
     }
    
     return 0;

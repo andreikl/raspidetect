@@ -50,15 +50,6 @@ void utils_parse_args(int argc, char** argv);
 const char *utils_read_str_value(const char name[], char *def_value);
 int utils_read_int_value(const char name[], int def_value);
 
-const char* utils_get_video_format_str(int format);
-int utils_get_video_format_int(const char* format);
-const char* utils_get_video_output_str(int format);
-int utils_get_video_output_int(const char* format);
-
-void utils_set_default_state(struct app_state_t *app);
-void utils_construct(struct app_state_t *app);
-int utils_init(struct app_state_t *app);
-
 int utils_fill_buffer(const char *path, char *buffer, int buffer_size, size_t *read);
 void *utils_read_file(const char *path, size_t *len);
 void utils_write_file(const char *path, unsigned char *data, int width, int height);

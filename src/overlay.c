@@ -37,7 +37,7 @@ int overlay_create(struct app_state_t *app)
         return -1;
     }
     if (app->verbose) {
-        fprintf(stderr, "INFO: overlay_stride %d\n", app->overlay_stride);
+        DEBUG("overlay_stride %d", app->overlay_stride);
     }
 
     return 0;

@@ -20,7 +20,7 @@
 
 int darknet_process(app_state_t *state)
 {
-    fprintf(stderr, "DEBUG: darknet start\n");
+    DEBUG("darknet start");
 
     image im = make_image(state->worker_width, state->worker_height, 3);
 
@@ -41,13 +41,13 @@ int darknet_process(app_state_t *state)
     fprintf(stderr, "ERROR: 64bit darknet conversion isn't implemented\n");
  #endif
 
-    fprintf(stderr, "DEBUG: darknet about to detect\n");
+    DEBUG("darknet about to detect");
 
     network_predict(state->dn.dn_net, im.data);
-    fprintf(stderr, "DEBUG: darknet detected\n");
+    DEBUG("darknet detected");
 
     detection *dets = get_network_boxes(state->dn.dn_net, 1, 1, THRESHOLD, 0, 0, 0, &state->worker_objects);
-    fprintf(stderr, "DEBUG: darknet about to freed\n");
+    DEBUG("darknet about to freed");
 
     free_detections(dets, state->worker_objects);
     free_image(im);
@@ -62,9 +62,7 @@ int darknet_create(app_state_t *state)
         return -1;
     }
     if (state->verbose) {
-        fprintf(stderr, "INFO: net width: %d, height: %d\n",
-        state->dn.dn_net->w,
-        state->dn.dn_net->h);
+        DEBUG("net width: %d, height: %d", state->dn.dn_net->w, state->dn.dn_net->h);
     }
     set_batch_network(state->dn.dn_net, 1);
 

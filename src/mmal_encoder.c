@@ -144,7 +144,7 @@ static void h264_input_buffer_callback(MMAL_PORT_T *port, MMAL_BUFFER_HEADER_T *
 {
     app_state_t *app = (app_state_t *) port->userdata;
     if (app->verbose) {
-    //    fprintf(stderr, "h264_input_buffer_callback: %s\n", __func__);
+    //    DEBUG("h264_input_buffer_callback: %s", __func__);
     }
     mmal_buffer_header_release(buffer);
 }
@@ -329,8 +329,8 @@ int camera_open(app_state_t *app)
     video_port->userdata = (struct MMAL_PORT_USERDATA_T *)app;
 
     // if (app->verbose) {
-    //     fprintf(stderr, "INFO: camera video buffer_size = %d\n", video_port->buffer_size);
-    //     fprintf(stderr, "INFO: camera video buffer_num = %d\n", video_port->buffer_num);
+    //     DEBUG("camera video buffer_size = %d", video_port->buffer_size);
+    //     DEBUG("camera video buffer_num = %d", video_port->buffer_num);
     // }
     // ------
 
@@ -354,7 +354,7 @@ int camera_open(app_state_t *app)
     fill_port_buffer(video_port, video_port_pool);
 
     if (app->verbose) {
-        fprintf(stderr, "INFO: Camera has been created\n");
+        DEBUG("Camera has been created");
     }
 
     return 0;
@@ -450,11 +450,10 @@ int camera_create_h264_encoder(app_state_t *app)
     }
 
     // if (app->verbose) {
-    //     fprintf(stderr, "INFO: encoder h264 input buffer_size = %d\n", input_port->buffer_size);
-    //     fprintf(stderr, "INFO: encoder h264 input buffer_num = %d\n", input_port->buffer_num);
-
-    //     fprintf(stderr, "INFO: encoder h264 output buffer_size = %d\n", output_port->buffer_size);
-    //     fprintf(stderr, "INFO: encoder h264 output buffer_num = %d\n", output_port->buffer_num);
+    //     DEBUG("encoder h264 input buffer_size = %d", input_port->buffer_size);
+    //     DEBUG("encoder h264 input buffer_num = %d", input_port->buffer_num);
+    //     DEBUG("encoder h264 output buffer_size = %d", output_port->buffer_size);
+    //     DEBUG("encoder h264 output buffer_num = %d", output_port->buffer_num);
     // }
 
     app->mmal.h264_input_pool = input_port_pool = (MMAL_POOL_T *) mmal_port_pool_create(input_port,
@@ -483,7 +482,7 @@ int camera_create_h264_encoder(app_state_t *app)
     app->mmal.encoder_h264 = encoder;
 
     if (app->verbose) {
-        fprintf(stderr, "INFO: Encoder h264 has been created\n");
+        DEBUG("Encoder h264 has been created");
     }
     return 0;
 

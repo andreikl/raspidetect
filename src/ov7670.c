@@ -72,7 +72,7 @@ const char* debug_file;
 
 //i2c_open(node);
 //ret = i2c_read16(OV7670_ADDRESS, OV7670_PID);
-//printf("Version: %d", ret);
+//DEBUG("Version: %d", ret);
 //i2c_close();
 //const char* input_file = read_str_value(INPUT, INPUT_DEF);
 //const char* output_file = read_str_value(OUTPUT, OUTPUT_DEF);

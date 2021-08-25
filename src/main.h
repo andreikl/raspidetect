@@ -27,7 +27,7 @@
 #define VIDEO_FORMAT "-f"
 #define VIDEO_FORMAT_DEF VIDEO_FORMAT_YUV422_STR
 #define VIDEO_OUTPUT "-o"
-#define VIDEO_OUTPUT_DEF VIDEO_OUTPUT_SDL_STR
+#define VIDEO_OUTPUT_DEF VIDEO_OUTPUT_SDL_STR","VIDEO_OUTPUT_RFB_STR
 
 #define PORT "-p"
 #define PORT_DEF 5900
@@ -106,25 +106,9 @@
     } \
 }
 
-#define DEBUG_INT(text, value) \
+#define DEBUG(format, ...) \
 { \
-    fprintf(stderr, "INFO: %s, "#text": %d\n", \
-        __FUNCTION__, \
-        value); \
-}
-
-#define DEBUG_PTR(text, value) \
-{ \
-    fprintf(stderr, "INFO: %s, "#text": %p\n", \
-        __FUNCTION__, \
-        value); \
-}
-
-#define DEBUG_STR(text, value) \
-{ \
-    fprintf(stderr, "INFO: %s, "#text": %s\n", \
-        __FUNCTION__, \
-        value); \
+    fprintf(stderr, "INFO: %s, "#format"\n", __FUNCTION__, ##__VA_ARGS__); \
 }
 
 #define CALL_MESSAGE(call, res) \
@@ -269,6 +253,7 @@ struct filter_reference_t {
 };
 
 struct input_t {
+    char* name;
     void *context;
 
     int (*init)();
@@ -296,9 +281,11 @@ struct filter_t {
 };
 
 struct output_t {
+    char* name;
+    void *context;
+
     int start_format;
     struct filter_reference_t filters[MAX_FILTERS];
-    void *context;
 
     int (*init)();
     int (*render)(char *buffer);

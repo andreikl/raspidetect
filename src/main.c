@@ -22,6 +22,7 @@
 
 #include "main.h"
 #include "utils.h"
+#include "app.h"
 #include "overlay.h"
 
 #ifdef OPENVG
@@ -48,7 +49,7 @@ void *worker_function(void *data)
 {
     struct app_state_t* app = (struct app_state_t*) data;
     if (app->verbose) {
-        fprintf(stderr, "INFO: Worker thread has been started\n");
+        DEBUG("Worker thread has been started");
     }
     while (!is_abort) {
         // ----- fps
@@ -84,16 +85,16 @@ void *worker_function(void *data)
 static void signal_handler(int signal_number)
 {
     if (signal_number == SIGUSR1) {
-        fprintf(stderr, "INFO: SIGUSR1\n"); 
+        DEBUG("SIGUSR1"); 
     } else {
-        fprintf(stderr, "INFO: Other signal %d\n", signal_number);
+        DEBUG("Other signal %d", signal_number);
     }
     is_abort = 1;
 }
 
 static void print_help()
 {
-    printf("ov5647 [options]\n");
+    printf("raspidetect [options]\n");
     printf("options:\n");
     printf("\n");
     printf("%s: help\n", HELP);
@@ -121,21 +122,19 @@ static int main_function()
     char buffer[MAX_DATA];
     struct app_state_t app;
 
-    utils_set_default_state(&app);
-    utils_construct(&app);
-    CALL(utils_init(&app), error);
+    app_set_default_state(&app);
+    app_construct(&app);
+    CALL(app_init(&app), error);
 
     if (app.verbose) {
-        fprintf(stderr, "INFO: camera_num: %d\n", app.camera_num);
-        fprintf(stderr, "INFO: camera_name: %s\n", app.camera_name);
-        fprintf(stderr, "INFO: camera max size: %d, %d\n", app.camera_max_width,
-            app.camera_max_height);
-        fprintf(stderr, "INFO: video size: %d, %d\n", app.video_width, app.video_height);
-        fprintf(stderr, "INFO: video format: %s\n", utils_get_video_format_str(app.video_format));
-        fprintf(stderr, "INFO: video output: %s\n", utils_get_video_output_str(app.video_output));
-
-        fprintf(stderr, "INFO: window size: %d, %d\n", app.window_width, app.window_height);
-        fprintf(stderr, "INFO: worker size: %d, %d\n", app.worker_width, app.worker_height);
+        DEBUG("camera_num: %d", app.camera_num);
+        DEBUG("camera_name: %s", app.camera_name);
+        DEBUG("camera max size: %d, %d", app.camera_max_width, app.camera_max_height);
+        DEBUG("video size: %d, %d", app.video_width, app.video_height);
+        DEBUG("video format: %s", app_get_video_format_str(app.video_format));
+        DEBUG("video output: %s", app_get_video_output_str(app.video_output));
+        DEBUG("window size: %d, %d", app.window_width, app.window_height);
+        DEBUG("worker size: %d, %d", app.worker_width, app.worker_height);
     }
 
 #ifdef CONTROL
@@ -223,7 +222,7 @@ static int main_function()
     while (!is_abort) {
         // for debug
         // usleep(TICK_TIME);
-        // fprintf(stdout, "is_abort: %d\n", is_abort);
+        // DEBUG("is_abort: %d", is_abort);
 
         CALL(res = input.process_frame());
         if (res != 0) {
@@ -369,17 +368,14 @@ error:
     //TODO: move to something like camara start
     // if (app.video_output == VIDEO_OUTPUT_STDOUT) {
     //    CALL(res = utils_camera_cleanup_h264_encoder(&app));
-    input.cleanup(&app);
-    for (int i = 0; filters[i].context != NULL && i < MAX_FILTERS; i++)
-        filters[i].cleanup(&app);
-    for (int i = 0; outputs[i].context != NULL && i < MAX_OUTPUTS; i++)
-        outputs[i].cleanup(&app);
 
-    fprintf(stderr, "worker_semaphore\n");
+    app_cleanup(&app);
+
+    DEBUG("worker_semaphore");
     CALL(sem_post(&app.worker_semaphore));
     CALL(sem_destroy(&app.worker_semaphore));
 
-    fprintf(stderr, "buffer_semaphore\n");
+    DEBUG("buffer_semaphore");
     CALL(sem_post(&app.buffer_semaphore));
     CALL(sem_destroy(&app.buffer_semaphore));
 
@@ -389,7 +385,7 @@ error:
         CALL_MESSAGE(pthread_mutex_destroy(&app.buffer_mutex), -1);
     }
 
-    fprintf(stderr, "worker_thread\n");
+    DEBUG("worker_thread");
     if (!app.worker_thread_res) {
         res = pthread_join(app.worker_thread, NULL);
         if (res != 0) {
@@ -427,7 +423,7 @@ error:
     openvg_destroy(&app);
     dispmanx_destroy(&app);
 #endif
-    fprintf(stderr, "exit\n");
+    DEBUG("exit");
 
     return exit_code;
 }

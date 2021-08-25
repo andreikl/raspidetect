@@ -142,7 +142,7 @@ static void *rfb_function(void *data)
     int res;
     const int one = 1;    
     if (rfb.app->verbose) {
-        fprintf(stderr, "INFO: RFB thread has been started\n");
+        DEBUG("RFB thread has been started");
     }
     while (!is_abort) {
         struct sockaddr_in client_addr;
@@ -172,7 +172,7 @@ static void *rfb_function(void *data)
             rfb_error);
 
         if (rfb.app->verbose) {
-            fprintf(stderr, "INFO: Client rfb version. %s\n", client_rfb_version);
+            DEBUG("Client rfb version. %s", client_rfb_version);
         }
 
         struct rfb_security_message_t security = {
@@ -189,7 +189,7 @@ static void *rfb_function(void *data)
         ), rfb_error);
 
         if (rfb.app->verbose) {
-            fprintf(stderr, "INFO: Client rfb security type. %d\n", client_security_type);
+            DEBUG("Client rfb security type. %d", client_security_type);
         }
     
         uint32_t success = 0;
@@ -199,7 +199,7 @@ static void *rfb_function(void *data)
         CALL(recv(rfb.client_socket, (char *)&shared_flag, sizeof(shared_flag), 0), rfb_error);
 
         if (rfb.app->verbose) {    
-            fprintf(stderr, "INFO: Client rfb shared flag. %d\n", shared_flag);
+            DEBUG("Client rfb shared flag. %d", shared_flag);
         }
     
         struct rfb_server_init_message_t init_message = {
@@ -227,10 +227,7 @@ static void *rfb_function(void *data)
         memset(init_message.name, 0, sizeof(init_message.name));
         memcpy(init_message.name, APP_NAME, strlen(APP_NAME));
 
-        // fprintf(stderr,
-        //     "INFO: il: %d, nl: %d\n",
-        //     sizeof(init_message.name),
-        //     sizeof(init_message));
+        // DEBUG("il: %d, nl: %d", sizeof(init_message.name), sizeof(init_message));
         CALL(send(rfb.client_socket, (char *)&init_message, sizeof(init_message), 0), rfb_error);
 
         // if (camera_create_h264_encoder(app)) {
@@ -244,25 +241,28 @@ static void *rfb_function(void *data)
             CALL(res = recv(rfb.client_socket, (char *)&type, sizeof(type), 0), rfb_error);
             if (res == 0) {
                 if (rfb.app->verbose)
-                    fprintf(stderr, "INFO: Client has closed the connection\n");
+                    DEBUG("Client has closed the connection");
                 break;
             }
 
             if (type.message_type == RFBSetPixelFormat)  {
                 struct rfb_pixel_format_request_message_t format;
                 CALL(recv(rfb.client_socket, (char *)&format, sizeof(format), 0), rfb_error);
-                fprintf(stderr, "INFO: RFBSetPixelFormat message.\n");
-                fprintf(stderr, "INFO: bpp: %d, depth: %d, big_endian: %d, true_color %d.\n", format.f.bpp, format.f.depth, format.f.big_endian, format.f.true_color);
-                fprintf(stderr, "INFO: red_max: %d, green_max: %d, blue_max: %d.\n", ntohs(format.f.red_max), ntohs(format.f.green_max), ntohs(format.f.blue_max));
-                fprintf(stderr, "INFO: red_shift: %d, green_shift: %d, blue_shift: %d.\n", format.f.red_shift, format.f.green_shift, format.f.blue_shift);
-                
+                DEBUG("RFBSetPixelFormat message.");
+                DEBUG("bpp: %d, depth: %d, big_endian: %d, true_color %d.",
+                    format.f.bpp, format.f.depth, format.f.big_endian, format.f.true_color);
+                DEBUG("red_max: %d, green_max: %d, blue_max: %d.", ntohs(format.f.red_max),
+                    ntohs(format.f.green_max), ntohs(format.f.blue_max));
+                DEBUG("red_shift: %d, green_shift: %d, blue_shift: %d.", format.f.red_shift,
+                    format.f.green_shift, format.f.blue_shift);
             }
             else if (type.message_type == RFBSetEncodings) {
-                fprintf(stderr, "INFO: RFBSetEncodings message.\n");
+                DEBUG("RFBSetEncodings message.");
                 struct rfb_set_encoding_request_message_t encoding;
                 CALL(recv(rfb.client_socket, (char *)&encoding, sizeof(encoding), 0), rfb_error);
 
-                fprintf(stderr, "INFO: RFBSetEncodings message, encodings: %d\n", ntohs(encoding.number_of_encodings));
+                DEBUG("RFBSetEncodings message, encodings: %d",
+                    ntohs(encoding.number_of_encodings));
                 int32_t e;
                 for (int i = 0; i < ntohs(encoding.number_of_encodings); i++) {
                     CALL(recv(rfb.client_socket, (char *)&e, sizeof(e), 0), rfb_error);
@@ -283,7 +283,7 @@ static void *rfb_function(void *data)
                     goto rfb_error;
                 }*/
             } else if (type.message_type == RFBKeyEvent) {
-                fprintf(stderr, "INFO: RFBKeyEvent message.\n");
+                DEBUG("RFBKeyEvent message.");
                 uint8_t downFlag;
                 uint16_t padding;
                 uint32_t key;
@@ -291,7 +291,7 @@ static void *rfb_function(void *data)
                 CALL(recv(rfb.client_socket, (char *)&padding, sizeof(padding), 0), rfb_error);
                 CALL(recv(rfb.client_socket, (char *)&key, sizeof(key), 0), rfb_error);
             } else if (type.message_type == RFBPointerEvent) {
-                fprintf(stderr, "INFO: RFBPointerEvent message.\n");
+                DEBUG("RFBPointerEvent message.");
                 uint8_t buttonMask;
                 uint16_t xPos;
                 uint16_t yPos;
@@ -300,7 +300,7 @@ static void *rfb_function(void *data)
                 CALL(recv(rfb.client_socket, (char *)&xPos, sizeof(xPos), 0), rfb_error);
                 CALL(recv(rfb.client_socket, (char *)&yPos, sizeof(yPos), 0), rfb_error);
             } else if (type.message_type == RFBClientCutText) {
-                fprintf(stderr, "INFO: RFBClientCutText message.\n");
+                DEBUG("RFBClientCutText message.");
                 char padding[3];
                 uint32_t length;
                 CALL(recv(rfb.client_socket, padding, sizeof(padding), 0), rfb_error);
@@ -349,11 +349,11 @@ static int rfb_init()
     CALL(bind(rfb.serv_socket, (struct sockaddr *)&serv_addr, sizeof(serv_addr)), cleanup);
     CALL(listen(rfb.serv_socket, RFB_MAX_CONNECTIONS), cleanup);
 
-    rfb.thread_res = pthread_create(&rfb.thread, NULL, rfb_function, NULL);
+    /*rfb.thread_res = pthread_create(&rfb.thread, NULL, rfb_function, NULL);
     if (rfb.thread_res) {
         CALL_CUSTOM_MESSAGE(pthread_create(&rfb.thread, NULL, rfb_function, NULL), rfb.thread_res);
         goto cleanup;
-    }
+    }*/
     return 0;
 cleanup:
     errno = EAGAIN;
@@ -389,8 +389,11 @@ int rfb_send_frame()
         return -1;
     }
 
-    //fprintf(stderr, "INFO: r: %d, x: %d, y: %d, w: %d, h: %d\n", ntohs(update_message.number_of_rectangles), ntohs(update_message.x), ntohs(update_message.y), ntohs(update_message.width), ntohs(update_message.height));
-    //fprintf(stderr, "INFO: t: %d, e: %d, size: %d, len: %d\n", update_message.message_type, ntohl(update_message.encoding_type), sizeof(update_message), length);
+    //DEBUG("r: %d, x: %d, y: %d, w: %d, h: %d", ntohs(update_message.number_of_rectangles),
+    //  ntohs(update_message.x), ntohs(update_message.y), ntohs(update_message.width),
+    //  ntohs(update_message.height));
+    //DEBUG("t: %d, e: %d, size: %d, len: %d", update_message.message_type,
+    //  ntohl(update_message.encoding_type), sizeof(update_message), length);
 
     /*res = pthread_mutex_lock(&rfb.app->mmal.h264_mutex);
     if (res) {
@@ -450,6 +453,7 @@ void rfb_construct(struct app_state_t *app)
 
     if (i != MAX_OUTPUTS) {
         rfb.app = app;
+        outputs[i].name = "rfb";
         outputs[i].context = &rfb;
         outputs[i].init = rfb_init;
         //outputs[i].render = sdl_render_yuv;

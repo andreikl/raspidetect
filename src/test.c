@@ -19,6 +19,7 @@
 #include "khash.h"
 #include "main.h"
 #include "utils.h"
+#include "app.h"
 
 #include <stdarg.h> //va_list
 #include <setjmp.h> //jmp_buf
@@ -38,34 +39,34 @@
 
     int __wrap___xstat(int __ver, const char *__filename, struct stat *__stat_buf)
     {
-        DEBUG_INT("stat", 1);
+        DEBUG("stat");
         __stat_buf->st_mode = __S_IFCHR;
         return 0;
     }
 
     int __wrap_open(const char *__file, int __oflag, ...)
     {
-        DEBUG_INT("open", 1);
+        DEBUG("open");
         return 1;
     }
 
     int __wrap_close(int fd)
     {
-        DEBUG_INT("close", 1);
+        DEBUG("close");
         return 0;
     }
 
     int __wrap_ioctl(int fd, int request, void *arg)
     {
         if (request == (int)VIDIOC_QUERYCAP) {
-            DEBUG_STR("request", "VIDIOC_QUERYCAP");
+            DEBUG("request: %s", "VIDIOC_QUERYCAP");
             struct v4l2_capability *cap = arg;
             strncpy((char *)cap->card, "test", 32);
             cap->capabilities = V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_STREAMING;
             return 0;
         }
         else if (request == (int)VIDIOC_ENUM_FMT) {
-            DEBUG_STR("request", "VIDIOC_ENUM_FMT");
+            DEBUG("request: %s", "VIDIOC_ENUM_FMT");
             struct v4l2_fmtdesc *fmt = arg;
             if (fmt->index == 0) {
                 fmt->pixelformat = V4L2_PIX_FMT_YUYV;
@@ -77,7 +78,7 @@
             }
         }
         else if (request == (int)VIDIOC_ENUM_FRAMESIZES) {
-            DEBUG_STR("request", "VIDIOC_ENUM_FRAMESIZES");
+            DEBUG("request: %s", "VIDIOC_ENUM_FRAMESIZES");
             struct v4l2_frmsizeenum *frmsize = arg;
             if (frmsize->index == 0) {
                 frmsize->type = V4L2_FRMSIZE_TYPE_STEPWISE;
@@ -95,7 +96,7 @@
             }
         }
         else {
-            DEBUG_INT("request", request);
+            DEBUG("request: %d", request);
         }
         errno = EAGAIN;
         return -1;
@@ -103,21 +104,21 @@
 
     int __wrap_v4l2_open(const char *__file, int __oflag, ...)
     {
-        DEBUG_INT("v4l2_open", 1);
+        DEBUG("v4l2_open");
         return 1;
     }
 
     int __wrap_v4l2_ioctl(int fd, int request, void *arg)
     {
         if (request == (int)VIDIOC_QUERYCAP) {
-            DEBUG_STR("request", "VIDIOC_QUERYCAP");
+            DEBUG("request: %s", "VIDIOC_QUERYCAP");
             struct v4l2_capability *cap = arg;
             strncpy((char *)cap->card, "test_encoder", 32);
             cap->capabilities = V4L2_CAP_VIDEO_M2M_MPLANE | V4L2_CAP_STREAMING;
             return 0;
         }
         else if (request == (int)VIDIOC_ENUM_FMT) {
-            DEBUG_STR("request", "VIDIOC_ENUM_FMT");
+            DEBUG("request: %s", "VIDIOC_ENUM_FMT");
             struct v4l2_fmtdesc *fmt = arg;
             if (fmt->index == 0 && fmt->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) {
                 fmt->pixelformat = V4L2_PIX_FMT_YUYV;
@@ -133,7 +134,7 @@
             }
         }
         else if (request == (int)VIDIOC_ENUM_FRAMESIZES) {
-            DEBUG_STR("request", "VIDIOC_ENUM_FRAMESIZES");
+            DEBUG("request %s", "VIDIOC_ENUM_FRAMESIZES");
             struct v4l2_frmsizeenum *frmsize = arg;
             if (frmsize->index == 0) {
                 frmsize->type = V4L2_FRMSIZE_TYPE_STEPWISE;
@@ -151,7 +152,7 @@
             }
         }
         else {
-            DEBUG_INT("request", request);
+            DEBUG("request: %d", request);
         }
         errno = EAGAIN;
         return -1;
@@ -164,7 +165,7 @@
 static SDL_Window *sdl_window = (SDL_Window *)1;
 int __wrap_SDL_Init(uint32_t flags)
 {
-    DEBUG_INT("SDL_Init", 1);
+    DEBUG("SDL_Init");
     return 0;
 }
 
@@ -173,13 +174,13 @@ SDL_Window *__wrap_SDL_CreateWindow(
     int x, int y, int w,
     int h, uint32_t flags)
 {
-    DEBUG_INT("__wrap_SDL_CreateWindow", 1);
+    DEBUG("__wrap_SDL_CreateWindow");
     return sdl_window;
 }
 
 void __wrap_SDL_DestroyWindow(uint32_t flags)
 {
-    DEBUG_INT("__wrap_SDL_DestroyWindow", 1);
+    DEBUG("__wrap_SDL_DestroyWindow");
 }
 
 #endif
@@ -202,20 +203,16 @@ static void test_utils_init(void **state)
     will_return(__wrap_read, cast_ptr_to_largest_integral_type("54321"));
     will_return(__wrap_read, 5);*/
 
-    utils_set_default_state(&app);
-    utils_construct(&app);
+    app_set_default_state(&app);
+    app_construct(&app);
 
-    int res = utils_init(&app);
+    int res = app_init(&app);
 
-    DEBUG_INT("utils_init", res);
+    DEBUG("res: %d", res);
 
     assert_int_not_equal(res, -1);
 
-    input.cleanup(&app);
-    for (int i = 0; filters[i].context != NULL && i < MAX_FILTERS; i++)
-        filters[i].cleanup(&app);
-    for (int i = 0; outputs[i].context != NULL && i < MAX_OUTPUTS; i++)
-        outputs[i].cleanup(&app);
+    app_cleanup(&app);
 }
 
 int main(int argc, char **argv)

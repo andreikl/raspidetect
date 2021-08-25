@@ -233,6 +233,7 @@ void sdl_construct(struct app_state_t *app)
 
     if (i != MAX_OUTPUTS) {
         sdl.app = app;
+        outputs[i].name = "sdl";
         outputs[i].context = &sdl;
         outputs[i].init = sdl_init;
         outputs[i].render = sdl_render_yuv;

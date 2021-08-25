@@ -33,11 +33,11 @@ int tensorflow_process(app_state_t *state)
     }
 
     if (state->verbose) {
-        //fprintf(stderr, "INFO: the image has been classified\n");
+        //DEBUG("the image has been classified");
 
         /*for (int i = 0; i < TfLiteInterpreterGetOutputTensorCount(state->tf_interpreter); i++) {
             const TfLiteTensor *tensor = TfLiteInterpreterGetOutputTensor(state->tf_interpreter, i);
-            fprintf(stderr, "INFO: Output tensor %d name: %s, type: %s, dimensions: %d, size: %d\n",
+            DEBUG("Output tensor %d name: %s, type: %s, dimensions: %d, size: %d",
                 i,
                 TfLiteTensorName(tensor),
                 TfLiteTypeGetName(TfLiteTensorType(tensor)),
@@ -52,13 +52,13 @@ int tensorflow_process(app_state_t *state)
                 return NULL;
             }
 
-            fprintf(stderr, "INFO: tensor %d dimensions size: ", i);
+            DEBUG("tensor %d dimensions size: ", i);
             for (int j = 0; j < TfLiteTensorNumDims(tensor); j++) {
                 fprintf(stderr, "%d ", TfLiteTensorDim(tensor, j));
             }
             fprintf(stderr, "\n");
 
-            fprintf(stderr, "INFO: data %d: \n", i);
+            DEBUG("data %d:", i);
             float *fdata = (float *)data;
             for (int j = 0; j < TfLiteTensorByteSize(tensor) / sizeof(float); j++) {
                 fprintf(stderr, "%.2f ", fdata[j]);
@@ -87,7 +87,7 @@ int tensorflow_process(app_state_t *state)
     }
 
     // if (state->verbose) {
-    //     fprintf(stderr, "INFO: scores: ");
+    //     DEBUG("scores:");
     //     for (int i = 0; i < state->worker_total_objects; i++) {
     //         fprintf(stderr, "%.2f ", state->worker_scores[i]);
     //     }
@@ -102,7 +102,7 @@ int tensorflow_process(app_state_t *state)
 int tensorflow_create(app_state_t *state)
 {
     if (state->verbose) {
-        fprintf(stderr, "INFO: TensorFlow Lite C library version %s\n", TfLiteVersion());
+        DEBUG("TensorFlow Lite C library version %s", TfLiteVersion());
     }
 
     state->tf.tf_model = TfLiteModelCreateFromFile(state->model_path);
@@ -124,8 +124,8 @@ int tensorflow_create(app_state_t *state)
         return -1;
     }
     if (state->verbose) {
-        fprintf(stderr, "INFO: Input tensors count: %d\n", TfLiteInterpreterGetInputTensorCount(state->tf.tf_interpreter));
-        fprintf(stderr, "INFO: Output tensors count: %d\n", TfLiteInterpreterGetOutputTensorCount(state->tf.tf_interpreter));
+        DEBUG("Input tensors count: %d", TfLiteInterpreterGetInputTensorCount(state->tf.tf_interpreter));
+        DEBUG("Output tensors count: %d", TfLiteInterpreterGetOutputTensorCount(state->tf.tf_interpreter));
     }
 
     if (TfLiteInterpreterGetInputTensorCount(state->tf.tf_interpreter) != 1) {
@@ -154,11 +154,11 @@ int tensorflow_create(app_state_t *state)
     }
 
     if (state->verbose) {
-        fprintf(stderr, "INFO: Input tensor dimensions: %d\n", TfLiteTensorNumDims(state->tf.tf_input_image));
-        fprintf(stderr, "INFO: Input tensor name: %s, type %s\n",
+        DEBUG("Input tensor dimensions: %d", TfLiteTensorNumDims(state->tf.tf_input_image));
+        DEBUG("Input tensor name: %s, type %s",
             TfLiteTensorName(state->tf.tf_input_image),
             TfLiteTypeGetName(TfLiteTensorType(state->tf.tf_input_image)));
-        fprintf(stderr, "INFO: Input tensor width %d, height %d, bits per pixel %d, size: %d\n",
+        DEBUG("Input tensor width %d, height %d, bits per pixel %d, size: %d",
             state->worker_width,
             state->worker_height,
             state->worker_bits_per_pixel,
@@ -201,7 +201,7 @@ int tensorflow_create(app_state_t *state)
     }
     state->tf_num_detections = (int)f_num_detections;
     if (state->verbose) {
-        fprintf(stderr, "INFO: Number of detections %d %.1f\n", state->tf_num_detections, f_num_detections);
+        DEBUG("Number of detections %d %.1f", state->tf_num_detections, f_num_detections);
     }*/
 
     return 0;

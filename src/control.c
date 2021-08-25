@@ -52,7 +52,7 @@ static int kb_left = 0, kb_up = 0, kb_right = 0, kb_down = 0;
 
 // static void set_mode(int want_key)
 // {
-//     fprintf(stderr, "INFO: set mode: %d\n", want_key);
+//     DEBUG("set mode: %d", want_key);
 // 	static struct termios old, new;
 // 	if (!want_key) {
 // 		tcsetattr(STDIN_FILENO, TCSANOW, &old);
@@ -157,49 +157,49 @@ int control_init(struct app_state_t *app)
 
 static void move_forward_start(struct app_state_t *app)
 {
-    fprintf(stderr, "INFO: move_forward_start\n");
+    DEBUG("move_forward_start");
     GPIO_SET(app->control.gpio) = (1 << GPIO_A1) | (1 << GPIO_B1);
 }
 
 static void move_forward_stop(struct app_state_t *app)
 {
-    fprintf(stderr, "INFO: move_forward_stop\n");
+    DEBUG("move_forward_stop");
     GPIO_CLR(app->control.gpio) = (1 << GPIO_A1) | (1 << GPIO_B1);
 }
 
 static void move_backwards_start(struct app_state_t *app)
 {
-    fprintf(stderr, "INFO: move_backwards_start\n");
+    DEBUG("move_backwards_start");
     GPIO_SET(app->control.gpio) = (1 << GPIO_A2) | (1 << GPIO_B2);
 }
 
 static void move_backwards_stop(struct app_state_t *app)
 {
-    fprintf(stderr, "INFO: move_backwards_stop\n");
+    DEBUG("move_backwards_stop");
     GPIO_CLR(app->control.gpio) = (1 << GPIO_A2) | (1 << GPIO_B2);
 }
 
 static void move_left_start(struct app_state_t *app)
 {
-    fprintf(stderr, "INFO: move_left_start\n");
+    DEBUG("move_left_start");
     GPIO_SET(app->control.gpio) = (1 << GPIO_A2) | (1 << GPIO_B1);
 }
 
 static void move_left_stop(struct app_state_t *app)
 {
-    fprintf(stderr, "INFO: move_left_stop\n");
+    DEBUG("move_left_stop");
     GPIO_CLR(app->control.gpio) = (1 << GPIO_A2) | (1 << GPIO_B1);
 }
 
 static void move_right_start(struct app_state_t *app)
 {
-    fprintf(stderr, "INFO: move_right_start\n");
+    DEBUG("move_right_start");
     GPIO_SET(app->control.gpio) = (1 << GPIO_A1) | (1 << GPIO_B2);
 }
 
 static void move_right_stop(struct app_state_t *app)
 {
-    fprintf(stderr, "INFO: move_right_stop\n");
+    DEBUG("move_right_stop");
     GPIO_CLR(app->control.gpio) = (1 << GPIO_A1) | (1 << GPIO_B2);
 }
 
@@ -232,7 +232,7 @@ int control_ssh_key(struct app_state_t *app)
     int size = utils_kbhit(&x, &y, &z);
     int is_left = 0, is_up = 0, is_right = 0, is_down = 0;    
     if (size > 0) {
-        fprintf(stderr, "INFO: Key %d, %d, %d, %d\n", x, y, z, size);
+        DEBUG("Key %d, %d, %d, %d", x, y, z, size);
 
         if (x == 97) {
             is_left = 1;

@@ -111,7 +111,7 @@ static int v4l_is_supported_resolution(int format)
                 v4l.app->camera_max_height = frmsize.discrete.height;
             }
             if (v4l.app->verbose)
-                fprintf(stderr, "INFO: V4L2_FRMSIZE_TYPE_DISCRETE %dx%d\n",
+                DEBUG("V4L2_FRMSIZE_TYPE_DISCRETE %dx%d",
                     frmsize.discrete.width, frmsize.discrete.height);
         }
         else if (
@@ -136,7 +136,7 @@ static int v4l_is_supported_resolution(int format)
                 v4l.app->camera_max_height = frmsize.stepwise.max_height;
             }
             if (v4l.app->verbose)
-                fprintf(stderr, "INFO: V4L2_FRMSIZE_TYPE_STEPWISE %dx%d\n",
+                DEBUG("V4L2_FRMSIZE_TYPE_STEPWISE %dx%d",
                     frmsize.stepwise.max_width, frmsize.stepwise.max_height);
         }
         frmsize.index++;
@@ -200,14 +200,13 @@ static int v4l_init()
     CALL(res = ioctl_enum(v4l.dev_id, VIDIOC_ENUM_FMT, &fmt), cleanup);
     while (res >= 0 && !is_found) {
         if (v4l.app->verbose)
-            fprintf(stderr, "INFO: pixelformat %c %c %c %c\n", GET_B(fmt.pixelformat),
-                GET_G(fmt.pixelformat), GET_R(fmt.pixelformat), GET_A(fmt.pixelformat));
+            DEBUG("pixelformat: %c %c %c %c", GET_B(fmt.pixelformat), GET_G(fmt.pixelformat),
+                GET_R(fmt.pixelformat), GET_A(fmt.pixelformat));
 
         for (int i = 0; i < formats_len; i++) {
             struct format_mapping_t *f = v4l_formats + i;
             if (f->internal_format == fmt.pixelformat) {
-                CALL(
-                    f->is_supported = v4l_is_supported_resolution(fmt.pixelformat),
+                CALL(f->is_supported = v4l_is_supported_resolution(fmt.pixelformat),
                     cleanup);
 
                 if (f->is_supported) {
@@ -329,6 +328,7 @@ static int v4l_stop()
     v4l_format = NULL;
 
     return 0;
+
 cleanup:
     if (errno == 0)
         errno = EAGAIN;
@@ -357,6 +357,7 @@ static int v4l_get_formats(const struct format_mapping_t *formats[])
 void v4l_construct(struct app_state_t *app)
 {
     v4l.app = app;
+    input.name = "v4l";
     input.context = &v4l;
     input.init = v4l_init;
     input.start = v4l_start;
