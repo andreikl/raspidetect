@@ -27,7 +27,9 @@ extern struct output_t outputs[MAX_OUTPUTS];
 
 const char *video_formats[] = {
     VIDEO_FORMAT_UNKNOWN_STR,
-    VIDEO_FORMAT_YUV422_STR
+    VIDEO_FORMAT_YUV422_STR,
+    VIDEO_FORMAT_YUV444_STR,
+    VIDEO_FORMAT_H264_STR
 };
 
 const char *video_outputs[] = {
@@ -179,7 +181,7 @@ static int find_path(
     int matrix_len = filters_len + 2;
     int bfs_adjacency_matrix[MAX_FILTERS + 2][MAX_FILTERS + 2];
     memset(*bfs_adjacency_matrix, 0, sizeof(bfs_adjacency_matrix));
-    DEBUG("bfs_adjacency_matrix: %lu", sizeof(bfs_adjacency_matrix));
+    //DEBUG("bfs_adjacency_matrix: %lu", sizeof(bfs_adjacency_matrix));
 
     if (in_f->format == out_f->format) {
         bfs_adjacency_matrix[0][matrix_len - 1] = in_f->format;
@@ -296,7 +298,7 @@ static int find_path(
         }
     }
 
-    DEBUG("distance: %d", distance);
+    //DEBUG("distance: %d", distance);
     KL_DESTROY(bfs_qeue_t, bfs_qeue);
     return distance;
 }
@@ -312,15 +314,72 @@ int app_init(struct app_state_t *app)
         CALL(filters[i].init(&app), error);
         filters_len++;
     }
-    DEBUG("filters count: %d", filters_len);
 
     const struct format_mapping_t* in_fs = NULL;
     int in_fs_len = input.get_formats(&in_fs);
-    DEBUG("input[%s] formats count %d", input.name, in_fs_len);
+    if (app->verbose) {
+        char buffer1[MAX_STRING];
+        char buffer2[MAX_STRING];
+
+        buffer1[0] = '\0';
+        for (int i = 0, k = 0; i < in_fs_len; i++) {
+            if (in_fs[i].is_supported) {
+                if (k > 0)
+                    strcat(buffer1, COMMA);
+                strcat(buffer1, app_get_video_format_str(in_fs[i].format));
+                k++;
+            }
+        }
+        DEBUG("input[%s]: %s", input.name, buffer1);
+
+        for (int i = 0; filters[i].context != NULL && i < MAX_FILTERS; i++) {
+            buffer1[0] = '\0';
+            const struct format_mapping_t* fin_fs = NULL;
+            int fin_fs_len = filters[i].get_in_formats(&fin_fs);
+            for (int j = 0, k = 0; j < fin_fs_len; j++) {
+                if (fin_fs[j].is_supported) {
+                    if (k > 0)
+                        strcat(buffer1, COMMA);
+                    strcat(buffer1, app_get_video_format_str(fin_fs[j].format));
+                    k++;
+                }
+            }
+            buffer2[0] = '\0';
+            const struct format_mapping_t* fout_fs = NULL;
+            int fout_fs_len = filters[i].get_out_formats(&fout_fs);
+            for (int j = 0, k = 0; j < fout_fs_len; j++) {
+                if (fout_fs[j].is_supported) {
+                    if (k > 0)
+                        strcat(buffer2, COMMA);
+                    strcat(buffer2, app_get_video_format_str(fout_fs[j].format));
+                    k++;
+                }
+            }
+            DEBUG("filter[%s]: %s -> %s",
+                filters[i].name,
+                buffer1,
+                buffer2);
+        }
+
+        for (int i = 0; outputs[i].context != NULL && i < MAX_OUTPUTS; i++) {
+            buffer1[0] = '\0';
+            const struct format_mapping_t* out_fs = NULL;
+            int out_fs_len = outputs[i].get_formats(&out_fs);
+            for (int j = 0, k = 0; j < out_fs_len; j++) {
+                if (out_fs[j].is_supported) {
+                    if (k > 0)
+                        strcat(buffer1, COMMA);
+                    strcat(buffer1, app_get_video_format_str(out_fs[j].format));
+                    k++;
+                }
+            }
+            DEBUG("otput[%s]: %s", outputs[i].name, buffer1);
+        }
+    }
+
     for (int i = 0; outputs[i].context != NULL && i < MAX_OUTPUTS; i++) {
         const struct format_mapping_t* out_fs = NULL;
         int out_fs_len = outputs[i].get_formats(&out_fs);
-        DEBUG("output[%s] formats count %d", outputs[i].name, out_fs_len);
 
         for (int ii = 0; ii < out_fs_len; ii++) {
             const struct format_mapping_t* out_f = out_fs + ii;
@@ -333,18 +392,34 @@ int app_init(struct app_state_t *app)
                 if (!out_f->is_supported)
                     continue;
 
-                if (find_path(in_f, out_f, filters_len, outputs + i) >= 0) {
-                    DEBUG("input -> %d", outputs[i].start_format);
-                    for (int k = 0; k < MAX_FILTERS && outputs[i].filters[k].out_format; k++) {
-                        int index = outputs[i].filters[k].index;
-                        DEBUG("filter(%s) -> %d",
-                            filters[index].name,
-                            outputs[i].filters[k].out_format);
-                    }
-                }
+                find_path(in_f, out_f, filters_len, outputs + i);
             }
         }
     }
+    if (app->verbose) {
+        char buffer[MAX_STRING];
+        for (int i = 0; outputs[i].context != NULL && i < MAX_OUTPUTS; i++) {
+            if (outputs[i].start_format != 0) {
+                buffer[0] = '\0';
+                for (int k = 0; k < MAX_FILTERS && outputs[i].filters[k].out_format; k++) {
+                    int index = outputs[i].filters[k].index;
+                    strcat(buffer, " -> ");
+                    strcat(buffer, filters[index].name);
+                    strcat(buffer, "[");
+                    strcat(buffer, app_get_video_format_str(outputs[i].filters[k].out_format));
+                    strcat(buffer, "]");
+                }
+                DEBUG("path for %s, %s[%s]%s",
+                    outputs[i].name,
+                    input.name,
+                    app_get_video_format_str(outputs[i].start_format),
+                    buffer);
+            } else {
+                DEBUG("path for %s doesn't exist", outputs[i].name);
+            }
+        }
+    }
+
 
     return 0;
 error:

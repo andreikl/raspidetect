@@ -12,7 +12,7 @@ static struct format_mapping_t v4l_input_formats[] = {
         .is_supported = 0
     },
     {
-        .format = VIDEO_FORMAT_YUV444M,
+        .format = VIDEO_FORMAT_YUV444,
         .internal_format = V4L2_PIX_FMT_YUV444M,
         .is_supported = 0
     }
@@ -87,9 +87,8 @@ static int v4l_is_supported_resolution(int format)
                 v4l.app->camera_max_width = frmsize.discrete.width;
                 v4l.app->camera_max_height = frmsize.discrete.height;
             }
-            if (v4l.app->verbose)
-                DEBUG("V4L2_FRMSIZE_TYPE_DISCRETE %dx%d",
-                    frmsize.discrete.width, frmsize.discrete.height);
+            // DEBUG("V4L2_FRMSIZE_TYPE_DISCRETE %dx%d",
+            //     frmsize.discrete.width, frmsize.discrete.height);
         }
         else if (
             frmsize.type == V4L2_FRMSIZE_TYPE_STEPWISE ||
@@ -112,9 +111,8 @@ static int v4l_is_supported_resolution(int format)
                 v4l.app->camera_max_width = frmsize.stepwise.max_width;
                 v4l.app->camera_max_height = frmsize.stepwise.max_height;
             }
-            if (v4l.app->verbose)
-                DEBUG("V4L2_FRMSIZE_TYPE_STEPWISE %dx%d",
-                    frmsize.stepwise.max_width, frmsize.stepwise.max_height);
+            // DEBUG("V4L2_FRMSIZE_TYPE_STEPWISE %dx%d",
+            //     frmsize.stepwise.max_width, frmsize.stepwise.max_height);
         }
         frmsize.index++;
         CALL(res = ioctl_enum(v4l.dev_id, VIDIOC_ENUM_FRAMESIZES, &frmsize), cleanup);
@@ -161,8 +159,7 @@ static int v4l_init()
     struct v4l2_capability cap;
     CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_QUERYCAP, &cap), cleanup);
     strncpy(v4l.app->camera_name, (const char *)cap.card, 32);
-    if (v4l.app->verbose)
-        DEBUG("cap.capabilities: %d", cap.capabilities);
+    // DEBUG("cap.capabilities: %d", cap.capabilities);
 
     ASSERT_INT((cap.capabilities & V4L2_CAP_VIDEO_M2M_MPLANE), ==, 0, cleanup);
     ASSERT_INT((cap.capabilities & V4L2_CAP_STREAMING), ==, 0, cleanup);
@@ -173,15 +170,10 @@ static int v4l_init()
     struct v4l2_fmtdesc fmt = {
         .index = 0, .type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE
     };
-    if (v4l.app->verbose) {
-        DEBUG("v4l2 buf type: V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE");
-    }
     CALL(res = ioctl_enum(v4l.dev_id, VIDIOC_ENUM_FMT, &fmt), cleanup);
     while (res >= 0 && !is_found) {
-        if (v4l.app->verbose)
-            DEBUG("pixelformat %c %c %c %c", GET_B(fmt.pixelformat),
-                GET_G(fmt.pixelformat), GET_R(fmt.pixelformat), GET_A(fmt.pixelformat));
-
+        // DEBUG("pixelformat %c %c %c %c", GET_B(fmt.pixelformat),
+        //     GET_G(fmt.pixelformat), GET_R(fmt.pixelformat), GET_A(fmt.pixelformat));
         for (int i = 0; i < formats_len; i++) {
             struct format_mapping_t *f = v4l_input_formats + i;
             if (f->internal_format == fmt.pixelformat) {
@@ -190,6 +182,15 @@ static int v4l_init()
                     cleanup);
 
                 if (f->is_supported) {
+                    if (v4l.app->verbose)
+                        DEBUG("%s(%c%c%c%c) and resolution(%dx%d) have been found!",
+                            "encoder input pixel format",
+                            GET_B(fmt.pixelformat),
+                            GET_G(fmt.pixelformat),
+                            GET_R(fmt.pixelformat),
+                            GET_A(fmt.pixelformat),
+                            v4l.app->video_width,
+                            v4l.app->video_height);
                     is_found = 1;
                 }
                 break;
@@ -208,15 +209,10 @@ static int v4l_init()
     formats_len = ARRAY_SIZE(v4l_output_formats);
     fmt.index = 0;
     fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
-    if (v4l.app->verbose) {
-        DEBUG("v4l2 buf type: V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE");
-    }
     CALL(res = ioctl_enum(v4l.dev_id, VIDIOC_ENUM_FMT, &fmt), cleanup);
     while (res >= 0 && !is_found) {
-        if (v4l.app->verbose)
-            DEBUG("pixelformat %c %c %c %c", GET_B(fmt.pixelformat),
-                GET_G(fmt.pixelformat), GET_R(fmt.pixelformat), GET_A(fmt.pixelformat));
-
+        // DEBUG("pixelformat %c %c %c %c", GET_B(fmt.pixelformat),
+        //     GET_G(fmt.pixelformat), GET_R(fmt.pixelformat), GET_A(fmt.pixelformat));
         for (int i = 0; i < formats_len; i++) {
             struct format_mapping_t *f = v4l_output_formats + i;
             if (f->internal_format == fmt.pixelformat) {
@@ -225,6 +221,15 @@ static int v4l_init()
                     cleanup);
 
                 if (f->is_supported) {
+                    if (v4l.app->verbose)
+                        DEBUG("%s(%c%c%c%c) and resolution(%dx%d) have been found!",
+                            "encoder output pixel format",
+                            GET_B(fmt.pixelformat),
+                            GET_G(fmt.pixelformat),
+                            GET_R(fmt.pixelformat),
+                            GET_A(fmt.pixelformat),
+                            v4l.app->video_width,
+                            v4l.app->video_height);
                     is_found = 1;
                 }
                 break;

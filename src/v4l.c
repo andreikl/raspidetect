@@ -110,9 +110,8 @@ static int v4l_is_supported_resolution(int format)
                 v4l.app->camera_max_width = frmsize.discrete.width;
                 v4l.app->camera_max_height = frmsize.discrete.height;
             }
-            if (v4l.app->verbose)
-                DEBUG("V4L2_FRMSIZE_TYPE_DISCRETE %dx%d",
-                    frmsize.discrete.width, frmsize.discrete.height);
+            // DEBUG("V4L2_FRMSIZE_TYPE_DISCRETE %dx%d",
+            //     frmsize.discrete.width, frmsize.discrete.height);
         }
         else if (
             frmsize.type == V4L2_FRMSIZE_TYPE_STEPWISE ||
@@ -135,9 +134,8 @@ static int v4l_is_supported_resolution(int format)
                 v4l.app->camera_max_width = frmsize.stepwise.max_width;
                 v4l.app->camera_max_height = frmsize.stepwise.max_height;
             }
-            if (v4l.app->verbose)
-                DEBUG("V4L2_FRMSIZE_TYPE_STEPWISE %dx%d",
-                    frmsize.stepwise.max_width, frmsize.stepwise.max_height);
+            // DEBUG("V4L2_FRMSIZE_TYPE_STEPWISE %dx%d",
+            //     frmsize.stepwise.max_width, frmsize.stepwise.max_height);
         }
         frmsize.index++;
         CALL(res = ioctl_enum(v4l.dev_id, VIDIOC_ENUM_FRAMESIZES, &frmsize), cleanup);
@@ -199,10 +197,6 @@ static int v4l_init()
     };
     CALL(res = ioctl_enum(v4l.dev_id, VIDIOC_ENUM_FMT, &fmt), cleanup);
     while (res >= 0 && !is_found) {
-        if (v4l.app->verbose)
-            DEBUG("pixelformat: %c %c %c %c", GET_B(fmt.pixelformat), GET_G(fmt.pixelformat),
-                GET_R(fmt.pixelformat), GET_A(fmt.pixelformat));
-
         for (int i = 0; i < formats_len; i++) {
             struct format_mapping_t *f = v4l_formats + i;
             if (f->internal_format == fmt.pixelformat) {
@@ -210,6 +204,15 @@ static int v4l_init()
                     cleanup);
 
                 if (f->is_supported) {
+                    if (v4l.app->verbose)
+                        DEBUG("input pixel format(%c%c%c%c) and resolution(%dx%d) have been found!",
+                            GET_B(fmt.pixelformat),
+                            GET_G(fmt.pixelformat),
+                            GET_R(fmt.pixelformat),
+                            GET_A(fmt.pixelformat),
+                            v4l.app->video_width,
+                            v4l.app->video_height);
+
                     is_found = 1;
                 }
                 break;

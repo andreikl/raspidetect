@@ -3,9 +3,12 @@
 
 #define VIDEO_FORMAT_UNKNOWN_STR "Unknown"
 #define VIDEO_FORMAT_YUV422_STR  "YUV422"
+#define VIDEO_FORMAT_YUV444_STR  "YUV444"
+#define VIDEO_FORMAT_H264_STR    "H264"
+
 #define VIDEO_FORMAT_UNKNOWN 0
 #define VIDEO_FORMAT_YUV422  1
-#define VIDEO_FORMAT_YUV444M 2 //three separate planes - Y, Cb, Cr
+#define VIDEO_FORMAT_YUV444  2 //three separate planes - Y, Cb, Cr
 #define VIDEO_FORMAT_H264    3
 
 #define VIDEO_OUTPUT_NULL_STR   "null"
@@ -52,6 +55,7 @@
 #define MAX_STRING 256
 #define MAX_DATA 1024
 #define TICK_TIME 500000 //500 miliseconds
+#define COMMA ", "
 
 #define FONT_DIR "."
 #define FONT_NAME "Vera.ttf"
@@ -108,7 +112,7 @@
 
 #define DEBUG(format, ...) \
 { \
-    fprintf(stderr, "INFO: %s, "#format"\n", __FUNCTION__, ##__VA_ARGS__); \
+    fprintf(stderr, "%s:%s, "#format"\n", __FILE__, __FUNCTION__, ##__VA_ARGS__); \
 }
 
 #define CALL_MESSAGE(call, res) \

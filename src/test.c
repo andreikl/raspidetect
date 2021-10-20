@@ -25,6 +25,11 @@
 #include <setjmp.h> //jmp_buf
 #include <cmocka.h>
 
+#define TEST_DEBUG(format, ...) \
+{ \
+    /*fprintf(stderr, "INFO: %s, "#format"\n", __FUNCTION__, ##__VA_ARGS__);*/ \
+}
+
 #ifdef V4L
     #include "linux/videodev2.h"
 
@@ -39,34 +44,34 @@
 
     int __wrap___xstat(int __ver, const char *__filename, struct stat *__stat_buf)
     {
-        DEBUG("stat");
+        TEST_DEBUG("stat");
         __stat_buf->st_mode = __S_IFCHR;
         return 0;
     }
 
     int __wrap_open(const char *__file, int __oflag, ...)
     {
-        DEBUG("open");
+        TEST_DEBUG("open");
         return 1;
     }
 
     int __wrap_close(int fd)
     {
-        DEBUG("close");
+        TEST_DEBUG("close");
         return 0;
     }
 
     int __wrap_ioctl(int fd, int request, void *arg)
     {
         if (request == (int)VIDIOC_QUERYCAP) {
-            DEBUG("request: %s", "VIDIOC_QUERYCAP");
+            TEST_DEBUG("request: %s", "VIDIOC_QUERYCAP");
             struct v4l2_capability *cap = arg;
             strncpy((char *)cap->card, "test", 32);
             cap->capabilities = V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_STREAMING;
             return 0;
         }
         else if (request == (int)VIDIOC_ENUM_FMT) {
-            DEBUG("request: %s", "VIDIOC_ENUM_FMT");
+            TEST_DEBUG("request: %s", "VIDIOC_ENUM_FMT");
             struct v4l2_fmtdesc *fmt = arg;
             if (fmt->index == 0) {
                 fmt->pixelformat = V4L2_PIX_FMT_YUYV;
@@ -78,7 +83,7 @@
             }
         }
         else if (request == (int)VIDIOC_ENUM_FRAMESIZES) {
-            DEBUG("request: %s", "VIDIOC_ENUM_FRAMESIZES");
+            TEST_DEBUG("request: %s", "VIDIOC_ENUM_FRAMESIZES");
             struct v4l2_frmsizeenum *frmsize = arg;
             if (frmsize->index == 0) {
                 frmsize->type = V4L2_FRMSIZE_TYPE_STEPWISE;
@@ -96,7 +101,7 @@
             }
         }
         else {
-            DEBUG("request: %d", request);
+            TEST_DEBUG("request: %d", request);
         }
         errno = EAGAIN;
         return -1;
@@ -104,21 +109,21 @@
 
     int __wrap_v4l2_open(const char *__file, int __oflag, ...)
     {
-        DEBUG("v4l2_open");
+        TEST_DEBUG("v4l2_open");
         return 1;
     }
 
     int __wrap_v4l2_ioctl(int fd, int request, void *arg)
     {
         if (request == (int)VIDIOC_QUERYCAP) {
-            DEBUG("request: %s", "VIDIOC_QUERYCAP");
+            TEST_DEBUG("request: %s", "VIDIOC_QUERYCAP");
             struct v4l2_capability *cap = arg;
             strncpy((char *)cap->card, "test_encoder", 32);
             cap->capabilities = V4L2_CAP_VIDEO_M2M_MPLANE | V4L2_CAP_STREAMING;
             return 0;
         }
         else if (request == (int)VIDIOC_ENUM_FMT) {
-            DEBUG("request: %s", "VIDIOC_ENUM_FMT");
+            TEST_DEBUG("request: %s", "VIDIOC_ENUM_FMT");
             struct v4l2_fmtdesc *fmt = arg;
             if (fmt->index == 0 && fmt->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) {
                 fmt->pixelformat = V4L2_PIX_FMT_YUYV;
@@ -134,7 +139,7 @@
             }
         }
         else if (request == (int)VIDIOC_ENUM_FRAMESIZES) {
-            DEBUG("request %s", "VIDIOC_ENUM_FRAMESIZES");
+            TEST_DEBUG("request %s", "VIDIOC_ENUM_FRAMESIZES");
             struct v4l2_frmsizeenum *frmsize = arg;
             if (frmsize->index == 0) {
                 frmsize->type = V4L2_FRMSIZE_TYPE_STEPWISE;
@@ -152,7 +157,7 @@
             }
         }
         else {
-            DEBUG("request: %d", request);
+            TEST_DEBUG("request: %d", request);
         }
         errno = EAGAIN;
         return -1;
@@ -165,7 +170,7 @@
 static SDL_Window *sdl_window = (SDL_Window *)1;
 int __wrap_SDL_Init(uint32_t flags)
 {
-    DEBUG("SDL_Init");
+    TEST_DEBUG("SDL_Init");
     return 0;
 }
 
@@ -174,13 +179,13 @@ SDL_Window *__wrap_SDL_CreateWindow(
     int x, int y, int w,
     int h, uint32_t flags)
 {
-    DEBUG("__wrap_SDL_CreateWindow");
+    TEST_DEBUG("__wrap_SDL_CreateWindow");
     return sdl_window;
 }
 
 void __wrap_SDL_DestroyWindow(uint32_t flags)
 {
-    DEBUG("__wrap_SDL_DestroyWindow");
+    TEST_DEBUG("__wrap_SDL_DestroyWindow");
 }
 
 #endif
@@ -208,7 +213,7 @@ static void test_utils_init(void **state)
 
     int res = app_init(&app);
 
-    DEBUG("res: %d", res);
+    TEST_DEBUG("res: %d", res);
 
     assert_int_not_equal(res, -1);
 
