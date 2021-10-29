@@ -91,10 +91,8 @@ static void test_sdl_loop(void **state)
     struct app_state_t *app = *state;
     struct output_t *output = sdl.output;
 
-    // expect_value(__wrap_ioctl, fmt->fmt.pix.width, app->video_width);
-    // expect_value(__wrap_ioctl, fmt->fmt.pix.height, app->video_height);
-    // expect_value(__wrap_ioctl, fmt->fmt.pix.pixelformat, V4L2_PIX_FMT_YUYV);
-    // will_return(__wrap_ioctl, 3);
+    expect_value(__wrap_ioctl, fmt->fmt.pix.pixelformat, V4L2_PIX_FMT_YUYV);
+    //will_return(__wrap_ioctl, 3);
 
     CALL(res = app_init(app), error);
     CALL(res = input.start(output->start_format), error);

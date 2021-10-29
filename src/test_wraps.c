@@ -84,6 +84,8 @@
         }
         else if (request == (int)VIDIOC_S_FMT) {
             WRAP_DEBUG("request: %s", "VIDIOC_S_FMT");
+            struct v4l2_format *fmt = arg;
+            check_expected(fmt->fmt.pix.pixelformat);
             return 0;
         }
         else if (request == (int)VIDIOC_REQBUFS) {
