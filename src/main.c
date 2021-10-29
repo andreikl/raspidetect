@@ -33,8 +33,6 @@
 #include "control.h"
 #endif //CONTROL
 
-#define TICK_TIME 500000 //500 miliseconds
-
 KHASH_MAP_INIT_STR(argvs_hash_t, char*)
 KHASH_T(argvs_hash_t) *h;
 
@@ -220,15 +218,8 @@ static int main_function()
     // }
 
     while (!is_abort) {
-        // for debug
-        // usleep(TICK_TIME);
-        // DEBUG("is_abort: %d", is_abort);
-
         CALL(res = input.process_frame());
-        if (res != 0) {
-            if (errno == ETIME)
-                continue;
-            else
+        if (res != 0 && errno != ETIME) {
                 goto error;
         }
         for (int i = 0; outputs[i].context != NULL && i < MAX_OUTPUTS; i++)

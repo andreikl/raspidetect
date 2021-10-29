@@ -27,198 +27,95 @@
 
 #define TEST_DEBUG(format, ...) \
 { \
-    /*fprintf(stderr, "INFO: %s, "#format"\n", __FUNCTION__, ##__VA_ARGS__);*/ \
+    fprintf(stderr, "TEST: %s:%s, "#format"\n", __FILE__, __FUNCTION__, ##__VA_ARGS__); \
 }
 
-#ifdef V4L
-    #include "linux/videodev2.h"
+KHASH_MAP_INIT_STR(argvs_hash_t, char*)
+KHASH_T(argvs_hash_t) *h;
 
-    KHASH_MAP_INIT_STR(argvs_hash_t, char*)
-    KHASH_T(argvs_hash_t) *h;
+int is_abort;
 
-    int is_abort;
+struct input_t input;
+struct filter_t filters[MAX_FILTERS];
+struct output_t outputs[MAX_OUTPUTS];
 
-    struct input_t input;
-    struct filter_t filters[MAX_FILTERS];
-    struct output_t outputs[MAX_OUTPUTS];
+#include "test_wraps.c"
 
-    int __wrap___xstat(int __ver, const char *__filename, struct stat *__stat_buf)
-    {
-        TEST_DEBUG("stat");
-        __stat_buf->st_mode = __S_IFCHR;
-        return 0;
-    }
-
-    int __wrap_open(const char *__file, int __oflag, ...)
-    {
-        TEST_DEBUG("open");
-        return 1;
-    }
-
-    int __wrap_close(int fd)
-    {
-        TEST_DEBUG("close");
-        return 0;
-    }
-
-    int __wrap_ioctl(int fd, int request, void *arg)
-    {
-        if (request == (int)VIDIOC_QUERYCAP) {
-            TEST_DEBUG("request: %s", "VIDIOC_QUERYCAP");
-            struct v4l2_capability *cap = arg;
-            strncpy((char *)cap->card, "test", 32);
-            cap->capabilities = V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_STREAMING;
-            return 0;
-        }
-        else if (request == (int)VIDIOC_ENUM_FMT) {
-            TEST_DEBUG("request: %s", "VIDIOC_ENUM_FMT");
-            struct v4l2_fmtdesc *fmt = arg;
-            if (fmt->index == 0) {
-                fmt->pixelformat = V4L2_PIX_FMT_YUYV;
-                return 0;
-            }
-            else {
-                errno = EINVAL;
-                return -1;
-            }
-        }
-        else if (request == (int)VIDIOC_ENUM_FRAMESIZES) {
-            TEST_DEBUG("request: %s", "VIDIOC_ENUM_FRAMESIZES");
-            struct v4l2_frmsizeenum *frmsize = arg;
-            if (frmsize->index == 0) {
-                frmsize->type = V4L2_FRMSIZE_TYPE_STEPWISE;
-                frmsize->stepwise.step_width = 16;
-                frmsize->stepwise.step_height = 16;
-                frmsize->stepwise.min_width = 320;
-                frmsize->stepwise.min_height = 256;
-                frmsize->stepwise.max_width = 1024;
-                frmsize->stepwise.max_height = 768;
-                return 0;
-            }
-            else {
-                errno = EINVAL;
-                return -1;
-            }
-        }
-        else {
-            TEST_DEBUG("request: %d", request);
-        }
-        errno = EAGAIN;
-        return -1;
-    }
-
-    int __wrap_v4l2_open(const char *__file, int __oflag, ...)
-    {
-        TEST_DEBUG("v4l2_open");
-        return 1;
-    }
-
-    int __wrap_v4l2_ioctl(int fd, int request, void *arg)
-    {
-        if (request == (int)VIDIOC_QUERYCAP) {
-            TEST_DEBUG("request: %s", "VIDIOC_QUERYCAP");
-            struct v4l2_capability *cap = arg;
-            strncpy((char *)cap->card, "test_encoder", 32);
-            cap->capabilities = V4L2_CAP_VIDEO_M2M_MPLANE | V4L2_CAP_STREAMING;
-            return 0;
-        }
-        else if (request == (int)VIDIOC_ENUM_FMT) {
-            TEST_DEBUG("request: %s", "VIDIOC_ENUM_FMT");
-            struct v4l2_fmtdesc *fmt = arg;
-            if (fmt->index == 0 && fmt->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) {
-                fmt->pixelformat = V4L2_PIX_FMT_YUYV;
-                return 0;
-            }
-            if (fmt->index == 0 && fmt->type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE) {
-                fmt->pixelformat = V4L2_PIX_FMT_H264;
-                return 0;
-            }
-            else {
-                errno = EINVAL;
-                return -1;
-            }
-        }
-        else if (request == (int)VIDIOC_ENUM_FRAMESIZES) {
-            TEST_DEBUG("request %s", "VIDIOC_ENUM_FRAMESIZES");
-            struct v4l2_frmsizeenum *frmsize = arg;
-            if (frmsize->index == 0) {
-                frmsize->type = V4L2_FRMSIZE_TYPE_STEPWISE;
-                frmsize->stepwise.step_width = 16;
-                frmsize->stepwise.step_height = 16;
-                frmsize->stepwise.min_width = 320;
-                frmsize->stepwise.min_height = 256;
-                frmsize->stepwise.max_width = 1024;
-                frmsize->stepwise.max_height = 768;
-                return 0;
-            }
-            else {
-                errno = EINVAL;
-                return -1;
-            }
-        }
-        else {
-            TEST_DEBUG("request: %d", request);
-        }
-        errno = EAGAIN;
-        return -1;
-    }
-#endif
-
-
-#ifdef SDL
-#include <SDL.h>
-static SDL_Window *sdl_window = (SDL_Window *)1;
-int __wrap_SDL_Init(uint32_t flags)
+static int test_setup(void **state)
 {
-    TEST_DEBUG("SDL_Init");
+    struct app_state_t *app = *state = malloc(sizeof(*app));
+    memset(app, 0, sizeof(*app));
+    app_set_default_state(app);
+    app_construct(app);
     return 0;
 }
 
-SDL_Window *__wrap_SDL_CreateWindow(
-    const char *title,
-    int x, int y, int w,
-    int h, uint32_t flags)
+static int test_verbose_true(void **state)
 {
-    TEST_DEBUG("__wrap_SDL_CreateWindow");
-    return sdl_window;
+    struct app_state_t *app = *state;
+    app->verbose = 1;
+    return 0;
 }
 
-void __wrap_SDL_DestroyWindow(uint32_t flags)
+static int test_verbose_false(void **state)
 {
-    TEST_DEBUG("__wrap_SDL_DestroyWindow");
+    struct app_state_t *app = *state;
+    app->verbose = 0;
+    return 0;
 }
 
-#endif
+static int test_teardown(void **state)
+{
+    free(*state);
+    return 0;
+}
 
 static void test_utils_init(void **state)
 {
-    struct app_state_t app;
-
-    /*char xbuf[9]; // 8 + '\0'
-
-    expect_value(__wrap_read, fd, 1);
-    expect_value(__wrap_read, buf, xbuf);
-    expect_value(__wrap_read, count, 8);
-    will_return(__wrap_read, cast_ptr_to_largest_integral_type("xyz"));
-	will_return(__wrap_read, 3);
-
-    expect_value(__wrap_read, fd, 1);
-    expect_value(__wrap_read, buf, xbuf+3);
-    expect_value(__wrap_read, count,5);
-    will_return(__wrap_read, cast_ptr_to_largest_integral_type("54321"));
-    will_return(__wrap_read, 5);*/
-
-    app_set_default_state(&app);
-    app_construct(&app);
-
-    int res = app_init(&app);
+    int res = 0;
+    struct app_state_t *app = *state;
+    CALL(res = app_init(app));
 
     TEST_DEBUG("res: %d", res);
-
     assert_int_not_equal(res, -1);
 
-    app_cleanup(&app);
+    app_cleanup(app);
 }
+
+#ifdef SDL
+#include "sdl.h"
+extern struct sdl_state_t sdl;
+static void test_sdl_loop(void **state)
+{
+    int res = 0;
+    struct app_state_t *app = *state;
+    struct output_t *output = sdl.output;
+
+    // expect_value(__wrap_ioctl, fmt->fmt.pix.width, app->video_width);
+    // expect_value(__wrap_ioctl, fmt->fmt.pix.height, app->video_height);
+    // expect_value(__wrap_ioctl, fmt->fmt.pix.pixelformat, V4L2_PIX_FMT_YUYV);
+    // will_return(__wrap_ioctl, 3);
+
+    CALL(res = app_init(app), error);
+    CALL(res = input.start(output->start_format), error);
+    for (int i = 0; i < 10; i++) {
+        CALL(res = input.process_frame());
+        if (res == -1 && errno != ETIME)
+            break;            
+        else
+            res = 0;
+        char* buffer = input.get_buffer();
+        CALL(res = output->render(buffer));
+    }
+
+error:
+    TEST_DEBUG("res: %d", res);
+    assert_int_not_equal(res, -1);
+
+    CALL(input.stop());
+    app_cleanup(app);
+}
+#endif //SDL
 
 int main(int argc, char **argv)
 {
@@ -226,9 +123,12 @@ int main(int argc, char **argv)
     utils_parse_args(argc, argv);
 
     const struct CMUnitTest tests[] = {
-        cmocka_unit_test(test_utils_init),
+        //cmocka_unit_test_setup(test_utils_init, test_verbose_false),
+#ifdef SDL
+        cmocka_unit_test_setup(test_sdl_loop, test_verbose_true)
+#endif //SDL
     };
-    int res = cmocka_run_group_tests(tests, NULL, NULL);
+    int res = cmocka_run_group_tests(tests, test_setup, test_teardown);
 
     KH_DESTROY(argvs_hash_t, h);
     return res;

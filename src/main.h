@@ -158,7 +158,7 @@
 #include <stdint.h>    //uint32_t
 #include <stdio.h>     // fprintf
 #include <stdlib.h>    // malloc, free
-#include <unistd.h>    // STDIN_FILENO
+//#include <unistd.h>    // STDIN_FILENO, usleep
 #include <time.h>      // time_t
 #include <semaphore.h>
 #include <errno.h>     // error codes

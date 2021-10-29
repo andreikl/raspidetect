@@ -125,7 +125,7 @@ static struct format_mapping_t rfb_formats[] = {
     }
 };
 
-static struct rfb_state_t rfb = {
+struct rfb_state_t rfb = {
     .app = NULL,
     .serv_socket = -1,
     .client_socket = -1,
@@ -424,8 +424,12 @@ int rfb_send_frame()
 static void rfb_cleanup()
 {
     // shutdown the server socket terminates accept call to wait incoming connections
-    if (rfb.serv_socket > 0)
-        CALL(shutdown(rfb.serv_socket, SHUT_RD));
+    if (rfb.serv_socket > 0) {
+        int res = shutdown(rfb.serv_socket, SHUT_RDWR);
+        if (res == -1 && errno != ENOTCONN) {
+            CALL_MESSAGE(shutdown(rfb.serv_socket, SHUT_RDWR), res);
+        }
+    }
 
     if (rfb.serv_socket > 0)
         CALL(close(rfb.serv_socket));
@@ -453,6 +457,7 @@ void rfb_construct(struct app_state_t *app)
 
     if (i != MAX_OUTPUTS) {
         rfb.app = app;
+        rfb.output = outputs + i;
         outputs[i].name = "rfb";
         outputs[i].context = &rfb;
         outputs[i].init = rfb_init;

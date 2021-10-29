@@ -31,7 +31,7 @@ static struct format_mapping_t sdl_formats[] = {
     }
 };
 
-static struct sdl_state_t sdl = {
+struct sdl_state_t sdl = {
     .app = NULL,
     .buffer = NULL,
     .buffer_len = 0,
@@ -233,6 +233,7 @@ void sdl_construct(struct app_state_t *app)
 
     if (i != MAX_OUTPUTS) {
         sdl.app = app;
+        sdl.output = outputs + i;
         outputs[i].name = "sdl";
         outputs[i].context = &sdl;
         outputs[i].init = sdl_init;

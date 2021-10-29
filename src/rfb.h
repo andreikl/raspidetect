@@ -3,6 +3,7 @@
 
 struct rfb_state_t {
     struct app_state_t *app;
+    struct output_t *output;
 
     pthread_t thread;
     int thread_res;
