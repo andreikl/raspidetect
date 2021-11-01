@@ -50,7 +50,6 @@ static int ioctl_enum(int fd, int request, void *arg)
 
 static void v4l_cleanup()
 {
-    DEBUG("%s", "v4l_cleanup");
     if (v4l.dev_id != -1) {
         CALL(close(v4l.dev_id));
         v4l.dev_id = -1;

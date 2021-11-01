@@ -341,7 +341,7 @@ cleanup:
 static char *v4l_get_buffer(int *format)
 {
     ASSERT_PTR(v4l_format, ==, NULL, cleanup);
-    if (*format)
+    if (format)
         *format = v4l_format->format;
     return v4l.buffer;
 

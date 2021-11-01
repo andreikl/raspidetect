@@ -27,13 +27,16 @@
 
 #define TEST_DEBUG(format, ...) \
 { \
-    fprintf(stderr, "TEST: %s:%s, "#format"\n", __FILE__, __FUNCTION__, ##__VA_ARGS__); \
+    if (test_verbose) \
+        fprintf(stderr, "TEST: %s:%s, "#format"\n", __FILE__, __FUNCTION__, ##__VA_ARGS__); \
 }
 
 KHASH_MAP_INIT_STR(argvs_hash_t, char*)
 KHASH_T(argvs_hash_t) *h;
 
 int is_abort;
+int wrap_verbose;
+int test_verbose;
 
 struct input_t input;
 struct filter_t filters[MAX_FILTERS];
@@ -54,6 +57,8 @@ static int test_verbose_true(void **state)
 {
     struct app_state_t *app = *state;
     app->verbose = 1;
+    test_verbose = 1;
+    wrap_verbose = 1;
     return 0;
 }
 
@@ -61,6 +66,8 @@ static int test_verbose_false(void **state)
 {
     struct app_state_t *app = *state;
     app->verbose = 0;
+    test_verbose = 0;
+    wrap_verbose = 0;
     return 0;
 }
 
@@ -92,6 +99,8 @@ static void test_sdl_loop(void **state)
     struct output_t *output = sdl.output;
 
     expect_value(__wrap_ioctl, fmt->fmt.pix.pixelformat, V4L2_PIX_FMT_YUYV);
+    expect_value(__wrap_ioctl, fmt->fmt.pix.width, app->video_width);
+    expect_value(__wrap_ioctl, fmt->fmt.pix.height, app->video_height);
     //will_return(__wrap_ioctl, 3);
 
     CALL(res = app_init(app), error);
@@ -102,7 +111,7 @@ static void test_sdl_loop(void **state)
             break;            
         else
             res = 0;
-        char* buffer = input.get_buffer();
+        char* buffer = input.get_buffer(NULL);
         CALL(res = output->render(buffer));
     }
 
@@ -121,9 +130,9 @@ int main(int argc, char **argv)
     utils_parse_args(argc, argv);
 
     const struct CMUnitTest tests[] = {
-        //cmocka_unit_test_setup(test_utils_init, test_verbose_false),
+        cmocka_unit_test_setup(test_utils_init, test_verbose_false),
 #ifdef SDL
-        cmocka_unit_test_setup(test_sdl_loop, test_verbose_true)
+        cmocka_unit_test_setup(test_sdl_loop, test_verbose_false)
 #endif //SDL
     };
     int res = cmocka_run_group_tests(tests, test_setup, test_teardown);

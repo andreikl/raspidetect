@@ -223,7 +223,7 @@ static int main_function()
                 goto error;
         }
         for (int i = 0; outputs[i].context != NULL && i < MAX_OUTPUTS; i++)
-            CALL(outputs[i].render(input.get_buffer()), error);
+            CALL(outputs[i].render(input.get_buffer(NULL)), error);
 
         //----- fps
         static int frame_count = 0;

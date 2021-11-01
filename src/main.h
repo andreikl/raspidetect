@@ -266,7 +266,7 @@ struct input_t {
     int (*stop)();
     void (*cleanup)();
 
-    char* (*get_buffer)();
+    char* (*get_buffer)(int *format);
     int (*get_formats)(const struct format_mapping_t *formats[]);
 };
 

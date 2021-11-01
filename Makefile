@@ -96,16 +96,22 @@ endif
 
 ifeq ($(CMOCKA), 1) 
 	TEST_COMMON = $(COMMON) -DCMOCKA `pkg-config --cflags cmocka`
-	TEST_LDFLAGS = $(LDFLAGS) `pkg-config --libs cmocka` 
+	TEST_LDFLAGS = $(LDFLAGS) `pkg-config --libs cmocka`
+# stat
 	TEST_LDFLAGS += -Wl,--wrap=__xstat
 	TEST_LDFLAGS += -Wl,--wrap=open
 	TEST_LDFLAGS += -Wl,--wrap=close
+	TEST_LDFLAGS += -Wl,--wrap=select
 	TEST_LDFLAGS += -Wl,--wrap=ioctl
 	TEST_LDFLAGS += -Wl,--wrap=v4l2_open
 	TEST_LDFLAGS += -Wl,--wrap=v4l2_ioctl
 	TEST_LDFLAGS += -Wl,--wrap=SDL_Init
 	TEST_LDFLAGS += -Wl,--wrap=SDL_CreateWindow
 	TEST_LDFLAGS += -Wl,--wrap=SDL_DestroyWindow
+	TEST_LDFLAGS += -Wl,--wrap=SDL_GetWindowSurface
+# SDL_BlitSurface
+	TEST_LDFLAGS += -Wl,--wrap=SDL_UpperBlit
+	TEST_LDFLAGS += -Wl,--wrap=SDL_UpdateWindowSurface
 	TEST_OBJ = test.o
 	TESTS = $(addprefix ${BUILD_DIR}/obj/, $(TEST_OBJ))
 endif

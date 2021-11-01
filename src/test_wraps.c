@@ -18,31 +18,41 @@
 
 #define WRAP_DEBUG(format, ...) \
 { \
-    fprintf(stderr, "WRAP: %s:%s, "#format"\n", __FILE__, __FUNCTION__, ##__VA_ARGS__); \
+    if (wrap_verbose) \
+        fprintf(stderr, "WRAP: %s:%s, "#format"\n", __FILE__, __FUNCTION__, ##__VA_ARGS__); \
+}
+
+int __wrap___xstat(int __ver, const char *__filename, struct stat *__stat_buf)
+{
+    WRAP_DEBUG("stat");
+    __stat_buf->st_mode = __S_IFCHR;
+    return 0;
+}
+
+int __wrap_open(const char *__file, int __oflag, ...)
+{
+    WRAP_DEBUG("open");
+    return 1;
+}
+
+int __wrap_close(int fd)
+{
+    WRAP_DEBUG("close");
+    return 0;
+}
+
+int __wrap_select(int fd)
+{
+    WRAP_DEBUG("select");
+    return 1;
 }
 
 #ifdef V4L
     #include "linux/videodev2.h"
 
-    int __wrap___xstat(int __ver, const char *__filename, struct stat *__stat_buf)
-    {
-        WRAP_DEBUG("stat");
-        __stat_buf->st_mode = __S_IFCHR;
-        return 0;
-    }
-
-    int __wrap_open(const char *__file, int __oflag, ...)
-    {
-        WRAP_DEBUG("open");
-        return 1;
-    }
-
-    int __wrap_close(int fd)
-    {
-        WRAP_DEBUG("close");
-        return 0;
-    }
-
+    static uint8_t *image = NULL;
+    static int image_width = 0;
+    static int image_height = 0;
     int __wrap_ioctl(int fd, int request, void *arg)
     {
         if (request == (int)VIDIOC_QUERYCAP) {
@@ -86,6 +96,10 @@
             WRAP_DEBUG("request: %s", "VIDIOC_S_FMT");
             struct v4l2_format *fmt = arg;
             check_expected(fmt->fmt.pix.pixelformat);
+            check_expected(fmt->fmt.pix.width);
+            check_expected(fmt->fmt.pix.height);
+            image_width = fmt->fmt.pix.width;
+            image_height = fmt->fmt.pix.height;
             return 0;
         }
         else if (request == (int)VIDIOC_REQBUFS) {
@@ -94,10 +108,27 @@
         }
         else if (request == (int)VIDIOC_QBUF) {
             WRAP_DEBUG("request: %s", "VIDIOC_QBUF");
+            struct v4l2_buffer *buf = arg;
+            assert_int_equal(buf->length, image_width * image_height * 2);
+            image = (uint8_t *)buf->m.userptr;
             return 0;
         }
         else if (request == (int)VIDIOC_STREAMON) {
             WRAP_DEBUG("request: %s", "VIDIOC_STREAMON");
+            return 0;
+        }
+        else if (request == (int)VIDIOC_STREAMOFF) {
+            WRAP_DEBUG("request: %s", "VIDIOC_STREAMOFF");
+            return 0;
+        }
+        else if (request == (int)VIDIOC_DQBUF) {
+            WRAP_DEBUG("request: %s", "VIDIOC_DQBUF");
+            uint8_t *index = image;
+            int row_length = image_width << 1;
+            for (int i = 0; i < image_height; i++)
+                for (int j = 0; j < row_length; j += 2, index += 2) {
+                    *index = (i & 0x8) == 0? 0: 255;
+                }
             return 0;
         }
         else {
@@ -168,6 +199,7 @@
 #ifdef SDL
 #include <SDL.h>
 static SDL_Window *sdl_window = (SDL_Window *)1;
+static SDL_Surface *sdl_surface = (SDL_Surface *)1;
 int __wrap_SDL_Init(uint32_t flags)
 {
     WRAP_DEBUG("SDL_Init");
@@ -188,5 +220,27 @@ void __wrap_SDL_DestroyWindow(uint32_t flags)
     WRAP_DEBUG("__wrap_SDL_DestroyWindow");
 }
 
+SDL_Surface *__wrap_SDL_GetWindowSurface(SDL_Window * window)
+{
+    WRAP_DEBUG("__wrap_SDL_GetWindowSurface");
+    return sdl_surface;
+}
+
+// SDL_BlitSurface
+int __wrap_SDL_UpperBlit(
+    SDL_Surface* src,
+    const SDL_Rect* srcrect,
+    SDL_Surface* dst,
+    SDL_Rect* dstrect)
+{
+    WRAP_DEBUG("__wrap_SDL_BlitSurface");
+    return 0;
+}
+
+int __wrap_SDL_UpdateWindowSurface(SDL_Window * window)
+{
+    WRAP_DEBUG("__wrap_SDL_UpdateWindowSurface");
+    return 0;
+}
 #endif
 
