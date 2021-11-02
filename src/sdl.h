@@ -44,7 +44,7 @@ struct sdl_state_t {
     struct app_state_t *app;
     struct output_t *output;
 
-    char* buffer;
+    uint8_t* buffer;
     int buffer_len;
     SDL_Window *window;
     //SDL_Renderer *renderer;

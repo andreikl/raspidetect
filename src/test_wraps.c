@@ -226,6 +226,20 @@ SDL_Surface *__wrap_SDL_GetWindowSurface(SDL_Window * window)
     return sdl_surface;
 }
 
+SDL_Surface *__wrap_SDL_CreateRGBSurfaceFrom(void *pixels,
+    int width,
+    int height,
+    int depth,
+    int pitch,
+    Uint32 Rmask,
+    Uint32 Gmask,
+    Uint32 Bmask,
+    Uint32 Amask)
+{
+    WRAP_DEBUG("__wrap_SDL_CreateRGBSurfaceFrom");
+    return sdl_surface;
+}
+
 // SDL_BlitSurface
 int __wrap_SDL_UpperBlit(
     SDL_Surface* src,

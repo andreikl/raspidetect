@@ -101,15 +101,16 @@ static void print_help()
     printf("%s: video format, default: %s\n", VIDEO_FORMAT, VIDEO_FORMAT_DEF);
     printf("\toptions: "VIDEO_FORMAT_YUV422_STR"\n");
     printf("%s: output, default: %s\n", VIDEO_OUTPUT, VIDEO_OUTPUT_DEF);
-    printf("\toptions: "VIDEO_OUTPUT_NULL_STR", "VIDEO_OUTPUT_STDOUT_STR", "
+    printf("\toptions: "VIDEO_OUTPUT_NULL_STR", "VIDEO_OUTPUT_FILE_STR", "
         VIDEO_OUTPUT_SDL_STR", "VIDEO_OUTPUT_RFB_STR"\n");
 
     printf("%s: port, default: %d\n", PORT, PORT_DEF);
     printf("%s: worker_width, default: %d\n", WORKER_WIDTH, WORKER_WIDTH_DEF);
     printf("%s: worker_height, default: %d\n", WORKER_HEIGHT, WORKER_HEIGHT_DEF);
-    printf("%s: TFL model path, default: %s\n", TFL_MODEL_PATH, TFL_MODEL_PATH_DEF);    
-    printf("%s: DN model path, default: %s\n", DN_MODEL_PATH, DN_MODEL_PATH_DEF);    
-    printf("%s: DN config path, default: %s\n", DN_CONFIG_PATH, DN_CONFIG_PATH_DEF);    
+    printf("%s: file path, default: %s\n", OUTPUT_PATH, OUTPUT_PATH_DEF);
+    printf("%s: TFL model path, default: %s\n", TFL_MODEL_PATH, TFL_MODEL_PATH_DEF);
+    printf("%s: DN model path, default: %s\n", DN_MODEL_PATH, DN_MODEL_PATH_DEF);
+    printf("%s: DN config path, default: %s\n", DN_CONFIG_PATH, DN_CONFIG_PATH_DEF);
     printf("%s: verbose, verbose: %d\n", VERBOSE, VERBOSE_DEF);
     exit(0);
 }
@@ -210,20 +211,14 @@ static int main_function()
         goto error;
     }
 
-    //CALL(input.start(), error);
-
-    //TODO: move to something like camara start
-    // if (app.video_output == VIDEO_OUTPUT_STDOUT) {
-    //     CALL(utils_camera_create_h264_encoder(&app), error);
-    // }
-
     while (!is_abort) {
-        CALL(res = input.process_frame());
-        if (res != 0 && errno != ETIME) {
-                goto error;
+        for (int i = 0; outputs[i].context != NULL && i < MAX_OUTPUTS; i++) {
+            CALL(res = outputs[i].process_frame());
+            if (res == -1 && errno != ETIME)
+                break;            
+            else
+                res = 0;
         }
-        for (int i = 0; outputs[i].context != NULL && i < MAX_OUTPUTS; i++)
-            CALL(outputs[i].render(input.get_buffer(NULL)), error);
 
         //----- fps
         static int frame_count = 0;
@@ -345,7 +340,6 @@ static int main_function()
 #endif // CONTROL
     }
     fprintf(stdout, "\n");
-    CALL(input.stop(&app), error);
 
     exit_code = EX_OK;
 
@@ -373,7 +367,7 @@ error:
     res = pthread_mutex_destroy(&app.buffer_mutex);
     if (res) {
         errno = res;
-        CALL_MESSAGE(pthread_mutex_destroy(&app.buffer_mutex), -1);
+        CALL_MESSAGE(pthread_mutex_destroy(&app.buffer_mutex));
     }
 
     DEBUG("worker_thread");

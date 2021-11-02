@@ -25,7 +25,7 @@ export BUILD_DIR ?= ./build
 
 #CC = arm-linux-gnueabihf-gcc
 #-mcpu=arm6 -mfpu=vfp
-CC = gcc
+CC = cc
 LDFLAGS = -lm
 COMMON = -Iexternal/klib -Isrc/
 #-D_POSIX_C_SOURCE=199309L fixes CLOCK_REALTIME error on pi zero 
@@ -109,6 +109,7 @@ ifeq ($(CMOCKA), 1)
 	TEST_LDFLAGS += -Wl,--wrap=SDL_CreateWindow
 	TEST_LDFLAGS += -Wl,--wrap=SDL_DestroyWindow
 	TEST_LDFLAGS += -Wl,--wrap=SDL_GetWindowSurface
+	TEST_LDFLAGS += -Wl,--wrap=SDL_CreateRGBSurfaceFrom
 # SDL_BlitSurface
 	TEST_LDFLAGS += -Wl,--wrap=SDL_UpperBlit
 	TEST_LDFLAGS += -Wl,--wrap=SDL_UpdateWindowSurface
@@ -117,7 +118,7 @@ ifeq ($(CMOCKA), 1)
 endif
 
 
-OBJ += utils.o app.o
+OBJ += utils.o app.o file.o
 OBJS = $(addprefix ${BUILD_DIR}/obj/, $(OBJ))
 
 

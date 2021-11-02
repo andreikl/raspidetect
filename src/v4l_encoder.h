@@ -7,10 +7,10 @@ struct v4l_encoder_state_t {
     char dev_name[20];
     int dev_id;
 
-    char *v4l_buf;
+    uint8_t *v4l_buf;
     int v4l_buf_length;
 
-    char *buffer;
+    uint8_t *buffer;
     int buffer_length;
 };
 

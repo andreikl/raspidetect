@@ -156,10 +156,10 @@ static int v4l_init()
     sprintf(v4l.dev_name, "/dev/video%d", v4l.app->camera_num);
 
     int len = v4l.app->video_width * v4l.app->video_height * 2;
-    char *data = malloc(len);
+    uint8_t *data = malloc(len);
     if (data == NULL) {
         errno = ENOMEM;
-        CALL_MESSAGE(malloc, 0);
+        CALL_MESSAGE(malloc);
         goto cleanup;
     }
     v4l.v4l_buf = data;
@@ -168,7 +168,7 @@ static int v4l_init()
     data = malloc(len);
     if (data == NULL) {
         errno = ENOMEM;
-        CALL_MESSAGE(malloc, 0);
+        CALL_MESSAGE(malloc);
         goto cleanup;
     }
     v4l.buffer = data;
@@ -284,6 +284,11 @@ cleanup:
     return -1;
 }
 
+static int v4l_is_started()
+{
+    return v4l_format != NULL? 1: 0;
+}
+
 static int v4l_process_frame()
 {
     ASSERT_PTR(v4l_format, ==, NULL, cleanup);
@@ -310,6 +315,7 @@ static int v4l_process_frame()
     CALL(ioctl_wait(v4l.dev_id, VIDIOC_DQBUF, &buf), cleanup);
 
     memcpy(v4l.buffer, v4l.v4l_buf, v4l.v4l_buf_len);
+    v4l.buffer_len = v4l.v4l_buf_len;
 
     buf.index = 0;
     buf.m.userptr = (unsigned long)v4l.v4l_buf;
@@ -338,17 +344,19 @@ cleanup:
     return -1;
 }
 
-static char *v4l_get_buffer(int *format)
+static uint8_t *v4l_get_buffer(int *format, int *length)
 {
     ASSERT_PTR(v4l_format, ==, NULL, cleanup);
     if (format)
         *format = v4l_format->format;
+    if (length)
+        *length = v4l.buffer_len;
     return v4l.buffer;
 
 cleanup:
     if (errno == 0)
         errno = EOPNOTSUPP;
-    return (char *)-1;
+    return (uint8_t *)-1;
 }
 
 static int v4l_get_formats(const struct format_mapping_t *formats[])
@@ -364,10 +372,11 @@ void v4l_construct(struct app_state_t *app)
     input.name = "v4l";
     input.context = &v4l;
     input.init = v4l_init;
-    input.start = v4l_start;
-    input.process_frame = v4l_process_frame;
-    input.stop = v4l_stop;
     input.cleanup = v4l_cleanup;
+    input.start = v4l_start;
+    input.is_started = v4l_is_started;
+    input.stop = v4l_stop;
+    input.process_frame = v4l_process_frame;
 
     input.get_buffer = v4l_get_buffer;
     input.get_formats = v4l_get_formats;

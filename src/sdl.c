@@ -33,12 +33,15 @@ static struct format_mapping_t sdl_formats[] = {
 
 struct sdl_state_t sdl = {
     .app = NULL,
+    .output = NULL,
     .buffer = NULL,
     .buffer_len = 0,
     .window = NULL,
     //.renderer = NULL,
     .surface = NULL
 };
+extern struct input_t input;
+extern struct filter_t filters[MAX_FILTERS];
 extern struct output_t outputs[MAX_OUTPUTS];
 extern int is_abort;
 
@@ -75,7 +78,7 @@ static void generate_yuv422_lookup()
 }
 #endif //YUV_MEMORY_OPTIMIZATION
 
-static void inline yuv422_to_rgb(const char* input, char *output)
+static void inline yuv422_to_rgb(const uint8_t* input, uint8_t *output)
 {
     int y0 = input[0];
     int u = input[1];
@@ -137,10 +140,10 @@ static int sdl_init()
     // ), cleanup);
 
     int len = sdl.app->video_width * sdl.app->video_height * 3;
-    char *data = malloc(len);
+    uint8_t *data = malloc(len);
     if (data == NULL) {
         errno = ENOMEM;
-        CALL_MESSAGE(malloc, 0);
+        CALL_MESSAGE(malloc);
         goto cleanup;
     }
     sdl.buffer = data;
@@ -152,12 +155,11 @@ static int sdl_init()
         sdl.app->video_width * 3,
         R_888_MASK, G_888_MASK, B_888_MASK, 0
     ), cleanup);
-
     SDL_SetEventFilter(filter, NULL);
     return 0;
 
 cleanup:
-    errno = EAGAIN;
+    if (!errno) errno = EAGAIN;
     return -1;
 }
 
@@ -179,12 +181,27 @@ static int sdl_render()
     return 0;
 
 cleanup:
-    errno = EAGAIN;
+    if (!errno) errno = EAGAIN;
     return -1;
 }
 
-static int sdl_render_yuv(char *buffer)
+static int sdl_process_frame()
 {
+    int res = 0;
+    struct output_t *output = sdl.output;
+    int in_format = output->start_format;
+    int out_format = output->start_format;
+    if (!input.is_started()) CALL(input.start(in_format), cleanup);
+    CALL(res = input.process_frame(), cleanup);
+    uint8_t *buffer = input.get_buffer(NULL, NULL);
+    for (int k = 0; k < MAX_FILTERS && output->filters[k].out_format; k++) {
+        struct filter_t *filter = filters + output->filters[k].index;
+        in_format = out_format;
+        out_format = output->filters[k].out_format;
+        if (!filter->is_started) CALL(filter->start(in_format, out_format), cleanup);
+        CALL(filter->process_frame(buffer), cleanup);
+        buffer = filter->get_buffer(NULL, NULL, NULL);
+    }
     int w = sdl.app->video_width;
     int h = sdl.app->video_height;
     int size = w * h;
@@ -195,6 +212,10 @@ static int sdl_render_yuv(char *buffer)
         }
 
     return sdl_render();
+
+cleanup:
+    if (!errno) errno = EAGAIN;
+    return -1;
 }
 
 static void sdl_cleanup()
@@ -228,7 +249,7 @@ static int sdl_get_formats(const struct format_mapping_t *formats[])
 void sdl_construct(struct app_state_t *app)
 {
     int i = 0;
-    while (outputs[i].context != NULL && i < MAX_OUTPUTS)
+    while (i < MAX_OUTPUTS && outputs[i].context != NULL)
         i++;
 
     if (i != MAX_OUTPUTS) {
@@ -237,7 +258,7 @@ void sdl_construct(struct app_state_t *app)
         outputs[i].name = "sdl";
         outputs[i].context = &sdl;
         outputs[i].init = sdl_init;
-        outputs[i].render = sdl_render_yuv;
+        outputs[i].process_frame = sdl_process_frame;
         outputs[i].cleanup = sdl_cleanup;
         outputs[i].get_formats = sdl_get_formats;
     }

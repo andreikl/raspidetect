@@ -133,10 +133,10 @@ static int v4l_init()
     sprintf(v4l.dev_name, "/dev/nvhost-msenc");
 
     int len = v4l.app->video_width * v4l.app->video_height * 2;
-    char *data = malloc(len);
+    uint8_t *data = malloc(len);
     if (data == NULL) {
         errno = ENOMEM;
-        CALL_MESSAGE(malloc, 0);
+        CALL_MESSAGE(malloc);
         goto cleanup;
     }
     v4l.v4l_buf = data;
@@ -145,7 +145,7 @@ static int v4l_init()
     data = malloc(len);
     if (data == NULL) {
         errno = ENOMEM;
-        CALL_MESSAGE(malloc, 0);
+        CALL_MESSAGE(malloc);
         goto cleanup;
     }
     v4l.buffer = data;
@@ -286,7 +286,12 @@ cleanup:
     return -1;
 }
 
-static int v4l_process(char * buffer)
+static int v4l_is_started()
+{
+    return v4l_input_format != NULL && v4l_output_format != NULL? 1: 0;
+}
+
+static int v4l_process_frame(uint8_t *buffer)
 {
     ASSERT_PTR(v4l_input_format, ==, NULL, cleanup);
     ASSERT_PTR(v4l_output_format, ==, NULL, cleanup);
@@ -334,16 +339,20 @@ static int v4l_stop()
     return 0;
 }
 
-static char *v4l_get_buffer()
+static uint8_t *v4l_get_buffer(int *in_format, int *out_format, int *length)
 {
     ASSERT_PTR(v4l_input_format, ==, NULL, cleanup);
     ASSERT_PTR(v4l_output_format, ==, NULL, cleanup);
+    if (in_format)
+        *in_format = v4l_input_format->format;
+    if (out_format)
+        *out_format = v4l_output_format->format;
     return v4l.buffer;
 
 cleanup:
     if (errno == 0)
         errno = EOPNOTSUPP;
-    return (char *)-1;
+    return (uint8_t *)-1;
 }
 
 static int v4l_get_in_formats(const struct format_mapping_t *formats[])
@@ -363,7 +372,7 @@ static int v4l_get_out_formats(const struct format_mapping_t *formats[])
 void v4l_encoder_construct(struct app_state_t *app)
 {
     int i = 0;
-    while (filters[i].context != NULL && i < MAX_FILTERS)
+    while (i < MAX_FILTERS && filters[i].context != NULL)
         i++;
 
     if (i != MAX_FILTERS) {
@@ -372,10 +381,12 @@ void v4l_encoder_construct(struct app_state_t *app)
         filters[i].name = "v4l_encoder";
         filters[i].context = &v4l;
         filters[i].init = v4l_init;
-        filters[i].start = v4l_start;
-        filters[i].process = v4l_process;
-        filters[i].stop = v4l_stop;
         filters[i].cleanup = v4l_cleanup;
+        filters[i].start = v4l_start;
+        filters[i].is_started = v4l_is_started;
+        filters[i].stop = v4l_stop;
+        filters[i].process_frame = v4l_process_frame;
+
 
         filters[i].get_buffer = v4l_get_buffer;
         filters[i].get_in_formats = v4l_get_in_formats;

@@ -127,6 +127,7 @@ static struct format_mapping_t rfb_formats[] = {
 
 struct rfb_state_t rfb = {
     .app = NULL,
+    .output = NULL,
     .serv_socket = -1,
     .client_socket = -1,
     .thread_res = -1
@@ -427,7 +428,7 @@ static void rfb_cleanup()
     if (rfb.serv_socket > 0) {
         int res = shutdown(rfb.serv_socket, SHUT_RDWR);
         if (res == -1 && errno != ENOTCONN) {
-            CALL_MESSAGE(shutdown(rfb.serv_socket, SHUT_RDWR), res);
+            CALL_MESSAGE(shutdown(rfb.serv_socket, SHUT_RDWR));
         }
     }
 
@@ -452,7 +453,7 @@ static int rfb_get_formats(const struct format_mapping_t *formats[])
 void rfb_construct(struct app_state_t *app)
 {
     int i = 0;
-    while (outputs[i].context != NULL && i < MAX_OUTPUTS)
+    while (i < MAX_OUTPUTS && outputs[i].context != NULL)
         i++;
 
     if (i != MAX_OUTPUTS) {

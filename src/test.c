@@ -89,6 +89,35 @@ static void test_utils_init(void **state)
     app_cleanup(app);
 }
 
+#include "file.h"
+extern struct file_state_t file;
+static void test_file_loop(void **state)
+{
+    int res = 0;
+    struct app_state_t *app = *state;
+    struct output_t *output = file.output;
+
+    expect_value(__wrap_ioctl, fmt->fmt.pix.pixelformat, V4L2_PIX_FMT_YUYV);
+    expect_value(__wrap_ioctl, fmt->fmt.pix.width, app->video_width);
+    expect_value(__wrap_ioctl, fmt->fmt.pix.height, app->video_height);
+    //will_return(__wrap_ioctl, 3);
+
+    CALL(res = app_init(app), error);
+    for (int i = 0; i < 10; i++) {
+        CALL(res = output->process_frame());
+        if (res == -1 && errno != ETIME)
+            break;            
+        else
+            res = 0;
+    }
+
+error:
+    TEST_DEBUG("res: %d", res);
+    assert_int_not_equal(res, -1);
+
+    app_cleanup(app);
+}
+
 #ifdef SDL
 #include "sdl.h"
 extern struct sdl_state_t sdl;
@@ -104,22 +133,18 @@ static void test_sdl_loop(void **state)
     //will_return(__wrap_ioctl, 3);
 
     CALL(res = app_init(app), error);
-    CALL(res = input.start(output->start_format), error);
     for (int i = 0; i < 10; i++) {
-        CALL(res = input.process_frame());
+        CALL(res = output->process_frame());
         if (res == -1 && errno != ETIME)
             break;            
         else
             res = 0;
-        char* buffer = input.get_buffer(NULL);
-        CALL(res = output->render(buffer));
     }
 
 error:
     TEST_DEBUG("res: %d", res);
     assert_int_not_equal(res, -1);
 
-    CALL(input.stop());
     app_cleanup(app);
 }
 #endif //SDL
@@ -130,9 +155,10 @@ int main(int argc, char **argv)
     utils_parse_args(argc, argv);
 
     const struct CMUnitTest tests[] = {
-        cmocka_unit_test_setup(test_utils_init, test_verbose_false),
+        cmocka_unit_test_setup(test_utils_init, test_verbose_true),
+        //cmocka_unit_test_setup(test_file_loop, test_verbose_true),
 #ifdef SDL
-        cmocka_unit_test_setup(test_sdl_loop, test_verbose_false)
+        //cmocka_unit_test_setup(test_sdl_loop, test_verbose_false)
 #endif //SDL
     };
     int res = cmocka_run_group_tests(tests, test_setup, test_teardown);

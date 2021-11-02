@@ -166,6 +166,7 @@ fail_open:
     return NULL;
 }
 
+// write Netpbm video
 void utils_write_file(const char *path, unsigned char *data, int width, int height)
 {
     FILE* fstream;

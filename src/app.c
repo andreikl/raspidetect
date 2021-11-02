@@ -34,13 +34,13 @@ const char *video_formats[] = {
 
 const char *video_outputs[] = {
     VIDEO_OUTPUT_NULL_STR,
-    VIDEO_OUTPUT_STDOUT_STR,
+    VIDEO_OUTPUT_FILE_STR,
     VIDEO_OUTPUT_SDL_STR,
-    VIDEO_OUTPUT_STDOUT_STR","VIDEO_OUTPUT_SDL_STR,
+    VIDEO_OUTPUT_FILE_STR","VIDEO_OUTPUT_SDL_STR,
     VIDEO_OUTPUT_RFB_STR,
-    VIDEO_OUTPUT_STDOUT_STR","VIDEO_OUTPUT_RFB_STR,
+    VIDEO_OUTPUT_FILE_STR","VIDEO_OUTPUT_RFB_STR,
     VIDEO_OUTPUT_SDL_STR","VIDEO_OUTPUT_RFB_STR,
-    VIDEO_OUTPUT_STDOUT_STR","VIDEO_OUTPUT_SDL_STR","VIDEO_OUTPUT_RFB_STR,
+    VIDEO_OUTPUT_FILE_STR","VIDEO_OUTPUT_SDL_STR","VIDEO_OUTPUT_RFB_STR,
 };
 
 const char* app_get_video_format_str(int format)
@@ -89,8 +89,8 @@ int app_get_video_output_int(const char* output)
     const char *next_end = strchr(next_start, coma);
     do {
         int len = next_end != NULL? next_end - next_start: strlen(next_start);
-        if (strncmp(VIDEO_OUTPUT_STDOUT_STR, next_start, len) == 0)
-            res |= VIDEO_OUTPUT_STDOUT;
+        if (strncmp(VIDEO_OUTPUT_FILE_STR, next_start, len) == 0)
+            res |= VIDEO_OUTPUT_FILE;
         else if (strncmp(VIDEO_OUTPUT_SDL_STR, next_start, len) == 0)
             res |= VIDEO_OUTPUT_SDL;
         else if (strncmp(VIDEO_OUTPUT_RFB_STR, next_start, len) == 0)
@@ -125,6 +125,7 @@ void app_set_default_state(struct app_state_t *app)
     app->worker_total_objects = 10;
     app->worker_thread_res = -1;
     app->verbose = utils_read_int_value(VERBOSE, VERBOSE_DEF);
+    app->output_path = utils_read_str_value(OUTPUT_PATH, OUTPUT_PATH_DEF);
 #ifdef TENSORFLOW
     app->model_path = utils_read_str_value(TFL_MODEL_PATH, TFL_MODEL_PATH_DEF);
 #elif DARKNET
@@ -145,6 +146,9 @@ void app_construct(struct app_state_t *app)
     mmal_encoder_construct(app);
 #endif
 
+    if ((app->video_output & VIDEO_OUTPUT_FILE) == VIDEO_OUTPUT_FILE)
+        file_construct(app);
+
 #ifdef SDL
     if ((app->video_output & VIDEO_OUTPUT_SDL) == VIDEO_OUTPUT_SDL)
         sdl_construct(app);
@@ -158,11 +162,15 @@ void app_construct(struct app_state_t *app)
 
 void app_cleanup(struct app_state_t *app)
 {
-    input.cleanup(&app);
-    for (int i = 0; filters[i].context != NULL && i < MAX_FILTERS; i++)
-        filters[i].cleanup(&app);
-    for (int i = 0; outputs[i].context != NULL && i < MAX_OUTPUTS; i++)
+    for (int i = 0; i < MAX_OUTPUTS && outputs[i].context != NULL; i++) {
         outputs[i].cleanup(&app);
+    }
+    for (int i = 0; i < MAX_FILTERS && filters[i].context != NULL; i++) {
+        if (filters[i].is_started) CALL(filters[i].stop())
+        filters[i].cleanup(&app);
+    }
+    if (input.is_started) CALL(input.stop());
+    input.cleanup(&app);
 }
 
 #define BFS_NODE_FREE(x)
@@ -306,11 +314,15 @@ static int find_path(
 int app_init(struct app_state_t *app)
 {
     CALL(input.init(), error);
-    for (int i = 0; outputs[i].context != NULL && i < MAX_OUTPUTS; i++)
-        CALL(outputs[i].init(&app), error);
+    for (int i = 0; i < MAX_OUTPUTS && outputs[i].context != NULL; i++) {
+        DEBUG("output_init: %s", outputs[i].name);
+        CALL(outputs[i].init(), error);
+    }
+        
 
     int filters_len = 0;
-    for (int i = 0; filters[i].context != NULL && i < MAX_FILTERS; i++) {
+    for (int i = 0; i < MAX_FILTERS && filters[i].context != NULL; i++) {
+        DEBUG("filter_init");
         CALL(filters[i].init(&app), error);
         filters_len++;
     }
@@ -361,7 +373,7 @@ int app_init(struct app_state_t *app)
                 buffer2);
         }
 
-        for (int i = 0; outputs[i].context != NULL && i < MAX_OUTPUTS; i++) {
+        for (int i = 0; i < MAX_OUTPUTS && outputs[i].context != NULL; i++) {
             buffer1[0] = '\0';
             const struct format_mapping_t* out_fs = NULL;
             int out_fs_len = outputs[i].get_formats(&out_fs);
@@ -377,7 +389,7 @@ int app_init(struct app_state_t *app)
         }
     }
 
-    for (int i = 0; outputs[i].context != NULL && i < MAX_OUTPUTS; i++) {
+    for (int i = 0; i < MAX_OUTPUTS && outputs[i].context != NULL; i++) {
         const struct format_mapping_t* out_fs = NULL;
         int out_fs_len = outputs[i].get_formats(&out_fs);
 
@@ -398,7 +410,7 @@ int app_init(struct app_state_t *app)
     }
     if (app->verbose) {
         char buffer[MAX_STRING];
-        for (int i = 0; outputs[i].context != NULL && i < MAX_OUTPUTS; i++) {
+        for (int i = 0; i < MAX_OUTPUTS && outputs[i].context != NULL; i++) {
             if (outputs[i].start_format != 0) {
                 buffer[0] = '\0';
                 for (int k = 0; k < MAX_FILTERS && outputs[i].filters[k].out_format; k++) {

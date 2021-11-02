@@ -12,14 +12,14 @@
 #define VIDEO_FORMAT_H264    3
 
 #define VIDEO_OUTPUT_NULL_STR   "null"
-#define VIDEO_OUTPUT_STDOUT_STR "stdout"
+#define VIDEO_OUTPUT_FILE_STR   "file"
 #define VIDEO_OUTPUT_SDL_STR    "sdl"
 #define VIDEO_OUTPUT_RFB_STR    "rfb"
 
 #define MAX_OUTPUTS   3
 #define MAX_FILTERS   3
 #define VIDEO_OUTPUT_NULL   0
-#define VIDEO_OUTPUT_STDOUT 1
+#define VIDEO_OUTPUT_FILE   1
 #define VIDEO_OUTPUT_SDL    2
 #define VIDEO_OUTPUT_RFB    4
 
@@ -30,7 +30,7 @@
 #define VIDEO_FORMAT "-f"
 #define VIDEO_FORMAT_DEF VIDEO_FORMAT_YUV422_STR
 #define VIDEO_OUTPUT "-o"
-#define VIDEO_OUTPUT_DEF VIDEO_OUTPUT_SDL_STR","VIDEO_OUTPUT_RFB_STR
+#define VIDEO_OUTPUT_DEF VIDEO_OUTPUT_FILE_STR","VIDEO_OUTPUT_SDL_STR","VIDEO_OUTPUT_RFB_STR
 
 #define PORT "-p"
 #define PORT_DEF 5900
@@ -43,7 +43,9 @@
 
 #define APP_NAME "raspidetect\0"
 #define VERBOSE "-d"
-#define VERBOSE_DEF 1
+#define VERBOSE_DEF 0
+#define OUTPUT_PATH "-f"
+#define OUTPUT_PATH_DEF "-" //stdout
 #define TFL_MODEL_PATH "-m"
 #define TFL_MODEL_PATH_DEF "./tflite_models/detect.tflite"
 #define DN_MODEL_PATH "-m"
@@ -115,7 +117,7 @@
     fprintf(stderr, "%s:%s, "#format"\n", __FILE__, __FUNCTION__, ##__VA_ARGS__); \
 }
 
-#define CALL_MESSAGE(call, res) \
+#define CALL_MESSAGE(call) \
 { \
     fprintf(stderr, "ERROR: "#call" returned error: %s (%d)\n%s:%d - %s\n", \
         strerror(errno), errno, __FILE__, __LINE__, __FUNCTION__); \
@@ -131,7 +133,7 @@
 { \
     int __res = call; \
     if (__res == -1) { \
-        CALL_MESSAGE(call, errno); \
+        CALL_MESSAGE(call); \
         goto error; \
     } \
 }
@@ -140,7 +142,7 @@
 { \
     int __res = call; \
     if (__res == -1) { \
-        CALL_MESSAGE(call, errno); \
+        CALL_MESSAGE(call); \
     } \
 }
 
@@ -261,12 +263,13 @@ struct input_t {
     void *context;
 
     int (*init)();
-    int (*start)(int format);
-    int (*process_frame)();
-    int (*stop)();
     void (*cleanup)();
+    int (*start)(int format);
+    int (*is_started)();
+    int (*stop)();
+    int (*process_frame)();
 
-    char* (*get_buffer)(int *format);
+    uint8_t* (*get_buffer)(int *format, int* length);
     int (*get_formats)(const struct format_mapping_t *formats[]);
 };
 
@@ -274,12 +277,15 @@ struct filter_t {
     char* name;
     void *context;
     int (*init)();
-    int (*start)(int input_format, int output_format);
-    int (*process)(char *buffer);
-    int (*stop)();    
     void (*cleanup)();
 
-    char* (*get_buffer)();
+    int (*start)(int input_format, int output_format);
+    int (*is_started)();
+    int (*stop)();
+    int (*process_frame)(uint8_t *buffer);
+
+
+    uint8_t *(*get_buffer)(int *in_format, int *out_format, int *length);
     int (*get_in_formats)(const struct format_mapping_t *formats[]);
     int (*get_out_formats)(const struct format_mapping_t *formats[]);
 };
@@ -292,8 +298,9 @@ struct output_t {
     struct filter_reference_t filters[MAX_FILTERS];
 
     int (*init)();
-    int (*render)(char *buffer);
     void (*cleanup)();
+
+    int (*process_frame)();
     int (*get_formats)(const struct format_mapping_t *formats[]);
 };
 
@@ -314,8 +321,9 @@ struct app_state_t {
     char *filename;                     // name of output file
     float fps;
     int verbose;                        // debug
-    char* model_path;
-    char* config_path;
+    const char* output_path;
+    const char* model_path;
+    const char* config_path;
     volatile unsigned *gpio;
     float rfb_fps;
 
