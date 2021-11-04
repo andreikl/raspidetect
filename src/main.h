@@ -45,7 +45,7 @@
 #define VERBOSE "-d"
 #define VERBOSE_DEF 0
 #define OUTPUT_PATH "-f"
-#define OUTPUT_PATH_DEF "-" //stdout
+#define OUTPUT_PATH_DEF "null"
 #define TFL_MODEL_PATH "-m"
 #define TFL_MODEL_PATH_DEF "./tflite_models/detect.tflite"
 #define DN_MODEL_PATH "-m"

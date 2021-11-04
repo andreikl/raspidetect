@@ -315,14 +315,12 @@ int app_init(struct app_state_t *app)
 {
     CALL(input.init(), error);
     for (int i = 0; i < MAX_OUTPUTS && outputs[i].context != NULL; i++) {
-        DEBUG("output_init: %s", outputs[i].name);
         CALL(outputs[i].init(), error);
     }
         
 
     int filters_len = 0;
     for (int i = 0; i < MAX_FILTERS && filters[i].context != NULL; i++) {
-        DEBUG("filter_init");
         CALL(filters[i].init(&app), error);
         filters_len++;
     }

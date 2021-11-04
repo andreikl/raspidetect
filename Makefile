@@ -109,6 +109,7 @@ ifeq ($(CMOCKA), 1)
 	TEST_LDFLAGS += -Wl,--wrap=SDL_CreateWindow
 	TEST_LDFLAGS += -Wl,--wrap=SDL_DestroyWindow
 	TEST_LDFLAGS += -Wl,--wrap=SDL_GetWindowSurface
+	TEST_LDFLAGS += -Wl,--wrap=SDL_FreeSurface
 	TEST_LDFLAGS += -Wl,--wrap=SDL_CreateRGBSurfaceFrom
 # SDL_BlitSurface
 	TEST_LDFLAGS += -Wl,--wrap=SDL_UpperBlit

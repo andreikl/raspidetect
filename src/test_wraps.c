@@ -22,14 +22,14 @@
         fprintf(stderr, "WRAP: %s:%s, "#format"\n", __FILE__, __FUNCTION__, ##__VA_ARGS__); \
 }
 
-int __wrap___xstat(int __ver, const char *__filename, struct stat *__stat_buf)
+int __wrap___xstat(int __ver, const char * __filename, struct stat * __stat_buf)
 {
-    WRAP_DEBUG("stat");
+    WRAP_DEBUG("stat, __filename: %s", __filename);
     __stat_buf->st_mode = __S_IFCHR;
     return 0;
 }
 
-int __wrap_open(const char *__file, int __oflag, ...)
+int __wrap_open(const char * __file, int __oflag, ...)
 {
     WRAP_DEBUG("open");
     return 1;
@@ -138,13 +138,13 @@ int __wrap_select(int fd)
         return -1;
     }
 
-    int __wrap_v4l2_open(const char *__file, int __oflag, ...)
+    int __wrap_v4l2_open(const char * __file, int __oflag, ...)
     {
         WRAP_DEBUG("v4l2_open");
         return 1;
     }
 
-    int __wrap_v4l2_ioctl(int fd, int request, void *arg)
+    int __wrap_v4l2_ioctl(int fd, int request, void * arg)
     {
         if (request == (int)VIDIOC_QUERYCAP) {
             WRAP_DEBUG("request: %s", "VIDIOC_QUERYCAP");
@@ -187,6 +187,23 @@ int __wrap_select(int fd)
                 return -1;
             }
         }
+        else if (request == (int)VIDIOC_QBUF) {
+            WRAP_DEBUG("request: %s", "VIDIOC_QBUF");
+            struct v4l2_buffer *buf = arg;
+            assert_int_equal(buf->length, image_width * image_height * 2);
+            image = (uint8_t *)buf->m.userptr;
+            return 0;
+        }
+        else if (request == (int)VIDIOC_DQBUF) {
+            WRAP_DEBUG("request: %s", "VIDIOC_DQBUF");
+            uint8_t *index = image;
+            int row_length = image_width << 1;
+            for (int i = 0; i < image_height; i++)
+                for (int j = 0; j < row_length; j += 2, index += 2) {
+                    *index = (i & 0x8) == 0? 0: 255;
+                }
+            return 0;
+        }
         else {
             WRAP_DEBUG("request: %d", request);
         }
@@ -226,7 +243,7 @@ SDL_Surface *__wrap_SDL_GetWindowSurface(SDL_Window * window)
     return sdl_surface;
 }
 
-SDL_Surface *__wrap_SDL_CreateRGBSurfaceFrom(void *pixels,
+SDL_Surface *__wrap_SDL_CreateRGBSurfaceFrom(void * pixels,
     int width,
     int height,
     int depth,
@@ -240,12 +257,17 @@ SDL_Surface *__wrap_SDL_CreateRGBSurfaceFrom(void *pixels,
     return sdl_surface;
 }
 
+void __wrap_SDL_FreeSurface(SDL_Surface * surface)
+{
+    WRAP_DEBUG("__wrap_SDL_FreeSurface");
+}
+
 // SDL_BlitSurface
 int __wrap_SDL_UpperBlit(
-    SDL_Surface* src,
-    const SDL_Rect* srcrect,
-    SDL_Surface* dst,
-    SDL_Rect* dstrect)
+    SDL_Surface * src,
+    const SDL_Rect * srcrect,
+    SDL_Surface * dst,
+    SDL_Rect * dstrect)
 {
     WRAP_DEBUG("__wrap_SDL_BlitSurface");
     return 0;

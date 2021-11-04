@@ -40,7 +40,6 @@ extern int is_abort;
 
 static int file_init()
 {
-    DEBUG("file_init");
     return 0;
 }
 
@@ -58,23 +57,33 @@ static int file_process_frame()
         struct filter_t *filter = filters + output->filters[k].index;
         in_format = out_format;
         out_format = output->filters[k].out_format;
-        if (!filter->is_started) CALL(filter->start(in_format, out_format), cleanup);
+        if (!filter->is_started()) CALL(filter->start(in_format, out_format), cleanup);
         CALL(filter->process_frame(buffer), cleanup);
         buffer = filter->get_buffer(NULL, NULL, &length);
     }
-
-    FILE* fstream;
-    if (file.app->output_path[0] == '-')
-        fstream = stdout;
-    else {
-        fstream = fopen(file.app->output_path, "w");
-        if (fstream == NULL)
-            CALL_MESSAGE(fopen(file.app->output_path, "w"));
+    int written = 0;
+    if (strcmp(file.app->output_path, "null") == 0) {
+        written = length;
+    } else {
+        FILE* fstream;
+        if (strcmp(file.app->output_path, "stdout") == 0) {
+            fstream = stdout;
+        }
+        else {
+            fstream = fopen(file.app->output_path, "w");
+            if (fstream == NULL)
+                CALL_MESSAGE(fopen(file.app->output_path, "w"));
+        }
+        written = fwrite(buffer, 1, length, fstream);
+        if (file.app->output_path[0] != '-') {
+            CALL(fclose(fstream), cleanup);
+        }
     }
-    fwrite(buffer, 1, length, fstream);
-    if (file.app->output_path[0] != '-') {
-        CALL(fclose(fstream), cleanup);
+    if (length <= 0 || written != length) {
+        CALL_CUSTOM_MESSAGE("The file output wasn't written, length: ", length);
+        goto cleanup;
     }
+    return 0;
 
 cleanup:
     if (!errno) errno = EAGAIN;
