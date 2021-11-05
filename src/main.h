@@ -17,7 +17,7 @@
 #define VIDEO_OUTPUT_RFB_STR    "rfb"
 
 #define MAX_OUTPUTS   3
-#define MAX_FILTERS   3
+#define MAX_FILTERS   4
 #define VIDEO_OUTPUT_NULL   0
 #define VIDEO_OUTPUT_FILE   1
 #define VIDEO_OUTPUT_SDL    2

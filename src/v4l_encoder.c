@@ -6,11 +6,11 @@
 #include "linux/videodev2.h"
 
 static struct format_mapping_t v4l_input_formats[] = {
-    {
-        .format = VIDEO_FORMAT_YUV422,
-        .internal_format = V4L2_PIX_FMT_YUYV,
-        .is_supported = 0
-    },
+    // {
+    //     .format = VIDEO_FORMAT_YUV422,
+    //     .internal_format = V4L2_PIX_FMT_YUYV,
+    //     .is_supported = 0
+    // },
     {
         .format = VIDEO_FORMAT_YUV444,
         .internal_format = V4L2_PIX_FMT_YUV444M,
@@ -130,7 +130,7 @@ static int v4l_init()
     ASSERT_INT(v4l.dev_id, !=, -1, cleanup);
 
     int res = 0;
-    sprintf(v4l.dev_name, "/dev/nvhost-msenc");
+    sprintf(v4l.dev_name, V4L_H264_ENCODER);
 
     int len = v4l.app->video_width * v4l.app->video_height * 2;
     uint8_t *data = malloc(len);
@@ -155,15 +155,15 @@ static int v4l_init()
     CALL(stat(v4l.dev_name, &st), cleanup);
     ASSERT_INT(S_ISCHR(st.st_mode), ==, 0, cleanup);
 
-    CALL(v4l.dev_id = v4l2_open(v4l.dev_name, O_RDWR | O_NONBLOCK, 0), cleanup);
+    CALL(v4l.dev_id = v4l2_open(v4l.dev_name, O_RDWR | O_NONBLOCK), cleanup);
     struct v4l2_capability cap;
     CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_QUERYCAP, &cap), cleanup);
     strncpy(v4l.app->camera_name, (const char *)cap.card, 32);
-    // DEBUG("cap.capabilities: %d", cap.capabilities);
+    DEBUG("v4l.app->camera_name: %s", v4l.app->camera_name);
+    DEBUG("cap.capabilities: %d", cap.capabilities);
 
     ASSERT_INT((cap.capabilities & V4L2_CAP_VIDEO_M2M_MPLANE), ==, 0, cleanup);
     ASSERT_INT((cap.capabilities & V4L2_CAP_STREAMING), ==, 0, cleanup);
-
 
     int is_found = 0;
     int formats_len = ARRAY_SIZE(v4l_input_formats);
@@ -172,8 +172,8 @@ static int v4l_init()
     };
     CALL(res = ioctl_enum(v4l.dev_id, VIDIOC_ENUM_FMT, &fmt), cleanup);
     while (res >= 0 && !is_found) {
-        // DEBUG("pixelformat %c %c %c %c", GET_B(fmt.pixelformat),
-        //     GET_G(fmt.pixelformat), GET_R(fmt.pixelformat), GET_A(fmt.pixelformat));
+        DEBUG("pixelformat %c %c %c %c", GET_B(fmt.pixelformat),
+            GET_G(fmt.pixelformat), GET_R(fmt.pixelformat), GET_A(fmt.pixelformat));
         for (int i = 0; i < formats_len; i++) {
             struct format_mapping_t *f = v4l_input_formats + i;
             if (f->internal_format == fmt.pixelformat) {
@@ -244,8 +244,8 @@ static int v4l_init()
         return -1;
     }
     return 0;
-cleanup:
 
+cleanup:
     v4l_cleanup();
     if (errno == 0)
         errno = EAGAIN;

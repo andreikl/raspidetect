@@ -25,7 +25,7 @@
 #include "opencv2/imgproc/imgproc_c.h"
 #endif
 
-KHASH_MAP_INIT_STR(argvs_hash_t, char *)
+KHASH_MAP_INIT_STR(argvs_hash_t, char *);
 extern KHASH_T(argvs_hash_t) *h;
 
 void utils_parse_args(int argc, char** argv)

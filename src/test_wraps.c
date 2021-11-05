@@ -22,22 +22,39 @@
         fprintf(stderr, "WRAP: %s:%s, "#format"\n", __FILE__, __FUNCTION__, ##__VA_ARGS__); \
 }
 
-int __wrap___xstat(int __ver, const char * __filename, struct stat * __stat_buf)
+#ifdef V4L_ENCODER
+// #include "v4l_encoder.h"
+// #define JETSON_REAL_ENCODER
+#endif
+
+int __wrap___xstat(int ver, const char * filename, struct stat * stat_buf)
 {
-    WRAP_DEBUG("stat, __filename: %s", __filename);
-    __stat_buf->st_mode = __S_IFCHR;
+#ifdef JETSON_REAL_ENCODER
+    if (strcmp(filename, V4L_H264_ENCODER) == 0) {
+        WRAP_DEBUG("real xstat, filename: %s", filename);
+        return __real___xstat(ver, filename, stat_buf);
+    }
+#endif
+    WRAP_DEBUG("xstat, filename: %s", filename);
+    stat_buf->st_mode = __S_IFCHR;
     return 0;
 }
 
-int __wrap_open(const char * __file, int __oflag, ...)
+int __wrap_open(const char * file, int oflag, ...)
 {
-    WRAP_DEBUG("open");
+    WRAP_DEBUG("open, file: %s", file);
     return 1;
 }
 
 int __wrap_close(int fd)
 {
-    WRAP_DEBUG("close");
+#ifdef JETSON_REAL_ENCODER
+    if (fd != 1) {
+        WRAP_DEBUG("real close, fd: %d", fd);
+        return __real_close(fd);
+    }
+#endif
+    WRAP_DEBUG("close, fd: %d", fd);
     return 0;
 }
 
@@ -138,14 +155,43 @@ int __wrap_select(int fd)
         return -1;
     }
 
-    int __wrap_v4l2_open(const char * __file, int __oflag, ...)
+    int __wrap_v4l2_open(const char * file, int oflag, ...)
     {
-        WRAP_DEBUG("v4l2_open");
+#ifdef JETSON_REAL_ENCODER
+        if (strcmp(file, V4L_H264_ENCODER) == 0) {
+            int res = __real_v4l2_open(file, oflag);
+            WRAP_DEBUG("real v4l2_open, file: %s, res: %d", file, res);
+            return res;
+        }
+#endif
+        WRAP_DEBUG("v4l2_open, file: %s", file);
         return 1;
     }
 
     int __wrap_v4l2_ioctl(int fd, int request, void * arg)
     {
+#ifdef JETSON_REAL_ENCODER
+        if (request == (int)VIDIOC_QUERYCAP) {
+            WRAP_DEBUG("real v4l2_ioctl, request: VIDIOC_QUERYCAP, fd: %d", fd);
+        }
+        else if (request == (int)VIDIOC_ENUM_FMT) {
+            WRAP_DEBUG("real v4l2_ioctl, request: VIDIOC_ENUM_FMT, fd: %d", fd);
+        }
+        else if (request == (int)VIDIOC_ENUM_FRAMESIZES) {
+            WRAP_DEBUG("real v4l2_ioctl, request: VIDIOC_ENUM_FRAMESIZES, fd: %d", fd);
+        }
+        else if (request == (int)VIDIOC_QBUF) {
+            WRAP_DEBUG("real v4l2_ioctl, request: VIDIOC_QBUF, fd: %d", fd);
+        }
+        else if (request == (int)VIDIOC_DQBUF) {
+            WRAP_DEBUG("real v4l2_ioctl, request: VIDIOC_DQBUF, fd: %d", fd);
+        }
+        else {
+            WRAP_DEBUG("real v4l2_ioctl, request: %d, fd: %d", request, fd);
+        }
+        return __real_v4l2_ioctl(fd, request, arg);
+#endif
+
         if (request == (int)VIDIOC_QUERYCAP) {
             WRAP_DEBUG("request: %s", "VIDIOC_QUERYCAP");
             struct v4l2_capability *cap = arg;
@@ -157,7 +203,7 @@ int __wrap_select(int fd)
             WRAP_DEBUG("request: %s", "VIDIOC_ENUM_FMT");
             struct v4l2_fmtdesc *fmt = arg;
             if (fmt->index == 0 && fmt->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) {
-                fmt->pixelformat = V4L2_PIX_FMT_YUYV;
+                fmt->pixelformat = V4L2_PIX_FMT_YUV444M;
                 return 0;
             }
             if (fmt->index == 0 && fmt->type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE) {

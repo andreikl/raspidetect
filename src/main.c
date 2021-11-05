@@ -33,7 +33,7 @@
 #include "control.h"
 #endif //CONTROL
 
-KHASH_MAP_INIT_STR(argvs_hash_t, char*)
+KHASH_MAP_INIT_STR(argvs_hash_t, char*);
 KHASH_T(argvs_hash_t) *h;
 
 int is_abort = 0;

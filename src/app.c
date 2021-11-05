@@ -140,6 +140,8 @@ void app_construct(struct app_state_t *app)
     v4l_construct(app);
 #endif //V4L
 
+    yuv_converter_construct(app);
+
 #ifdef V4L_ENCODER
     v4l_encoder_construct(app);
 #elif MMAL_ENCODER
@@ -321,6 +323,7 @@ int app_init(struct app_state_t *app)
 
     int filters_len = 0;
     for (int i = 0; i < MAX_FILTERS && filters[i].context != NULL; i++) {
+        DEBUG("filters[%s].init", filters[i].name);
         CALL(filters[i].init(&app), error);
         filters_len++;
     }

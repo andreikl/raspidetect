@@ -27,7 +27,7 @@ export BUILD_DIR ?= ./build
 #-mcpu=arm6 -mfpu=vfp
 CC = cc
 LDFLAGS = -lm
-COMMON = -Iexternal/klib -Isrc/
+COMMON = -Iexternal/klib/ -Isrc/
 #-D_POSIX_C_SOURCE=199309L fixes CLOCK_REALTIME error on pi zero 
 #CFLAGS = -pthread -O3 -fPIC -Wall -Wno-implicit-function-declaration -Wno-unused-function -DNDEBUG -std=c11 -D_POSIX_C_SOURCE=199309L
 CFLAGS = -pthread -O3 -fPIC -Wall -Wno-implicit-function-declaration -Wno-unused-function -DNDEBUG -std=c11 -D_POSIX_C_SOURCE=199309L
@@ -119,13 +119,13 @@ ifeq ($(CMOCKA), 1)
 endif
 
 
-OBJ += utils.o app.o file.o
+OBJ += app.o utils.o file.o yuv_converter.o
 OBJS = $(addprefix ${BUILD_DIR}/obj/, $(OBJ))
 
 
 all: clean setup $(BUILD_DIR)/$(EXEC) $(BUILD_DIR)/$(EXEC)_test
 
-$(BUILD_DIR)/$(EXEC): $(OBJS) ${BUILD_DIR}/obj/main.o
+$(BUILD_DIR)/$(EXEC): ${BUILD_DIR}/obj/main.o $(OBJS)
 	$(CC) $(COMMON) $(CFLAGS) $^ -o $@ $(LDFLAGS)
 
 $(BUILD_DIR)/$(EXEC)_test: $(OBJS) $(TESTS)
