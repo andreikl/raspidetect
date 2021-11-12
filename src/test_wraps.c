@@ -23,8 +23,8 @@
 }
 
 #ifdef V4L_ENCODER
-// #include "v4l_encoder.h"
-// #define JETSON_REAL_ENCODER
+   #include "v4l_encoder.h"
+   #define JETSON_REAL_ENCODER
 #endif
 
 int __wrap___xstat(int ver, const char * filename, struct stat * stat_buf)

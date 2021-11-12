@@ -183,12 +183,12 @@ struct bfs_node_t {
 KLIST_INIT(bfs_qeue_t, struct bfs_node_t, BFS_NODE_FREE)
 
 static int find_path(
+    struct app_state_t *app,
     const struct format_mapping_t* in_f,
     const struct format_mapping_t* out_f,
-    int filters_len,
     struct output_t* output)
 {
-    int matrix_len = filters_len + 2;
+    int matrix_len = MAX_FILTERS + 2;
     int bfs_adjacency_matrix[MAX_FILTERS + 2][MAX_FILTERS + 2];
     memset(*bfs_adjacency_matrix, 0, sizeof(bfs_adjacency_matrix));
     //DEBUG("bfs_adjacency_matrix: %lu", sizeof(bfs_adjacency_matrix));
@@ -197,7 +197,7 @@ static int find_path(
         bfs_adjacency_matrix[0][matrix_len - 1] = in_f->format;
     }
 
-    for (int i = 0; filters[i].context != NULL && i < MAX_FILTERS; i++) {
+    for (int i = 0; i < MAX_FILTERS && filters[i].context != NULL; i++) {
         const struct format_mapping_t* fin_fs = NULL;
         int fin_fs_len = filters[i].get_in_formats(&fin_fs);
         const struct format_mapping_t* fout_fs = NULL;
@@ -212,15 +212,22 @@ static int find_path(
             }
 
             //try to connect another output format of filter(j) to current input format of filter(i)
-            for (int j = 0; filters[j].context != NULL && j < MAX_FILTERS; j++) {
+            for (int j = 0; j < MAX_FILTERS && filters[j].context; j++) {
                 if (j == i)
                     continue; //skip current filter
                 const struct format_mapping_t* ffout_fs = NULL;
-                int ffout_fs_len = filters[i].get_out_formats(&ffout_fs);
+                int ffout_fs_len = filters[j].get_out_formats(&ffout_fs);
                 for (int jj = 0; jj < ffout_fs_len; jj++) {
                     const struct format_mapping_t* ffout_f = ffout_fs + jj;
                     if (!ffout_f->is_supported)
                         continue;
+
+                    // if (i == 1) {
+                    //     DEBUG("%s in[%s], other out[%s]",
+                    //         filters[i].name,
+                    //         app_get_video_format_str(fin_f->format),
+                    //         app_get_video_format_str(ffout_f->format));
+                    // }
 
                     if (fin_f->format == ffout_f->format) {
                         bfs_adjacency_matrix[j + 1][i + 1] = ffout_f->format;
@@ -238,16 +245,23 @@ static int find_path(
             }
 
             //try to connect current output format of filter(i) to another input format of filter(j)
-            for (int j = 0; filters[j].context != NULL && j < MAX_FILTERS; j++) {
+            for (int j = 0; j < MAX_FILTERS && filters[j].context != NULL; j++) {
                 if (j == i)
                     continue; //skip current filter
+
                 const struct format_mapping_t* ffin_fs = NULL;
-                int ffin_fs_len = filters[i].get_in_formats(&ffin_fs);
+                int ffin_fs_len = filters[j].get_in_formats(&ffin_fs);
                 for (int jj = 0; jj < ffin_fs_len; jj++) {
                     const struct format_mapping_t* ffin_f = ffin_fs + jj;
                     if (!ffin_fs->is_supported)
                         continue;
 
+                    // if (i == 1) {
+                    //     DEBUG("%s out[%s], other in[%s]",
+                    //         filters[i].name,
+                    //         app_get_video_format_str(fout_f->format),
+                    //         app_get_video_format_str(ffin_f->format));
+                    // }
                     if (fout_f->format == ffin_f->format) {
                         bfs_adjacency_matrix[i + 1][j + 1] = fout_f->format;
                     }
@@ -255,6 +269,41 @@ static int find_path(
             }
         }
     }
+
+    // if (app->verbose) {
+    //     char buffer[MAX_STRING], tmp[MAX_STRING];;
+
+    //     DEBUG("adjacency matrix for input(%s) and output(%s)",
+    //         app_get_video_format_str(in_f->format),
+    //         app_get_video_format_str(out_f->format)
+    //     );
+    //     for (int i = 0; i < MAX_FILTERS + 2; i++) {
+    //         if (i == 0) {
+    //             strcpy(buffer, "in:\t\t|");
+    //         }
+    //         else if (i == MAX_FILTERS + 1) {
+    //             strcpy(buffer, "out:\t\t|");
+    //         }
+    //         else {
+    //             if (i - 1 < MAX_FILTERS && filters[i - 1].context != NULL) {
+    //                 strcpy(buffer, filters[i - 1].name);
+    //                 strcat(buffer, "\t|");
+    //             } else {
+    //                 strcpy(buffer, "\t\t\t|");
+    //             }
+    //         }
+    //         for (int j = 0; j < MAX_FILTERS + 2; j++) {
+    //             if (bfs_adjacency_matrix[i][j] > 0) {
+    //                 sprintf(tmp, "%s\t|", app_get_video_format_str(bfs_adjacency_matrix[i][j]));
+    //                 strcat(buffer, tmp);
+    //             }
+    //             else
+    //                 strcat(buffer, "\t|");
+                
+    //         }
+    //         DEBUG("%s", buffer);
+    //     }
+    // }
 
     //Breadth-First-Search (BFS)
     int distance = -1;
@@ -285,10 +334,10 @@ static int find_path(
                     while (d > 0) {
                         // find previous filter
                         for (int j = 1; j < ARRAY_SIZE(bfs_path); j++) {
-                            if (bfs_path[j] == d + 1) {
+                            if (bfs_path[j] == d) {
                                 output->filters[d - 1].out_format
-                                    = bfs_adjacency_matrix[node.index][i];
-                                output->filters[d-1].index = j - 1;
+                                    = bfs_adjacency_matrix[j][output->filters[d].index + 1];
+                                output->filters[d - 1].index = j - 1;
                                 break;
                             }
                         }
@@ -321,11 +370,9 @@ int app_init(struct app_state_t *app)
     }
         
 
-    int filters_len = 0;
     for (int i = 0; i < MAX_FILTERS && filters[i].context != NULL; i++) {
         DEBUG("filters[%s].init", filters[i].name);
         CALL(filters[i].init(&app), error);
-        filters_len++;
     }
 
     const struct format_mapping_t* in_fs = NULL;
@@ -345,7 +392,7 @@ int app_init(struct app_state_t *app)
         }
         DEBUG("input[%s]: %s", input.name, buffer1);
 
-        for (int i = 0; filters[i].context != NULL && i < MAX_FILTERS; i++) {
+        for (int i = 0; i < MAX_FILTERS && filters[i].context != NULL; i++) {
             buffer1[0] = '\0';
             const struct format_mapping_t* fin_fs = NULL;
             int fin_fs_len = filters[i].get_in_formats(&fin_fs);
@@ -405,7 +452,7 @@ int app_init(struct app_state_t *app)
                 if (!out_f->is_supported)
                     continue;
 
-                find_path(in_f, out_f, filters_len, outputs + i);
+                find_path(app, in_f, out_f, outputs + i);
             }
         }
     }
