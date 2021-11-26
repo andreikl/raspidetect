@@ -85,6 +85,7 @@ static int yuv_process_frame(uint8_t *buffer)
         res[j + 1 + plane] = (u01 & 0xF0) >> 4;
         res[j + 1 + planes] = (v01 & 0xF0) >> 4;
     }
+    return 0;
 
 cleanup:
     if (errno == 0)

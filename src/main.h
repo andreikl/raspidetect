@@ -167,6 +167,7 @@
 #include <signal.h>    // SIGUSR1
 #include <string.h>    // memcpy
 #include <sys/stat.h>  // stat
+#include <sys/select.h> //select
 #include <fcntl.h>     // O_RDWR | O_NONBLOCK
 
 struct cpu_state_t {

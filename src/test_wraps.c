@@ -58,9 +58,19 @@ int __wrap_close(int fd)
     return 0;
 }
 
-int __wrap_select(int fd)
+int __wrap_select(int nfds,
+    fd_set *readfds,
+    fd_set *writefds,
+    fd_set *exceptfds,
+    struct timeval *timeout)
 {
-    WRAP_DEBUG("select");
+#ifdef JETSON_REAL_ENCODER
+    if (__FDS_BITS (readfds)[0] != 2) {
+        WRAP_DEBUG("real select, fd: %ld", (__FDS_BITS (readfds)[0] >> 1));
+        return __real_select(nfds, readfds, writefds, exceptfds, timeout);
+    }
+#endif
+    WRAP_DEBUG("select, fd: %ld", (__FDS_BITS (readfds)[0] >> 1));
     return 1;
 }
 
@@ -180,8 +190,22 @@ int __wrap_select(int fd)
         else if (request == (int)VIDIOC_ENUM_FRAMESIZES) {
             WRAP_DEBUG("real v4l2_ioctl, request: VIDIOC_ENUM_FRAMESIZES, fd: %d", fd);
         }
+        else if (request == (int)VIDIOC_S_FMT) {
+            WRAP_DEBUG("real v4l2_ioctl, request: %s", "VIDIOC_S_FMT");
+        }
+        else if (request == (int)VIDIOC_REQBUFS) {
+            WRAP_DEBUG("real request: %s", "VIDIOC_REQBUFS");
+        }
         else if (request == (int)VIDIOC_QBUF) {
             WRAP_DEBUG("real v4l2_ioctl, request: VIDIOC_QBUF, fd: %d", fd);
+        }
+        else if (request == (int)VIDIOC_STREAMON) {
+            WRAP_DEBUG("real request: %s", "VIDIOC_STREAMON");
+            return 0;
+        }
+        else if (request == (int)VIDIOC_STREAMOFF) {
+            WRAP_DEBUG("real request: %s", "VIDIOC_STREAMOFF");
+            return 0;
         }
         else if (request == (int)VIDIOC_DQBUF) {
             WRAP_DEBUG("real v4l2_ioctl, request: VIDIOC_DQBUF, fd: %d", fd);
@@ -233,11 +257,23 @@ int __wrap_select(int fd)
                 return -1;
             }
         }
+        else if (request == (int)VIDIOC_S_FMT) {
+            WRAP_DEBUG("request: %s", "VIDIOC_S_FMT");
+            return 0;
+        }
         else if (request == (int)VIDIOC_QBUF) {
             WRAP_DEBUG("request: %s", "VIDIOC_QBUF");
             struct v4l2_buffer *buf = arg;
             assert_int_equal(buf->length, image_width * image_height * 2);
             image = (uint8_t *)buf->m.userptr;
+            return 0;
+        }
+        else if (request == (int)VIDIOC_STREAMON) {
+            WRAP_DEBUG("request: %s", "VIDIOC_STREAMON");
+            return 0;
+        }
+        else if (request == (int)VIDIOC_STREAMOFF) {
+            WRAP_DEBUG("request: %s", "VIDIOC_STREAMOFF");
             return 0;
         }
         else if (request == (int)VIDIOC_DQBUF) {

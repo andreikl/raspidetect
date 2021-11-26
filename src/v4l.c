@@ -197,8 +197,8 @@ static int v4l_init()
     };
     CALL(res = ioctl_enum(v4l.dev_id, VIDIOC_ENUM_FMT, &fmt), cleanup);
     while (res >= 0 && !is_found) {
-        DEBUG("pixelformat %c %c %c %c", GET_B(fmt.pixelformat),
-            GET_G(fmt.pixelformat), GET_R(fmt.pixelformat), GET_A(fmt.pixelformat));
+        // DEBUG("pixelformat %c %c %c %c", GET_B(fmt.pixelformat),
+        //     GET_G(fmt.pixelformat), GET_R(fmt.pixelformat), GET_A(fmt.pixelformat));
         for (int i = 0; i < formats_len; i++) {
             struct format_mapping_t *f = v4l_formats + i;
             if (f->internal_format == fmt.pixelformat) {

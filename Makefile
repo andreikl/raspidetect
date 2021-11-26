@@ -50,6 +50,8 @@ ifeq ($(H264_ENCODER_JETSON), 1)
 	COMMON += -DV4L_ENCODER
 	COMMON += `pkg-config --cflags libv4l2`
 	LDFLAGS += `pkg-config --libs libv4l2`
+	LDFLAGS += -L/usr/lib/aarch64-linux-gnu/tegra -L/usr/lib/aarch64-linux-gnu
+	LDFLAGS += -lnvbuf_utils -lnvrm -lnvrm_graphics -lnvddk_vic -lnvos -lnvbuf_fdmap
 	OBJ += v4l_encoder.o
 endif
 

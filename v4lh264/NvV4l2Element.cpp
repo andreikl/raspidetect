@@ -57,6 +57,7 @@ NvV4l2Element::NvV4l2Element(const char *comp_name, const char *dev_node, int fl
 
     /*Synchronization issue of libv4l2 open source library fixing here,adding lock for that*/
     pthread_mutex_lock(&initializer_mutex);
+    cout << "v4l2_open:" << ((flags & O_NONBLOCK == 0)? "O_BLOCK": "O_NONBLOCK") << "\n";
     fd = v4l2_open(dev_node, flags | O_RDWR);
     if (fd == -1)
     {
@@ -69,6 +70,7 @@ NvV4l2Element::NvV4l2Element(const char *comp_name, const char *dev_node, int fl
 
     COMP_DEBUG_MSG("Opened, fd = " << fd);
 
+    cout << "v4l2_ioctl VIDIOC_QUERYCAP\n";
     ret = v4l2_ioctl(fd, VIDIOC_QUERYCAP, &caps);
     if (ret != 0)
     {
@@ -91,6 +93,7 @@ NvV4l2Element::~NvV4l2Element()
 
     if (fd != -1)
     {
+        cout << "v4l2_close\n";
         v4l2_close(fd);
         CAT_DEBUG_MSG("Device closed, fd = " << fd);
     }
@@ -103,6 +106,7 @@ NvV4l2Element::dqEvent(struct v4l2_event &ev, uint32_t max_wait_ms)
 
     do
     {
+        cout << "v4l2_ioctl VIDIOC_DQEVENT\n";
         ret = v4l2_ioctl(fd, VIDIOC_DQEVENT, &ev);
 
         if (ret == 0)
@@ -138,6 +142,7 @@ NvV4l2Element::setControl(uint32_t id, int32_t value)
     ctl.id = id;
     ctl.value = value;
 
+    cout << "v4l2_ioctl VIDIOC_S_CTRL\n";
     ret = v4l2_ioctl(fd, VIDIOC_S_CTRL, &ctl);
 
     if (ret < 0)
@@ -160,6 +165,7 @@ NvV4l2Element::getControl(uint32_t id, int32_t &value)
 
     ctl.id = id;
 
+    cout << "v4l2_ioctl VIDIOC_G_CTRL\n";
     ret = v4l2_ioctl(fd, VIDIOC_G_CTRL, &ctl);
 
     if (ret < 0)
@@ -179,6 +185,7 @@ NvV4l2Element::setExtControls(v4l2_ext_controls &ctl)
 {
     int ret;
 
+    cout << "v4l2_ioctl VIDIOC_S_EXT_CTRLS\n";
     ret = v4l2_ioctl(fd, VIDIOC_S_EXT_CTRLS, &ctl);
 
     if (ret < 0)
@@ -197,6 +204,7 @@ NvV4l2Element::getExtControls(v4l2_ext_controls &ctl)
 {
     int ret;
 
+    cout << "v4l2_ioctl VIDIOC_G_EXT_CTRLS\n";
     ret = v4l2_ioctl(fd, VIDIOC_G_EXT_CTRLS, &ctl);
 
     if (ret < 0)
@@ -222,6 +230,7 @@ NvV4l2Element::subscribeEvent(uint32_t type, uint32_t id, uint32_t flags)
     sub.id = id;
     sub.flags = flags;
 
+    cout << "v4l2_ioctl VIDIOC_SUBSCRIBE_EVENT\n";
     ret = v4l2_ioctl(fd, VIDIOC_SUBSCRIBE_EVENT, &sub);
     if (ret == 0)
     {

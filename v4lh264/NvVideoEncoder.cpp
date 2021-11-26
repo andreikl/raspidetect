@@ -119,6 +119,12 @@ NvVideoEncoder::setOutputPlaneFormat(uint32_t pixfmt, uint32_t width,
     format.fmt.pix_mp.pixelformat = pixfmt;
     format.fmt.pix_mp.num_planes = num_bufferplanes;
 
+    cout << "fmt.type: " << format.type << "\n";
+    cout << "fmt.fmt.pix_mp.width: " << format.fmt.pix_mp.width << "\n";
+    cout << "fmt.fmt.pix_mp.height: " << format.fmt.pix_mp.height << "\n";
+    cout << "fmt.fmt.pix_mp.pixelformat: " << format.fmt.pix_mp.pixelformat << "\n";
+    cout << "fmt.fmt.pix_mp.num_planes: " << format.fmt.pix_mp.num_planes << "\n";
+
     return output_plane.setFormat(format);
 }
 
