@@ -7,13 +7,8 @@
 #include "sys/mman.h"
 
 static struct format_mapping_t v4l_input_formats[] = {
-    // {
-    //     .format = VIDEO_FORMAT_YUV422,
-    //     .internal_format = V4L2_PIX_FMT_YUYV,
-    //     .is_supported = 0
-    // },
     {
-        .format = VIDEO_FORMAT_YUV444,
+        .format = VIDEO_FORMAT_YUV422,
         .internal_format = V4L2_PIX_FMT_YUV444M,
         .is_supported = 0
     }
@@ -441,6 +436,7 @@ static int v4l_is_started()
 
 static int v4l_process_frame(uint8_t *buffer)
 {
+    DEBUG("Process frame");
     ASSERT_PTR(v4l_input_format, ==, NULL, cleanup);
     ASSERT_PTR(v4l_output_format, ==, NULL, cleanup);
     
@@ -464,38 +460,62 @@ static int v4l_process_frame(uint8_t *buffer)
         vi = v4l.in_planes[2].buf + v4l.in_planes[2].stride * y;
     }
 
-    struct v4l2_buffer buf;
-    memset(&buf, 0, sizeof(buf));
-    struct v4l2_plane output_planes[V4L_PLANES_SIZE];
-    memset(output_planes, 0, sizeof(output_planes));
-    buf.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
-    buf.memory = V4L2_MEMORY_MMAP;
-    buf.index = 0;
-    buf.length = V4L_PLANES_SIZE;
-    buf.m.planes = output_planes;
-    buf.m.planes[0].bytesused = v4l.in_planes[0].stride * v4l.app->video_height;
-    buf.m.planes[1].bytesused = v4l.in_planes[1].stride * v4l.app->video_height;
-    buf.m.planes[2].bytesused = v4l.in_planes[2].stride * v4l.app->video_height;
+    struct v4l2_buffer in_buf;
+    memset(&in_buf, 0, sizeof(in_buf));
+    struct v4l2_plane in_planes[V4L_PLANES_SIZE];
+    memset(in_planes, 0, sizeof(in_planes));
+    in_buf.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
+    in_buf.memory = V4L2_MEMORY_MMAP;
+    in_buf.index = 0;
+    in_buf.length = V4L_PLANES_SIZE;
+    in_buf.m.planes = in_planes;
+    in_buf.m.planes[0].bytesused = v4l.in_planes[0].stride * v4l.app->video_height;
+    in_buf.m.planes[1].bytesused = v4l.in_planes[1].stride * v4l.app->video_height;
+    in_buf.m.planes[2].bytesused = v4l.in_planes[2].stride * v4l.app->video_height;
     for (int i = 0; i < V4L_PLANES_SIZE; i++) {
         CALL(NvBufferMemSyncForDevice(v4l.in_planes[i].fd, i, (void **)&v4l.in_planes[i].buf),
             cleanup);
     }
-    CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_QBUF, &buf), cleanup);
+    CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_QBUF, &in_buf), cleanup);
 
-    struct timeval tv;
-    fd_set rfds;
-    FD_ZERO(&rfds);
-    FD_SET(v4l.dev_id, &rfds);
-    tv.tv_sec = 2;
-    tv.tv_usec = 0;
-    DEBUG("Select");
-    CALL(res = select(v4l.dev_id + 1, &rfds, NULL, NULL, &tv), cleanup);
-    if (res == 0) {
-        errno = ETIME;
-        goto cleanup;
+    // struct timeval tv;
+    // fd_set rfds;
+    // FD_ZERO(&rfds);
+    // FD_SET(v4l.dev_id, &rfds);
+    // tv.tv_sec = 2;
+    // tv.tv_usec = 0;
+    // CALL(res = select(v4l.dev_id + 1, &rfds, NULL, NULL, &tv), cleanup);
+    // if (res == 0) {
+    //     errno = ETIME;
+    //     goto cleanup;
+    // }
+
+    // struct v4l2_buffer out_buf;
+    // struct v4l2_plane out_plane;
+    // memset(&out_buf, 0, sizeof(out_buf));
+    // memset(&out_plane, 0, sizeof(out_plane));
+    // out_buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+    // out_buf.memory = V4L2_MEMORY_MMAP;
+    // out_buf.index = 0;
+    // out_buf.length = 1;
+    // out_buf.m.planes = &out_plane;
+    // CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_DQBUF, &out_buf), cleanup);
+    // CALL(NvBufferMemSyncForDevice(v4l.out_plane.fd, 0, (void **)&v4l.out_plane.buf), cleanup);
+    // DEBUG("Out plane - bytesused: %d", out_buf.m.planes[0].bytesused);
+
+    // memset(&out_buf, 0, sizeof(out_buf));
+    // memset(&out_plane, 0, sizeof(out_plane));
+    // out_buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+    // out_buf.memory = V4L2_MEMORY_MMAP;
+    // out_buf.index = 0;
+    // out_buf.length = 1;
+    // out_buf.m.planes = &out_plane;
+    // CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_QBUF, &out_buf), cleanup);
+
+    CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_DQBUF, &in_buf), cleanup);
+    for (int i = 0; i < V4L_PLANES_SIZE; i++) {
+        DEBUG("In plane[%d] - bytesused: %d", i, in_buf.m.planes[i].bytesused);
     }
-
-    DEBUG("Select done");
     return 0;
 
 cleanup:
