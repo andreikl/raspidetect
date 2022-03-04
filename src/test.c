@@ -156,7 +156,7 @@ int main(int argc, char **argv)
 
     const struct CMUnitTest tests[] = {
         cmocka_unit_test_setup(test_utils_init, test_verbose_false),
-        cmocka_unit_test_setup(test_file_loop, test_verbose_true),
+        cmocka_unit_test_setup(test_file_loop, test_verbose_false),
 #ifdef SDL
         cmocka_unit_test_setup(test_sdl_loop, test_verbose_false)
 #endif //SDL

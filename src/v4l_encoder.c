@@ -297,22 +297,13 @@ static int v4l_start(int input_format, int output_format)
         DEBUG("In plane[%d] - stride: %d", i, fmt.fmt.pix_mp.plane_fmt[i].bytesperline);
         DEBUG("In Plane[%d] - sizeimage: %d", i, fmt.fmt.pix_mp.plane_fmt[i].sizeimage);
     }
-    //TODO: [DEBUG] (NvVideoEncoder.cpp:190) <enc0> :Setting encoder bitrate to 4194304: success
-    //TODO:  (NvVideoEncoder.cpp:263) <enc0> :Setting encoder profile to 0: success
-    //TODO: [DEBUG] (NvVideoEncoder.cpp:298) <enc0> :Setting encoder level to 15: success
-    //TODO: [DEBUG] (NvVideoEncoder.cpp:349) <enc0> :Setting encoder rate control mode to 1: success
-    //TODO: [DEBUG] (NvVideoEncoder.cpp:418) <enc0> :Setting encoder IDR interval to 256: success
-    //TODO: [DEBUG] (NvVideoEncoder.cpp:395) <enc0> :Setting encoder I-frame interval to 30: success
-    //TODO: [DEBUG] (NvV4l2ElementPlane.cpp:603) <enc0> :Output Plane:Successfully set stream parameters
-    //TODO: [DEBUG] (NvVideoEncoder.cpp:166) <enc0> :Setting framerate to 30/1: success
-    //TODO: [DEBUG] (NvV4l2ElementPlane.cpp:528) <enc0> :Output Plane:Reqbuf returned 10 buffers
-
     //https://docs.nvidia.com/jetson/l4t-multimedia/group__V4L2Enc.html
     // only V4L2_MEMORY_MMAP is supported
     // MEMORY               OUTPUT PLANE 	CAPTURE PLANE
     // V4L2_MEMORY_MMAP     Y           	    Y
     // V4L2_MEMORY_DMABUF   Y           	    N
-    // V4L2_MEMORY_USERPTR  N           	    N    
+    // V4L2_MEMORY_USERPTR  N           	    N
+
     struct v4l2_requestbuffers req;
     memset(&req, 0, sizeof(req));
     req.count = 1;
@@ -407,15 +398,6 @@ static int v4l_start(int input_format, int output_format)
     type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
     CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_STREAMON, &type), cleanup);
 
-    memset(&buf, 0, sizeof(buf));
-    memset(planes, 0, sizeof(planes));
-    buf.index = 0;
-    buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
-    buf.memory = V4L2_MEMORY_MMAP;
-    buf.m.planes = planes;
-    buf.length = 1;
-    CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_QBUF, &buf), cleanup);
-
     return 0;
 
 cleanup:
@@ -436,10 +418,23 @@ static int v4l_is_started()
 
 static int v4l_process_frame(uint8_t *buffer)
 {
-    DEBUG("Process frame");
+    DEBUG("v4l_process_frame");
     ASSERT_PTR(v4l_input_format, ==, NULL, cleanup);
     ASSERT_PTR(v4l_output_format, ==, NULL, cleanup);
-    
+
+    DEBUG("queue output frame");
+    struct v4l2_buffer out_buf;
+    struct v4l2_plane out_plane;
+    memset(&out_buf, 0, sizeof(out_buf));
+    memset(&out_plane, 0, sizeof(out_plane));
+    out_buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+    out_buf.memory = V4L2_MEMORY_MMAP;
+    out_buf.index = 0;
+    out_buf.length = 1;
+    out_buf.m.planes = &out_plane;
+    CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_QBUF, &out_buf), cleanup);
+
+    DEBUG("queue input frame");
     int res;
     uint8_t *yi = v4l.in_planes[0].buf, *ui = v4l.in_planes[1].buf, *vi = v4l.in_planes[2].buf;
     for (int i = 0, y = 0; y < v4l.app->video_height; y++) {
@@ -477,6 +472,7 @@ static int v4l_process_frame(uint8_t *buffer)
             cleanup);
     }
     CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_QBUF, &in_buf), cleanup);
+    
 
     // struct timeval tv;
     // fd_set rfds;
@@ -490,32 +486,25 @@ static int v4l_process_frame(uint8_t *buffer)
     //     goto cleanup;
     // }
 
-    // struct v4l2_buffer out_buf;
-    // struct v4l2_plane out_plane;
-    // memset(&out_buf, 0, sizeof(out_buf));
-    // memset(&out_plane, 0, sizeof(out_plane));
-    // out_buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
-    // out_buf.memory = V4L2_MEMORY_MMAP;
-    // out_buf.index = 0;
-    // out_buf.length = 1;
-    // out_buf.m.planes = &out_plane;
-    // CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_DQBUF, &out_buf), cleanup);
-    // CALL(NvBufferMemSyncForDevice(v4l.out_plane.fd, 0, (void **)&v4l.out_plane.buf), cleanup);
-    // DEBUG("Out plane - bytesused: %d", out_buf.m.planes[0].bytesused);
 
-    // memset(&out_buf, 0, sizeof(out_buf));
-    // memset(&out_plane, 0, sizeof(out_plane));
-    // out_buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
-    // out_buf.memory = V4L2_MEMORY_MMAP;
-    // out_buf.index = 0;
-    // out_buf.length = 1;
-    // out_buf.m.planes = &out_plane;
-    // CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_QBUF, &out_buf), cleanup);
+    DEBUG("dequeue output frame");
+    memset(&out_buf, 0, sizeof(out_buf));
+    memset(&out_plane, 0, sizeof(out_plane));
+    out_buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+    out_buf.memory = V4L2_MEMORY_MMAP;
+    out_buf.index = 0;
+    out_buf.length = 1;
+    out_buf.m.planes = &out_plane;
+    CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_DQBUF, &out_buf), cleanup);
+    DEBUG("Out plane - bytesused shouldn't be 0: %d", out_buf.m.planes[0].bytesused);
+    CALL(NvBufferMemSyncForDevice(v4l.out_plane.fd, 0, (void **)&v4l.out_plane.buf), cleanup);
 
+    DEBUG("dequeue input frame");
     CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_DQBUF, &in_buf), cleanup);
     for (int i = 0; i < V4L_PLANES_SIZE; i++) {
         DEBUG("In plane[%d] - bytesused: %d", i, in_buf.m.planes[i].bytesused);
     }
+
     return 0;
 
 cleanup:

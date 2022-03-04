@@ -54,6 +54,75 @@
 
 using namespace std;
 
+#define ARRAY_SIZE(a) (sizeof(a) / sizeof(a[0]))
+
+#define GET_3RD_ARG(arg1, arg2, arg3, ...) arg3
+
+#define ASSERT_INT(value, condition, expectation, error) \
+{ \
+    if (value condition expectation) { \
+        fprintf(stderr, "ERROR: assert "#value"(%d) "#condition" "#expectation"(%d)\n%s:%d - %s\n", \
+            value, expectation, __FILE__, __LINE__, __FUNCTION__); \
+        goto error; \
+    } \
+}
+
+#define ASSERT_LNG(value, condition, expectation, error) \
+{ \
+    if (value condition expectation) { \
+        fprintf(stderr, "ERROR: assert "#value"(%ld) "#condition" "#expectation"(%ld)\n%s:%d - %s\n", \
+            value, (long int)expectation, __FILE__, __LINE__, __FUNCTION__); \
+        goto error; \
+    } \
+}
+
+#define ASSERT_PTR(value, condition, expectation, error) \
+{ \
+    if (value condition expectation) { \
+        fprintf(stderr, "ERROR: assert "#value"(%p) "#condition" "#expectation"(%p)\n%s:%d - %s\n", \
+            value, expectation, __FILE__, __LINE__, __FUNCTION__); \
+        goto error; \
+    } \
+}
+
+#define DEBUG(format, ...) \
+{ \
+    fprintf(stderr, "%s:%s, "#format"\n", __FILE__, __FUNCTION__, ##__VA_ARGS__); \
+}
+
+#define CALL_MESSAGE(call) \
+{ \
+    fprintf(stderr, "ERROR: "#call" returned error: %s (%d)\n%s:%d - %s\n", \
+        strerror(errno), errno, __FILE__, __LINE__, __FUNCTION__); \
+}
+
+#define CALL_CUSTOM_MESSAGE(call, res) \
+{ \
+    fprintf(stderr, "ERROR: "#call" returned error: (%d)\n%s:%d - %s\n", \
+        res, __FILE__, __LINE__, __FUNCTION__); \
+}
+
+#define CALL_2(call, error) \
+{ \
+    int __res = call; \
+    if (__res == -1) { \
+        CALL_MESSAGE(call); \
+        goto error; \
+    } \
+}
+
+#define CALL_1(call) \
+{ \
+    int __res = call; \
+    if (__res == -1) { \
+        CALL_MESSAGE(call); \
+    } \
+}
+
+#define CALL_X(...) GET_3RD_ARG(__VA_ARGS__, CALL_2, CALL_1, )
+
+#define CALL(...) CALL_X(__VA_ARGS__)(__VA_ARGS__)
+
 #include "encoder_unit_sample.hpp"
 
 /**
@@ -68,6 +137,7 @@ using namespace std;
  * OUTPUT PLANE         | CAPTURE PLANE
  * :----------------:   | :----------------:
  * V4L2_PIX_FMT_YUV420M | V4L2_PIX_FMT_H264
+ * V4L2_PIX_FMT_YUV444M
  *
  * ## Memory Type
  *            | OUTPUT PLANE        | CAPTURE PLANE
@@ -259,6 +329,22 @@ Buffer::fill_buffer_plane_format(uint32_t *num_planes,
 {
     switch (raw_pixfmt)
     {
+        case V4L2_PIX_FMT_YUV444M:
+            *num_planes = 3;
+
+            planefmts[0].width = width;
+            planefmts[1].width = width;
+            planefmts[2].width = width;
+
+            planefmts[0].height = height;
+            planefmts[1].height = height;
+            planefmts[2].height = height;
+
+            planefmts[0].bytesperpixel = 1;
+            planefmts[1].bytesperpixel = 1;
+            planefmts[2].bytesperpixel = 1;
+            break;
+
         case V4L2_PIX_FMT_YUV420M:
             *num_planes = 3;
 
@@ -274,6 +360,7 @@ Buffer::fill_buffer_plane_format(uint32_t *num_planes,
             planefmts[1].bytesperpixel = 1;
             planefmts[2].bytesperpixel = 1;
             break;
+
         case V4L2_PIX_FMT_NV12M:
             *num_planes = 2;
 
@@ -294,7 +381,8 @@ Buffer::fill_buffer_plane_format(uint32_t *num_planes,
 }
 
 static int
-read_video_frame(ifstream * stream, Buffer & buffer)
+//read_video_frame(ifstream * stream, Buffer & buffer)
+read_video_frame(Buffer & buffer)
 {
     uint32_t i, j;
     char *data;
@@ -312,9 +400,9 @@ read_video_frame(ifstream * stream, Buffer & buffer)
         */
         for (j = 0; j < plane.fmt.height; j++)
         {
-            stream->read(data, bytes_to_read);
+            /*stream->read(data, bytes_to_read);
             if (stream->gcount() < bytes_to_read)
-                return -1;
+                return -1;*/
             data += plane.fmt.stride;
         }
         plane.bytesused = plane.fmt.stride * plane.fmt.height;
@@ -368,82 +456,6 @@ wait_for_dqthread(context_t& ctx, uint32_t max_wait_ms)
         cerr << "Time out waiting for dqthread" << endl;
         ctx.in_error = 1;
     }
-    return ret_val;
-}
-
-static int
-set_capture_plane_format(context_t& ctx, uint32_t sizeimage)
-{
-    int ret_val = 0;
-    struct v4l2_format format;
-
-    memset(&format, 0, sizeof (struct v4l2_format));
-    format.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
-    format.fmt.pix_mp.pixelformat = ctx.encode_pixfmt;
-    format.fmt.pix_mp.width = ctx.width;
-    format.fmt.pix_mp.height = ctx.height;
-    format.fmt.pix_mp.num_planes = 1;
-    format.fmt.pix_mp.plane_fmt[0].sizeimage = sizeimage;
-
-    ret_val = v4l2_ioctl (ctx.fd, VIDIOC_S_FMT, &format);
-
-    if (!ret_val)
-    {
-        ctx.capplane_num_planes = format.fmt.pix_mp.num_planes;
-        for (uint32_t i = 0; i < ctx.capplane_num_planes; ++i)
-        {
-            ctx.capplane_planefmts[i].stride =
-                format.fmt.pix_mp.plane_fmt[i].bytesperline;
-            ctx.capplane_planefmts[i].sizeimage =
-                format.fmt.pix_mp.plane_fmt[i].sizeimage;
-        }
-    }
-
-    return ret_val;
-}
-
-static int
-set_output_plane_format(context_t& ctx)
-{
-    struct v4l2_format format;
-    int ret_val = 0;
-    uint32_t num_bufferplanes;
-    Buffer::BufferPlaneFormat planefmts[MAX_PLANES];
-
-    if (ctx.raw_pixfmt != V4L2_PIX_FMT_YUV420M)
-    {
-        cerr << "Only V4L2_PIX_FMT_YUV420M is supported" << endl;
-        return -1;
-    }
-
-    Buffer::fill_buffer_plane_format(&num_bufferplanes, planefmts, ctx.width,
-            ctx.height, ctx.raw_pixfmt);
-
-    ctx.outplane_num_planes = num_bufferplanes;
-    for (uint32_t i = 0; i < num_bufferplanes; ++i)
-    {
-        ctx.outplane_planefmts[i] = planefmts[i];
-    }
-    memset(&format, 0, sizeof (struct v4l2_format));
-    format.type = ctx.outplane_buf_type;
-    format.fmt.pix_mp.width = ctx.width;
-    format.fmt.pix_mp.height = ctx.height;
-    format.fmt.pix_mp.pixelformat = ctx.raw_pixfmt;
-    format.fmt.pix_mp.num_planes = num_bufferplanes;
-
-    ret_val = v4l2_ioctl(ctx.fd, VIDIOC_S_FMT, &format);
-    if (!ret_val)
-    {
-        ctx.outplane_num_planes = format.fmt.pix_mp.num_planes;
-        for (uint32_t j = 0; j < ctx.outplane_num_planes; j++)
-        {
-            ctx.outplane_planefmts[j].stride =
-                format.fmt.pix_mp.plane_fmt[j].bytesperline;
-            ctx.outplane_planefmts[j].sizeimage =
-                format.fmt.pix_mp.plane_fmt[j].sizeimage;
-        }
-    }
-
     return ret_val;
 }
 
@@ -783,7 +795,8 @@ encoder_process_blocking(context_t& ctx)
 
         // Read and enqueue the filled buffer.
 
-        ret_val = read_video_frame(ctx.input_file, *buffer);
+        //ret_val = read_video_frame(ctx.input_file, *buffer);
+        ret_val = read_video_frame(*buffer);
         if (ret_val < 0)
         {
             cerr << "Could not read complete frame from input file" << endl;
@@ -835,8 +848,6 @@ int main (int argc, char const *argv[])
 {
     context_t ctx;
     int ret = 0;
-    int flags = 0;
-    struct v4l2_capability encoder_caps;
     struct v4l2_buffer outplane_v4l2_buf;
     struct v4l2_plane outputplanes[MAX_PLANES];
     struct v4l2_exportbuffer outplane_expbuf;
@@ -847,8 +858,6 @@ int main (int argc, char const *argv[])
     // Initialisation.
 
     memset(&ctx, 0, sizeof (context_t));
-    ctx.raw_pixfmt = V4L2_PIX_FMT_YUV420M;
-    ctx.encode_pixfmt = V4L2_PIX_FMT_H264;
     ctx.outplane_mem_type = V4L2_MEMORY_MMAP;
     ctx.capplane_mem_type = V4L2_MEMORY_MMAP;
     ctx.outplane_buf_type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
@@ -863,71 +872,66 @@ int main (int argc, char const *argv[])
     pthread_mutex_init(&ctx.queue_lock, NULL);
     pthread_cond_init(&ctx.queue_cond, NULL);
 
-    assert(argc == 5);
-    ctx.input_file_path = argv[1];
-    ctx.output_file_path = argv[4];
-    ctx.width = atoi(argv[2]);
-    ctx.height = atoi(argv[3]);
-
-    // I/O file operations.
-
-    ctx.input_file = new ifstream(ctx.input_file_path);
-    CHECK_ERROR(!ctx.input_file->is_open(),
-        "Error in opening input file", cleanup);
+    assert(argc == 4);
+    ctx.output_file_path = argv[3];
+    ctx.width = atoi(argv[1]);
+    ctx.height = atoi(argv[2]);
 
     ctx.output_file = new ofstream(ctx.output_file_path);
     CHECK_ERROR(!ctx.output_file->is_open(),
         "Error in opening output file", cleanup);
 
-    /* The call creates a new V4L2 Video Encoder object
-    ** on the device node "/dev/nvhost-msenc"
-    ** Additional flags can also be given with which the device
-    ** should be opened.
-    ** This opens the device in Blocking mode.
-    */
+    CALL(ctx.fd = v4l2_open(ENCODER_DEV, O_RDWR));
+    struct v4l2_capability cap;
+    CALL(v4l2_ioctl(ctx.fd, VIDIOC_QUERYCAP, &cap), cleanup);
+    ASSERT_INT((cap.capabilities & V4L2_CAP_VIDEO_M2M_MPLANE), ==, 0, cleanup);
+    ASSERT_INT((cap.capabilities & V4L2_CAP_STREAMING), ==, 0, cleanup);
 
-    ctx.fd = v4l2_open(ENCODER_DEV, flags | O_RDWR);
-    CHECK_ERROR(ctx.fd == -1,
-        "Error in opening encoder device", cleanup);
 
-    /* The Querycap Ioctl call queries the video capabilities
-    ** of the opened node and checks for
-    ** V4L2_CAP_VIDEO_M2M_MPLANE capability on the device.
-    */
-
-    ret = v4l2_ioctl(ctx.fd, VIDIOC_QUERYCAP, &encoder_caps);
-    CHECK_ERROR(ret, "Failed to query video capabilities", cleanup);
-
-    if (!(encoder_caps.capabilities & V4L2_CAP_VIDEO_M2M_MPLANE))
+    struct v4l2_format fmt;
+    memset(&fmt, 0, sizeof(fmt));
+    fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+    fmt.fmt.pix_mp.width = ctx.width;
+    fmt.fmt.pix_mp.height = ctx.height;
+    fmt.fmt.pix_mp.pixelformat = V4L2_PIX_FMT_H264;
+    fmt.fmt.pix_mp.num_planes = 1;
+    CALL(v4l2_ioctl(ctx.fd, VIDIOC_S_FMT, &fmt));
+    DEBUG("Out plane - stride: %d", fmt.fmt.pix_mp.plane_fmt[0].bytesperline);
+    DEBUG("Out plane - sizeimage: %d", fmt.fmt.pix_mp.plane_fmt[0].sizeimage);
+    DEBUG("Out plane - num_planes: %d", fmt.fmt.pix_mp.num_planes);
+    ctx.capplane_num_planes = fmt.fmt.pix_mp.num_planes;
+    for (uint32_t i = 0; i < ctx.capplane_num_planes; ++i)
     {
-        cerr << "Device does not support V4L2_CAP_VIDEO_M2M_MPLANE" << endl;
-        ctx.in_error = 1;
-        goto cleanup;
+        ctx.capplane_planefmts[i].stride =
+            fmt.fmt.pix_mp.plane_fmt[i].bytesperline;
+        ctx.capplane_planefmts[i].sizeimage =
+            fmt.fmt.pix_mp.plane_fmt[i].sizeimage;
     }
 
-    /* It is necessary to set capture plane
-    ** format before the output plane format
-    ** along with the frame width and height.
-    ** The format of the encoded bitstream is set.
-    */
+    uint32_t num_bufferplanes;
+    Buffer::BufferPlaneFormat planefmts[MAX_PLANES];
+    Buffer::fill_buffer_plane_format(&num_bufferplanes, planefmts, ctx.width, ctx.height,
+        V4L2_PIX_FMT_YUV444M);
 
-    ret = set_capture_plane_format(ctx, 2 * 1024 * 1024);
-    CHECK_ERROR(ret, "Error in setting capture plane format", cleanup);
-
-    // Set format on output plane.
-
-    ret = set_output_plane_format(ctx);
-    CHECK_ERROR(ret, "Error in setting output plane format", cleanup);
-
-    /* The H264 properties and streaming
-    ** parameters are set default by the encoder.
-    ** They can be modified by calling
-    ** VIDIOC_S_PARAM and VIDIOC_S_EXT_CTRLS.
-    */
-
-    /* Request buffers on output plane to fill
-    ** the raw data.
-    */
+    memset(&fmt, 0, sizeof(fmt));
+    fmt.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
+    fmt.fmt.pix_mp.width = ctx.width;
+    fmt.fmt.pix_mp.height = ctx.height;
+    fmt.fmt.pix_mp.pixelformat = V4L2_PIX_FMT_YUV444M;
+    fmt.fmt.pix_mp.num_planes = 3;
+    CALL(v4l2_ioctl(ctx.fd, VIDIOC_S_FMT, &fmt), cleanup);
+    for (int i = 0; i < fmt.fmt.pix_mp.num_planes; i++)
+    {
+        DEBUG("In plane[%d] - stride: %d", i, fmt.fmt.pix_mp.plane_fmt[i].bytesperline);
+        DEBUG("In Plane[%d] - sizeimage: %d", i, fmt.fmt.pix_mp.plane_fmt[i].sizeimage);
+    }
+    ctx.outplane_num_planes = fmt.fmt.pix_mp.num_planes;
+    for (uint32_t j = 0; j < ctx.outplane_num_planes; j++)
+    {
+        ctx.outplane_planefmts[j] = planefmts[j];
+        ctx.outplane_planefmts[j].stride = fmt.fmt.pix_mp.plane_fmt[j].bytesperline;
+        ctx.outplane_planefmts[j].sizeimage = fmt.fmt.pix_mp.plane_fmt[j].sizeimage;
+    }
 
     ret = req_buffers_on_output_plane(&ctx, V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE,
         ctx.outplane_mem_type, 10);
@@ -1107,7 +1111,8 @@ int main (int argc, char const *argv[])
         v4l2_buf.index = i;
         v4l2_buf.m.planes = planes;
 
-        ret = read_video_frame(ctx.input_file, *buffer);
+        //ret = read_video_frame(ctx.input_file, *buffer);
+        ret = read_video_frame(*buffer);
         if (ret < 0)
         {
             cerr << "Could not read complete frame from input file" << endl;
@@ -1198,10 +1203,10 @@ cleanup:
 
     }
 
-    ctx.input_file->close();
+    //ctx.input_file->close();
     ctx.output_file->close();
 
-    delete ctx.input_file;
+    //delete ctx.input_file;
     delete ctx.output_file;
 
     if (ctx.in_error)
