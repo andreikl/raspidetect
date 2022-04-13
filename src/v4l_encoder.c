@@ -51,14 +51,56 @@ static struct v4l_encoder_state_t v4l = {
     .in_bufs[3][1].fd = -1,
     .in_bufs[3][2].buf = MAP_FAILED,
     .in_bufs[3][2].fd = -1,
+    .in_bufs[4][0].buf = MAP_FAILED,
+    .in_bufs[4][0].fd = -1,
+    .in_bufs[4][1].buf = MAP_FAILED,
+    .in_bufs[4][1].fd = -1,
+    .in_bufs[4][2].buf = MAP_FAILED,
+    .in_bufs[4][2].fd = -1,
+    .in_bufs[5][0].buf = MAP_FAILED,
+    .in_bufs[5][0].fd = -1,
+    .in_bufs[5][1].buf = MAP_FAILED,
+    .in_bufs[5][1].fd = -1,
+    .in_bufs[5][2].buf = MAP_FAILED,
+    .in_bufs[5][2].fd = -1,
+    .in_bufs[6][0].buf = MAP_FAILED,
+    .in_bufs[6][0].fd = -1,
+    .in_bufs[6][1].buf = MAP_FAILED,
+    .in_bufs[6][1].fd = -1,
+    .in_bufs[6][2].buf = MAP_FAILED,
+    .in_bufs[6][2].fd = -1,
+    .in_bufs[7][0].buf = MAP_FAILED,
+    .in_bufs[7][0].fd = -1,
+    .in_bufs[7][1].buf = MAP_FAILED,
+    .in_bufs[7][1].fd = -1,
+    .in_bufs[7][2].buf = MAP_FAILED,
+    .in_bufs[7][2].fd = -1,
+    .in_bufs[8][0].buf = MAP_FAILED,
+    .in_bufs[8][0].fd = -1,
+    .in_bufs[8][1].buf = MAP_FAILED,
+    .in_bufs[8][1].fd = -1,
+    .in_bufs[8][2].buf = MAP_FAILED,
+    .in_bufs[8][2].fd = -1,
+    .in_bufs[9][0].buf = MAP_FAILED,
+    .in_bufs[9][0].fd = -1,
+    .in_bufs[9][1].buf = MAP_FAILED,
+    .in_bufs[9][1].fd = -1,
+    .in_bufs[9][2].buf = MAP_FAILED,
+    .in_bufs[9][2].fd = -1,
     .out_bufs[0].buf = MAP_FAILED,
     .out_bufs[0].fd = -1,
     .out_bufs[1].buf = MAP_FAILED,
     .out_bufs[1].fd = -1,
     .out_bufs[2].buf = MAP_FAILED,
     .out_bufs[2].fd = -1,
-    .in_bufs_count = 1,
-    .out_bufs_count = 1,
+    .out_bufs[3].buf = MAP_FAILED,
+    .out_bufs[3].fd = -1,
+    .out_bufs[4].buf = MAP_FAILED,
+    .out_bufs[4].fd = -1,
+    .out_bufs[5].buf = MAP_FAILED,
+    .out_bufs[5].fd = -1,
+    .in_bufs_count = V4L_MAX_IN_BUFS,
+    .out_bufs_count = V4L_MAX_OUT_BUFS,
     .in_curr_buf = 0
 };
 
@@ -302,11 +344,9 @@ static int v4l_start(int input_format, int output_format)
     fmt.fmt.pix_mp.pixelformat = v4l_output_format->internal_format;
     fmt.fmt.pix_mp.num_planes = 1;
     V4L_CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_S_FMT, &fmt), cleanup);
-    for (int i = 0; i < V4L_MAX_OUT_BUFS; i++) {
-        v4l.out_bufs[i].sizeimage = fmt.fmt.pix_mp.plane_fmt[0].sizeimage;
-        v4l.out_bufs[i].stride = fmt.fmt.pix_mp.plane_fmt[0].bytesperline;
-    }
-    DEBUG("Out plane - size: %d, stride: %d", v4l.out_bufs[0].sizeimage, v4l.out_bufs[0].stride);
+    v4l.out_sizeimages[0] = fmt.fmt.pix_mp.plane_fmt[0].sizeimage;
+    v4l.out_strides[0] = fmt.fmt.pix_mp.plane_fmt[0].bytesperline;
+    DEBUG("Out plane - size: %d, stride: %d", v4l.out_sizeimages[0], v4l.out_strides[0]);
 
     memset(&fmt, 0, sizeof(fmt));
     fmt.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
@@ -320,17 +360,12 @@ static int v4l_start(int input_format, int output_format)
     // DEBUG("fmt.fmt.pix_mp.pixelformat[%d]", fmt.fmt.pix_mp.pixelformat);
     // DEBUG("fmt.fmt.pix_mp.num_planes[%d]", fmt.fmt.pix_mp.num_planes);
     V4L_CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_S_FMT, &fmt), cleanup);
-    for (int i = 0; i < V4L_MAX_IN_BUFS; i++)
-        for (int j = 0; j < fmt.fmt.pix_mp.num_planes; j++) {
-            v4l.in_bufs[i][j].sizeimage = fmt.fmt.pix_mp.plane_fmt[j].sizeimage;
-            v4l.in_bufs[i][j].stride = fmt.fmt.pix_mp.plane_fmt[j].bytesperline;
+    for (int i = 0; i < fmt.fmt.pix_mp.num_planes; i++) {
+        v4l.in_sizeimages[i] = fmt.fmt.pix_mp.plane_fmt[i].sizeimage;
+        v4l.in_strides[i] = fmt.fmt.pix_mp.plane_fmt[i].bytesperline;
 
-            if (i == 0) {
-                DEBUG("In Plane[%d] - size: %d, stride: %d", j, v4l.in_bufs[i][j].sizeimage,
-                    v4l.in_bufs[i][j].stride);
-
-            }
-        }
+        DEBUG("In Plane[%d] - size: %d, stride: %d", i, v4l.in_sizeimages[i], v4l.in_strides[i]);
+    }
 
     //https://docs.nvidia.com/jetson/l4t-multimedia/group__V4L2Enc.html
     // only V4L2_MEMORY_MMAP is supported
@@ -347,7 +382,10 @@ static int v4l_start(int input_format, int output_format)
     V4L_CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_REQBUFS, &req), cleanup);
     ASSERT_INT(req.count, >, V4L_MAX_IN_BUFS, cleanup);
     ASSERT_INT(req.count, <=, 0, cleanup);
+    DEBUG("v4l.in_bufs_count before: %d", v4l.in_bufs_count);
     v4l.in_bufs_count = req.count;
+    DEBUG("v4l.in_bufs_count after: %d", v4l.in_bufs_count);
+
 
     struct v4l2_buffer buf;
     struct v4l2_plane planes[3];
@@ -402,7 +440,9 @@ static int v4l_start(int input_format, int output_format)
     V4L_CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_REQBUFS, &req), cleanup);
     ASSERT_INT(req.count, >, V4L_MAX_OUT_BUFS, cleanup);
     ASSERT_INT(req.count, <=, 0, cleanup);
+    DEBUG("v4l.out_bufs_count before: %d", v4l.out_bufs_count);
     v4l.out_bufs_count = req.count;
+    DEBUG("v4l.iout_bufs_count after: %d", v4l.out_bufs_count);
 
     for (int i = 0; i < v4l.out_bufs_count; i++) {
         memset(&buf, 0, sizeof(buf));
@@ -439,13 +479,14 @@ static int v4l_start(int input_format, int output_format)
         }
     }
 
-    enum v4l2_buf_type type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
+    enum v4l2_buf_type type;
+    type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
     V4L_CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_STREAMON, &type), cleanup);
 
     type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
     V4L_CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_STREAMON, &type), cleanup);
 
-    DEBUG("queue output frame");
+    /*DEBUG("queue output frame");
     struct v4l2_buffer out_buf;
     struct v4l2_plane out_plane;
     for (int i = 0; i < v4l.out_bufs_count; i++) {
@@ -457,7 +498,7 @@ static int v4l_start(int input_format, int output_format)
         out_buf.length = 1;
         out_buf.m.planes = &out_plane;
         V4L_CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_QBUF, &out_buf), cleanup);
-    }
+    }*/
 
     return 0;
 
@@ -535,9 +576,9 @@ static int v4l_process_frame(uint8_t *buffer)
     in_buf.index = cb;
     in_buf.length = 3;
     in_buf.m.planes = in_planes;
-    in_buf.m.planes[0].bytesused = v4l.in_bufs[cb][0].stride * v4l.app->video_height;
-    in_buf.m.planes[1].bytesused = v4l.in_bufs[cb][1].stride * v4l.app->video_height;
-    in_buf.m.planes[2].bytesused = v4l.in_bufs[cb][2].stride * v4l.app->video_height;
+    in_buf.m.planes[0].bytesused = v4l.in_strides[0] * v4l.app->video_height;
+    in_buf.m.planes[1].bytesused = v4l.in_strides[1] * v4l.app->video_height;
+    in_buf.m.planes[2].bytesused = v4l.in_strides[2] * v4l.app->video_height;
     DEBUG("bytesused: %d, %d, %d", in_buf.m.planes[0].bytesused, in_buf.m.planes[1].bytesused,
         in_buf.m.planes[2].bytesused);
     for (int i = 0; i < 3; i++) {

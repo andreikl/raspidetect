@@ -146,89 +146,12 @@ using namespace std;
 
 #include "encoder_unit_sample.hpp"
 
-/**
- *
- * V4L2 H264 Video Encoder Sample
- *
- * The video encoder device node is
- *     /dev/nvhost-msenc
- *
- * In this sample:
- * ## Pixel Formats
- * OUTPUT PLANE         | CAPTURE PLANE
- * :----------------:   | :----------------:
- * V4L2_PIX_FMT_YUV420M | V4L2_PIX_FMT_H264
- * V4L2_PIX_FMT_YUV444M
- *
- * ## Memory Type
- *            | OUTPUT PLANE        | CAPTURE PLANE
- * :--------: | :----------:        | :-----------:
- * MEMORY     | V4L2_MEMORY_MMAP    | V4L2_MEMORY_MMAP
- *
- * ## Supported Controls
- * - #V4L2_CID_MPEG_VIDEO_DISABLE_COMPLETE_FRAME_INPUT
- * - V4L2_CID_MIN_BUFFERS_FOR_CAPTURE (Get the minimum buffers to be allocated
- * on capture plane.
- * Read-only. Valid after #V4L2_EVENT_RESOLUTION_CHANGE)
- *
- * ## Supported Events
- * Event                         | Purpose
- * ----------------------------- | :----------------------------:
- * #V4L2_EVENT_EOS               | End of Stream detected.
- *
- * ## Opening the Encoder
- * The encoder device node is opened through the v4l2_open IOCTL call.
- * After opening the device, the application calls VIDIOC_QUERYCAP to identify
- * the driver capabilities.
- *
- * ## Subscribing events and setting up the planes
- * The application subscribes to the V4L2_EVENT_EOS event,
- * to detect the end of stream and handle the plane buffers
- * accordingly.
- * It calls VIDIOC_S_FMT to setup the formats required on
- * OUTPUT PLANE and CAPTURE PLANE for the data
- * negotiation between the former and the driver.
- * It is necessary to set capture plane format before the output plane format
- * along with the frame width and height
- *
- * ## Setting Controls
- * The application gets/sets the properties of the encoder by setting
- * the controls, calling VIDIOC_S_EXT_CTRLS, VIDIOC_G_CTRL.
- *
- * ## Buffer Management
- * Buffers are requested on the OUTPUT PLANE by the application, calling
- * VIDIOC_REQBUFS. The actual buffers allocated by the encoder are then
- * queried and exported as FD for the DMA-mapped buffer while mapped
- * for Mmaped buffer.
- * Status STREAMON is called on both planes to signal the encoder for
- * processing.
- *
- * Application continuously queues the raw data in the allocated
- * OUTPUT PLANE buffer and dequeues the next empty buffer fed into the
- * encoder.
- * The encoder encodes the raw buffer and signals a successful dequeue
- * on the capture plane, from where the data of v4l2_buffer dequeued is
- * dumped as an encoded bitstream.
- *
- * The encoding thread blocks on the DQ buffer call, which returns either after
- * a successful encoded bitstream or after a specific timeout.
- *
- * ## EOS Handling
- * For sending EOS and receiving EOS from the encoder, the application must
- * - Send EOS to the encoder by queueing on the output plane a buffer with
- * bytesused = 0 for the 0th plane (`v4l2_buffer.m.planes[0].bytesused = 0`).
- * - Dequeues buffers on the output plane until it gets a buffer with bytesused = 0
- * for the 0th plane (`v4l2_buffer.m.planes[0].bytesused == 0`)
- * - Dequeues buffers on the capture plane until it gets a buffer with bytesused = 0
- * for the 0th plane.
- * After the last buffer on the capture plane is dequeued, set STREAMOFF on both
- * planes and destroy the allocated buffers.
- *
- */
+static struct v4l_encoder_state_t v4l;
+
 
 #define CHECK_ERROR(condition, error_str, label) if (condition) { \
                                                         cerr << error_str << endl; \
-                                                        ctx.in_error = 1; \
+                                                        v4l.in_error = 1; \
                                                         goto label; }
 
 Buffer::Buffer(enum v4l2_buf_type buf_type, enum v4l2_memory memory_type,
@@ -245,17 +168,16 @@ Buffer::Buffer(enum v4l2_buf_type buf_type, enum v4l2_memory memory_type,
     n_planes = 1;
     for (i = 0; i < n_planes; i++)
     {
-        this->planes[i].fd = -1;
+        this->planes[i].dev_id = -1;
         this->planes[i].data = NULL;
         this->planes[i].bytesused = 0;
         this->planes[i].mem_offset = 0;
         this->planes[i].length = 0;
-        this->planes[i].fmt.sizeimage = 0;
     }
 }
 
 Buffer::Buffer(enum v4l2_buf_type buf_type, enum v4l2_memory memory_type,
-        uint32_t n_planes, BufferPlaneFormat * fmt, uint32_t index)
+        uint32_t n_planes, uint32_t index)
         :buf_type(buf_type),
          memory_type(memory_type),
          index(index),
@@ -268,8 +190,7 @@ Buffer::Buffer(enum v4l2_buf_type buf_type, enum v4l2_memory memory_type,
     memset(planes, 0, sizeof(planes));
     for (i = 0; i < n_planes; i++)
     {
-        this->planes[i].fd = -1;
-        this->planes[i].fmt = fmt[i];
+        this->planes[i].dev_id = -1;
     }
 }
 
@@ -300,7 +221,7 @@ Buffer::map()
 
     for (j = 0; j < n_planes; j++)
     {
-        if (planes[j].fd == -1)
+        if (planes[j].dev_id == -1)
         {
             return -1;
         }
@@ -309,7 +230,7 @@ Buffer::map()
                                                 planes[j].length,
                                                 PROT_READ | PROT_WRITE,
                                                 MAP_SHARED,
-                                                planes[j].fd,
+                                                planes[j].dev_id,
                                                 planes[j].mem_offset);
         if (planes[j].data == MAP_FAILED)
         {
@@ -343,66 +264,7 @@ Buffer::unmap()
     mapped = false;
 }
 
-int
-Buffer::fill_buffer_plane_format(uint32_t *num_planes,
-        Buffer::BufferPlaneFormat *planefmts,
-        uint32_t width, uint32_t height, uint32_t raw_pixfmt)
-{
-    switch (raw_pixfmt)
-    {
-        case V4L2_PIX_FMT_YUV444M:
-            *num_planes = 3;
-
-            planefmts[0].width = width;
-            planefmts[1].width = width;
-            planefmts[2].width = width;
-
-            planefmts[0].height = height;
-            planefmts[1].height = height;
-            planefmts[2].height = height;
-
-            planefmts[0].bytesperpixel = 1;
-            planefmts[1].bytesperpixel = 1;
-            planefmts[2].bytesperpixel = 1;
-            break;
-
-        case V4L2_PIX_FMT_YUV420M:
-            *num_planes = 3;
-
-            planefmts[0].width = width;
-            planefmts[1].width = width / 2;
-            planefmts[2].width = width / 2;
-
-            planefmts[0].height = height;
-            planefmts[1].height = height / 2;
-            planefmts[2].height = height / 2;
-
-            planefmts[0].bytesperpixel = 1;
-            planefmts[1].bytesperpixel = 1;
-            planefmts[2].bytesperpixel = 1;
-            break;
-
-        case V4L2_PIX_FMT_NV12M:
-            *num_planes = 2;
-
-            planefmts[0].width = width;
-            planefmts[1].width = width / 2;
-
-            planefmts[0].height = height;
-            planefmts[1].height = height / 2;
-
-            planefmts[0].bytesperpixel = 1;
-            planefmts[1].bytesperpixel = 2;
-            break;
-        default:
-            cout << "Unsupported pixel format " << raw_pixfmt << endl;
-            return -1;
-    }
-    return 0;
-}
-
 static int
-//read_video_frame(ifstream * stream, Buffer & buffer)
 read_video_frame(Buffer & buffer)
 {
     uint32_t i, j;
@@ -411,22 +273,21 @@ read_video_frame(Buffer & buffer)
     for (i = 0; i < buffer.n_planes; i++)
     {
         Buffer::BufferPlane &plane = buffer.planes[i];
-        streamsize bytes_to_read =
-            plane.fmt.bytesperpixel * plane.fmt.width;
+        streamsize bytes_to_read = v4l.in_strides[i];
         data = (char *) plane.data;
         plane.bytesused = 0;
         /* It is necessary to set bytesused properly,
         ** so that encoder knows how
         ** many bytes in the buffer to be read.
         */
-        for (j = 0; j < plane.fmt.height; j++)
+        for (j = 0; j < v4l.height; j++)
         {
             /*stream->read(data, bytes_to_read);
             if (stream->gcount() < bytes_to_read)
                 return -1;*/
-            data += plane.fmt.stride;
+            data += v4l.in_strides[i];
         }
-        plane.bytesused = plane.fmt.stride * plane.fmt.height;
+        plane.bytesused = v4l.in_strides[i] * v4l.height;
     }
     return 0;
 }
@@ -439,378 +300,11 @@ write_encoded_frame(ofstream * stream, Buffer * buffer)
 }
 
 static int
-wait_for_dqthread(context_t& ctx, uint32_t max_wait_ms)
-{
-    struct timespec waiting_time;
-    struct timeval now;
-    int ret_val = 0;
-    int dq_return = 0;
-
-    gettimeofday(&now, NULL);
-
-    waiting_time.tv_nsec = (now.tv_usec + (max_wait_ms % 1000) * 1000L) * 1000L;
-    waiting_time.tv_sec = now.tv_sec + max_wait_ms / 1000 +
-        waiting_time.tv_nsec / 1000000000L;
-    waiting_time.tv_nsec = waiting_time.tv_nsec % 1000000000L;
-
-    pthread_mutex_lock(&ctx.queue_lock);
-    while (ctx.dqthread_running)
-    {
-        dq_return = pthread_cond_timedwait(&ctx.queue_cond, &ctx.queue_lock,
-            &waiting_time);
-        if (dq_return == ETIMEDOUT)
-        {
-            ret_val = -1;
-            break;
-        }
-    }
-
-    pthread_mutex_unlock(&ctx.queue_lock);
-
-    if (dq_return == 0)
-    {
-        pthread_join(ctx.enc_dq_thread, NULL);
-        ctx.enc_dq_thread = 0;
-    }
-    else
-    {
-        cerr << "Time out waiting for dqthread" << endl;
-        ctx.in_error = 1;
-    }
-    return ret_val;
-}
-
-static int
-req_buffers_on_capture_plane(context_t * ctx, enum v4l2_buf_type buf_type,
-        enum v4l2_memory mem_type, int num_buffers)
-{
-    struct v4l2_requestbuffers reqbuffers;
-    int ret_val = 0;
-    memset (&reqbuffers, 0, sizeof (struct v4l2_requestbuffers));
-
-    reqbuffers.count = num_buffers;
-    reqbuffers.memory = mem_type;
-    reqbuffers.type = buf_type;
-
-    ret_val = v4l2_ioctl (ctx->fd, VIDIOC_REQBUFS, &reqbuffers);
-    if (ret_val)
-        return ret_val;
-
-    if (reqbuffers.count)
-    {
-        ctx->capplane_buffers = new Buffer *[reqbuffers.count];
-        for (uint32_t i = 0; i < reqbuffers.count; ++i)
-        {
-            ctx->capplane_buffers[i] = new Buffer (buf_type, mem_type,
-                ctx->capplane_num_planes, ctx->capplane_planefmts, i);
-        }
-    }
-    else
-    {
-        for (uint32_t i = 0; i < ctx->capplane_num_buffers; ++i)
-        {
-            delete ctx->capplane_buffers[i];
-        }
-        delete[] ctx->capplane_buffers;
-        ctx->capplane_buffers = NULL;
-    }
-    ctx->capplane_num_buffers = reqbuffers.count;
-
-    return ret_val;
-}
-
-static int
-req_buffers_on_output_plane(context_t * ctx, enum v4l2_buf_type buf_type,
-        enum v4l2_memory mem_type, int num_buffers)
-{
-    struct v4l2_requestbuffers reqbuffers;
-    int ret_val = 0;
-    memset (&reqbuffers, 0, sizeof (struct v4l2_requestbuffers));
-
-    reqbuffers.count = num_buffers;
-    reqbuffers.memory = mem_type;
-    reqbuffers.type = buf_type;
-
-    ret_val = v4l2_ioctl (ctx->fd, VIDIOC_REQBUFS, &reqbuffers);
-    if (ret_val)
-        return ret_val;
-
-    if (reqbuffers.count)
-    {
-        ctx->outplane_buffers = new Buffer *[reqbuffers.count];
-        for (uint32_t i = 0; i < reqbuffers.count; ++i)
-        {
-            ctx->outplane_buffers[i] = new Buffer (buf_type, mem_type,
-                ctx->outplane_num_planes, ctx->outplane_planefmts, i);
-        }
-    }
-    else
-    {
-        for (uint32_t i = 0; i < ctx->outplane_num_buffers; ++i)
-        {
-            delete ctx->outplane_buffers[i];
-        }
-        delete[] ctx->outplane_buffers;
-        ctx->outplane_buffers = NULL;
-    }
-    ctx->outplane_num_buffers = reqbuffers.count;
-
-    return ret_val;
-}
-
-/*static int
-subscribe_event(int fd, uint32_t type, uint32_t id, uint32_t flags)
-{
-    struct v4l2_event_subscription sub;
-    int ret_val;
-
-    memset(&sub, 0, sizeof (struct v4l2_event_subscription));
-
-    sub.type = type;
-    sub.id = id;
-    sub.flags = flags;
-
-    ret_val = v4l2_ioctl(fd, VIDIOC_SUBSCRIBE_EVENT, &sub);
-
-    return ret_val;
-}*/
-
-static int
-q_buffer(context_t * ctx, struct v4l2_buffer &v4l2_buf, Buffer * buffer,
-    enum v4l2_buf_type buf_type, enum v4l2_memory memory_type, int num_planes)
-{
-    int ret_val;
-    uint32_t j;
-
-    pthread_mutex_lock (&ctx->queue_lock);
-    v4l2_buf.type = buf_type;
-    v4l2_buf.memory = memory_type;
-    v4l2_buf.length = num_planes;
-
-    switch (memory_type)
-    {
-        case V4L2_MEMORY_MMAP:
-            for (j = 0; j < buffer->n_planes; ++j)
-            {
-                v4l2_buf.m.planes[j].bytesused =
-                buffer->planes[j].bytesused;
-            }
-            break;
-        case V4L2_MEMORY_DMABUF:
-            break;
-        default:
-            pthread_cond_broadcast (&ctx->queue_cond);
-            pthread_mutex_unlock (&ctx->queue_lock);
-            return -1;
-    }
-
-    ret_val = v4l2_ioctl (ctx->fd, VIDIOC_QBUF, &v4l2_buf);
-
-    if (!ret_val)
-    {
-        switch (v4l2_buf.type)
-        {
-            case V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE:
-                ctx->num_queued_outplane_buffers++;
-                break;
-            case V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE:
-                ctx->num_queued_capplane_buffers++;
-                break;
-            default:
-                cerr << "Buffer Type not supported" << endl;
-        }
-        pthread_cond_broadcast (&ctx->queue_cond);
-    }
-    pthread_mutex_unlock (&ctx->queue_lock);
-
-    return ret_val;
-}
-
-static int
-dq_buffer(context_t * ctx, struct v4l2_buffer &v4l2_buf, Buffer ** buffer,
-    enum v4l2_buf_type buf_type, enum v4l2_memory memory_type, uint32_t num_retries)
+encoder_process_blocking()
 {
     int ret_val = 0;
-    bool is_in_error = false;
-    v4l2_buf.type = buf_type;
-    v4l2_buf.memory = memory_type;
-
-    do
+    while (!v4l.in_error && !v4l.eos)
     {
-        ret_val = v4l2_ioctl (ctx->fd, VIDIOC_DQBUF, &v4l2_buf);
-
-        if (ret_val == 0)
-        {
-            pthread_mutex_lock(&ctx->queue_lock);
-            switch(v4l2_buf.type)
-            {
-                case V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE:
-                    if (buffer)
-                        *buffer = ctx->outplane_buffers[v4l2_buf.index];
-                    for (uint32_t j = 0; j < ctx->outplane_buffers[v4l2_buf.index]->n_planes; j++)
-                    {
-                        ctx->outplane_buffers[v4l2_buf.index]->planes[j].bytesused =
-                        v4l2_buf.m.planes[j].bytesused;
-                    }
-                    ctx->num_queued_outplane_buffers--;
-                    break;
-
-                case V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE:
-                    if (buffer)
-                        *buffer = ctx->capplane_buffers[v4l2_buf.index];
-                    for (uint32_t j = 0; j < ctx->capplane_buffers[v4l2_buf.index]->n_planes; j++)
-                    {
-                        ctx->capplane_buffers[v4l2_buf.index]->planes[j].bytesused =
-                        v4l2_buf.m.planes[j].bytesused;
-                    }
-                    ctx->num_queued_capplane_buffers--;
-                    break;
-
-                default:
-                    cout << "Invaild buffer type" << endl;
-            }
-            pthread_cond_broadcast(&ctx->queue_cond);
-            pthread_mutex_unlock(&ctx->queue_lock);
-        }
-        else if (errno == EAGAIN)
-        {
-            pthread_mutex_lock(&ctx->queue_lock);
-            if (v4l2_buf.flags & V4L2_BUF_FLAG_LAST)
-            {
-                pthread_mutex_unlock(&ctx->queue_lock);
-                break;
-            }
-            pthread_mutex_unlock(&ctx->queue_lock);
-
-            if (num_retries-- == 0)
-            {
-                // Resource temporarily unavailable.
-                cout << "Resource temporarily unavailable" << endl;
-                break;
-            }
-        }
-        else
-        {
-            is_in_error = true;
-            break;
-        }
-    }
-    while (ret_val && !is_in_error);
-
-    return ret_val;
-}
-
-static void *
-dq_thread(void *arg)
-{
-    context_t *ctx = (context_t *)arg;
-    bool stop_dqthread = false;
-
-    while (!stop_dqthread)
-    {
-        struct v4l2_buffer v4l2_buf;
-        struct v4l2_plane planes[MAX_PLANES];
-        Buffer *buffer = new Buffer(ctx->capplane_buf_type,
-                ctx->capplane_mem_type, 0);
-        bool ret_val;
-
-        memset(&v4l2_buf, 0, sizeof (struct v4l2_buffer));
-        memset(planes, 0, MAX_PLANES * sizeof (struct v4l2_plane));
-        v4l2_buf.m.planes = planes;
-        v4l2_buf.length = ctx->capplane_num_planes;
-
-        if (dq_buffer(ctx, v4l2_buf, &buffer, ctx->capplane_buf_type,
-                ctx->capplane_mem_type, -1) < 0)
-        {
-            if (errno != EAGAIN)
-            {
-                ctx->in_error = true;
-            }
-
-            if (errno != EAGAIN || ctx->capplane_streamon)
-                ret_val = capture_plane_callback(NULL, NULL, ctx);
-
-            if (!ctx->capplane_streamon)
-                break;
-        }
-        else
-        {
-            ret_val = capture_plane_callback(&v4l2_buf, buffer, ctx);
-        }
-        if (!ret_val)
-        {
-            break;
-        }
-    }
-    stop_dqthread = true;
-
-    pthread_mutex_lock(&ctx->queue_lock);
-    ctx->dqthread_running = false;
-    pthread_cond_broadcast(&ctx->queue_cond);
-    pthread_mutex_unlock(&ctx->queue_lock);
-
-    return NULL;
-}
-
-static bool
-capture_plane_callback(struct v4l2_buffer *v4l2_buf, Buffer * buffer, void *arg)
-{
-    context_t *ctx = (context_t *)arg;
-
-    if (v4l2_buf == NULL)
-    {
-        cout << "Error while DQing buffer from capture plane" << endl;
-        ctx->in_error = 1;
-        return false;
-    }
-
-    if (buffer->planes[0].bytesused == 0)
-    {
-        cout << "Got 0 size buffer in capture" << endl;
-        return false;
-    }
-
-    write_encoded_frame(ctx->output_file, buffer);
-
-    if (q_buffer(ctx, *v4l2_buf, buffer, ctx->capplane_buf_type, ctx->capplane_mem_type,
-            ctx->capplane_num_planes) < 0)
-    {
-        cerr << "Error while Qing buffer at capture plane" <<  endl;
-        ctx->in_error = 1;
-        return false;
-    }
-
-    return true;
-}
-
-static int
-encoder_process_blocking(context_t& ctx)
-{
-    int ret_val = 0;
-    //struct v4l2_buffer v4l2_buf;
-    //struct v4l2_plane planes[MAX_PLANES];
-
-
-    /* Reading input till EOS is reached.
-    ** As all the output plane buffers are queued, a buffer
-    ** is dequeued first before new data is read and queued back.
-    */
-    while (!ctx.in_error && !ctx.eos)
-    {
-        // Buffer *buffer =  new Buffer(ctx.outplane_buf_type, ctx.outplane_mem_type, 0);
-        // memset(&v4l2_buf, 0, sizeof (v4l2_buf));
-        // memset(planes, 0, sizeof (planes));
-        // v4l2_buf.m.planes = planes;
-        // // Dequeue the empty buffer on output plane.
-        // ret_val = dq_buffer(&ctx, v4l2_buf, &buffer, ctx.outplane_buf_type,
-        //             ctx.outplane_mem_type, 10);
-        // if (ret_val < 0)
-        // {
-        //     cerr << "Error while DQing buffer at output plane" << endl;
-        //     ctx.in_error = 1;
-        //     break;
-        // }
-
         struct v4l2_buffer in_buf;
         struct v4l2_plane in_planes[3];
         memset(&in_buf, 0, sizeof(in_buf));
@@ -818,61 +312,60 @@ encoder_process_blocking(context_t& ctx)
         in_buf.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
         in_buf.memory = V4L2_MEMORY_MMAP;
         in_buf.m.planes = in_planes;
-        //pthread_mutex_lock(&ctx.queue_lock);
-        V4L_CALL(v4l2_ioctl(ctx.fd, VIDIOC_DQBUF, &in_buf));
-        Buffer *buffer = ctx.outplane_buffers[in_buf.index];
-        for (uint32_t j = 0; j < ctx.outplane_buffers[in_buf.index]->n_planes; j++)
+        V4L_CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_DQBUF, &in_buf));
+        Buffer *buffer = v4l.outplane_buffers[in_buf.index];
+        for (uint32_t j = 0; j < v4l.outplane_buffers[in_buf.index]->n_planes; j++)
         {
             DEBUG("In plane[%d] - bytesused: %d", j, in_buf.m.planes[j].bytesused);
-            ctx.outplane_buffers[in_buf.index]->planes[j].bytesused = 
+            v4l.outplane_buffers[in_buf.index]->planes[j].bytesused = 
                 in_buf.m.planes[j].bytesused;
         }
-        ctx.num_queued_outplane_buffers--;
-        //pthread_cond_broadcast(&ctx.queue_cond);
-        //pthread_mutex_unlock(&ctx.queue_lock);
+        v4l.num_queued_outplane_buffers--;
 
         DEBUG("read_video_frame");
-        // Read and enqueue the filled buffer.
         ret_val = read_video_frame(*buffer);
         if (ret_val < 0)
         {
             cerr << "Could not read complete frame from input file" << endl;
-            ctx.eos = true;
+            v4l.eos = true;
             in_buf.m.planes[0].m.userptr = 0;
             in_buf.m.planes[0].bytesused =
                 in_buf.m.planes[1].bytesused =
                 in_buf.m.planes[2].bytesused = 0;
         }
 
-        if (ctx.outplane_mem_type == V4L2_MEMORY_MMAP ||
-                ctx.outplane_mem_type == V4L2_MEMORY_DMABUF)
+        if (v4l.outplane_mem_type == V4L2_MEMORY_MMAP ||
+                v4l.outplane_mem_type == V4L2_MEMORY_DMABUF)
         {
             for (uint32_t j = 0; j < buffer->n_planes; ++j)
             {
-                ret_val = NvBufferMemSyncForDevice(buffer->planes[j].fd, j,
+                ret_val = NvBufferMemSyncForDevice(buffer->planes[j].dev_id, j,
                     (void **)&buffer->planes[j].data);
                 if (ret_val < 0)
                 {
                     cerr << "Error while NvBufferMemSyncForDevice at output plane" << endl;
-                    ctx.in_error = 1;
+                    v4l.in_error = 1;
                     break;
                 }
             }
         }
 
-        ret_val = q_buffer(&ctx,  in_buf, buffer, ctx.outplane_buf_type,
-            ctx.outplane_mem_type, ctx.outplane_num_planes);
-        if (ret_val)
-        {
-            cerr << "Error while queueing buffer on output plane" << endl;
-            ctx.in_error = 1;
-            break;
+        in_buf.m.planes[0].bytesused = buffer->planes[0].bytesused;
+        in_buf.m.planes[1].bytesused = buffer->planes[1].bytesused;
+        in_buf.m.planes[2].bytesused = buffer->planes[2].bytesused;
+        DEBUG("bytesused: %d, %d, %d", in_buf.m.planes[0].bytesused, in_buf.m.planes[1].bytesused,
+            in_buf.m.planes[2].bytesused);
+        for (int j = 0; j < 3; j++) {
+            CALL(
+                NvBufferMemSyncForDevice(buffer->planes[j].dev_id, j, (void **)&buffer->planes[j].data);
+            );
         }
+        V4L_CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_QBUF, &in_buf));
 
         if (in_buf.m.planes[0].bytesused == 0)
         {
             cout << "File read complete." << endl;
-            ctx.eos = true;
+            v4l.eos = true;
             break;
         }
 
@@ -883,7 +376,94 @@ encoder_process_blocking(context_t& ctx)
 
 int main (int argc, char const *argv[])
 {
-    context_t ctx;
+
+    v4l.in_bufs[0][0].buf = (uint8_t*)MAP_FAILED;
+    v4l.in_bufs[0][0].fd = -1;
+    v4l.in_bufs[0][1].buf = (uint8_t*)MAP_FAILED;
+    v4l.in_bufs[0][1].fd = -1;
+    v4l.in_bufs[0][2].buf = (uint8_t*)MAP_FAILED;
+    v4l.in_bufs[0][2].fd = -1;
+    v4l.in_bufs[1][0].buf = (uint8_t*)MAP_FAILED;
+    v4l.in_bufs[1][0].fd = -1;
+    v4l.in_bufs[1][1].buf = (uint8_t*)MAP_FAILED;
+    v4l.in_bufs[1][1].fd = -1;
+    v4l.in_bufs[1][2].buf = (uint8_t*)MAP_FAILED;
+    v4l.in_bufs[1][2].fd = -1;
+    v4l.in_bufs[2][0].buf = (uint8_t*)MAP_FAILED;
+    v4l.in_bufs[2][0].fd = -1;
+    v4l.in_bufs[2][1].buf = (uint8_t*)MAP_FAILED;
+    v4l.in_bufs[2][1].fd = -1;
+    v4l.in_bufs[2][2].buf = (uint8_t*)MAP_FAILED;
+    v4l.in_bufs[2][2].fd = -1;
+    v4l.in_bufs[3][0].buf = (uint8_t*)MAP_FAILED;
+    v4l.in_bufs[3][0].fd = -1;
+    v4l.in_bufs[3][1].buf = (uint8_t*)MAP_FAILED;
+    v4l.in_bufs[3][1].fd = -1;
+    v4l.in_bufs[3][2].buf = (uint8_t*)MAP_FAILED;
+    v4l.in_bufs[3][2].fd = -1;
+    v4l.in_bufs[4][0].buf = (uint8_t*)MAP_FAILED;
+    v4l.in_bufs[4][0].fd = -1;
+    v4l.in_bufs[4][1].buf = (uint8_t*)MAP_FAILED;
+    v4l.in_bufs[4][1].fd = -1;
+    v4l.in_bufs[4][2].buf = (uint8_t*)MAP_FAILED;
+    v4l.in_bufs[4][2].fd = -1;
+    v4l.in_bufs[5][0].buf = (uint8_t*)MAP_FAILED;
+    v4l.in_bufs[5][0].fd = -1;
+    v4l.in_bufs[5][1].buf = (uint8_t*)MAP_FAILED;
+    v4l.in_bufs[5][1].fd = -1;
+    v4l.in_bufs[5][2].buf = (uint8_t*)MAP_FAILED;
+    v4l.in_bufs[5][2].fd = -1;
+    v4l.in_bufs[6][0].buf = (uint8_t*)MAP_FAILED;
+    v4l.in_bufs[6][0].fd = -1;
+    v4l.in_bufs[6][1].buf = (uint8_t*)MAP_FAILED;
+    v4l.in_bufs[6][1].fd = -1;
+    v4l.in_bufs[6][2].buf = (uint8_t*)MAP_FAILED;
+    v4l.in_bufs[6][2].fd = -1;
+    v4l.in_bufs[7][0].buf = (uint8_t*)MAP_FAILED;
+    v4l.in_bufs[7][0].fd = -1;
+    v4l.in_bufs[7][1].buf = (uint8_t*)MAP_FAILED;
+    v4l.in_bufs[7][1].fd = -1;
+    v4l.in_bufs[7][2].buf = (uint8_t*)MAP_FAILED;
+    v4l.in_bufs[7][2].fd = -1;
+    v4l.in_bufs[8][0].buf = (uint8_t*)MAP_FAILED;
+    v4l.in_bufs[8][0].fd = -1;
+    v4l.in_bufs[8][1].buf = (uint8_t*)MAP_FAILED;
+    v4l.in_bufs[8][1].fd = -1;
+    v4l.in_bufs[8][2].buf = (uint8_t*)MAP_FAILED;
+    v4l.in_bufs[8][2].fd = -1;
+    v4l.in_bufs[9][0].buf = (uint8_t*)MAP_FAILED;
+    v4l.in_bufs[9][0].fd = -1;
+    v4l.in_bufs[9][1].buf = (uint8_t*)MAP_FAILED;
+    v4l.in_bufs[9][1].fd = -1;
+    v4l.in_bufs[9][2].buf = (uint8_t*)MAP_FAILED;
+    v4l.in_bufs[9][2].fd = -1;
+    v4l.out_bufs[0].buf = (uint8_t*)MAP_FAILED;
+    v4l.out_bufs[0].fd = -1;
+    v4l.out_bufs[1].buf = (uint8_t*)MAP_FAILED;
+    v4l.out_bufs[1].fd = -1;
+    v4l.out_bufs[2].buf = (uint8_t*)MAP_FAILED;
+    v4l.out_bufs[2].fd = -1;
+    v4l.out_bufs[3].buf = (uint8_t*)MAP_FAILED;
+    v4l.out_bufs[3].fd = -1;
+    v4l.out_bufs[4].buf = (uint8_t*)MAP_FAILED;
+    v4l.out_bufs[4].fd = -1;
+    v4l.out_bufs[5].buf = (uint8_t*)MAP_FAILED;
+    v4l.out_bufs[5].fd = -1;
+    v4l.in_bufs_count = V4L_MAX_IN_BUFS;
+    v4l.out_bufs_count = V4L_MAX_OUT_BUFS;
+
+    v4l.outplane_mem_type = V4L2_MEMORY_MMAP;
+    v4l.capplane_mem_type = V4L2_MEMORY_MMAP;
+    v4l.outplane_buf_type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
+    v4l.capplane_buf_type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+    v4l.dev_id = -1;
+    v4l.outplane_buffers = NULL;
+    v4l.capplane_buffers = NULL;
+    v4l.num_queued_outplane_buffers = 0;
+    v4l.num_queued_capplane_buffers = 0;
+    v4l.dqthread_running = false;
+    v4l.enc_dq_thread = 0;
+
     int ret = 0;
     struct v4l2_buffer outplane_v4l2_buf;
     struct v4l2_plane outputplanes[MAX_PLANES];
@@ -892,35 +472,18 @@ int main (int argc, char const *argv[])
     struct v4l2_plane captureplanes[MAX_PLANES];
     struct v4l2_exportbuffer capplane_expbuf;
 
-    // Initialisation.
-
-    memset(&ctx, 0, sizeof (context_t));
-    ctx.outplane_mem_type = V4L2_MEMORY_MMAP;
-    ctx.capplane_mem_type = V4L2_MEMORY_MMAP;
-    ctx.outplane_buf_type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
-    ctx.capplane_buf_type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
-    ctx.fd = -1;
-    ctx.outplane_buffers = NULL;
-    ctx.capplane_buffers = NULL;
-    ctx.num_queued_outplane_buffers = 0;
-    ctx.num_queued_capplane_buffers = 0;
-    ctx.dqthread_running = false;
-    ctx.enc_dq_thread = 0;
-    pthread_mutex_init(&ctx.queue_lock, NULL);
-    pthread_cond_init(&ctx.queue_cond, NULL);
-
     assert(argc == 4);
-    ctx.output_file_path = argv[3];
-    ctx.width = atoi(argv[1]);
-    ctx.height = atoi(argv[2]);
+    v4l.output_file_path = argv[3];
+    v4l.width = atoi(argv[1]);
+    v4l.height = atoi(argv[2]);
 
-    ctx.output_file = new ofstream(ctx.output_file_path);
-    CHECK_ERROR(!ctx.output_file->is_open(),
+    v4l.output_file = new ofstream(v4l.output_file_path);
+    CHECK_ERROR(!v4l.output_file->is_open(),
         "Error in opening output file", cleanup);
 
-    CALL(ctx.fd = v4l2_open(ENCODER_DEV, O_RDWR));
+    CALL(v4l.dev_id = v4l2_open(ENCODER_DEV, O_RDWR));
     struct v4l2_capability cap;
-    CALL(v4l2_ioctl(ctx.fd, VIDIOC_QUERYCAP, &cap), cleanup);
+    CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_QUERYCAP, &cap), cleanup);
     ASSERT_INT((cap.capabilities & V4L2_CAP_VIDEO_M2M_MPLANE), ==, 0, cleanup);
     ASSERT_INT((cap.capabilities & V4L2_CAP_STREAMING), ==, 0, cleanup);
 
@@ -928,324 +491,231 @@ int main (int argc, char const *argv[])
     struct v4l2_format fmt;
     memset(&fmt, 0, sizeof(fmt));
     fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
-    fmt.fmt.pix_mp.width = ctx.width;
-    fmt.fmt.pix_mp.height = ctx.height;
+    fmt.fmt.pix_mp.width = v4l.width;
+    fmt.fmt.pix_mp.height = v4l.height;
     fmt.fmt.pix_mp.pixelformat = V4L2_PIX_FMT_H264;
     fmt.fmt.pix_mp.num_planes = 1;
-    CALL(v4l2_ioctl(ctx.fd, VIDIOC_S_FMT, &fmt));
-    DEBUG("Out plane - stride: %d", fmt.fmt.pix_mp.plane_fmt[0].bytesperline);
-    DEBUG("Out plane - sizeimage: %d", fmt.fmt.pix_mp.plane_fmt[0].sizeimage);
-    DEBUG("Out plane - num_planes: %d", fmt.fmt.pix_mp.num_planes);
-    ctx.capplane_num_planes = fmt.fmt.pix_mp.num_planes;
-    for (uint32_t i = 0; i < ctx.capplane_num_planes; ++i)
-    {
-        ctx.capplane_planefmts[i].stride =
-            fmt.fmt.pix_mp.plane_fmt[i].bytesperline;
-        ctx.capplane_planefmts[i].sizeimage =
-            fmt.fmt.pix_mp.plane_fmt[i].sizeimage;
-    }
-
-    uint32_t num_bufferplanes;
-    Buffer::BufferPlaneFormat planefmts[MAX_PLANES];
-    Buffer::fill_buffer_plane_format(&num_bufferplanes, planefmts, ctx.width, ctx.height,
-        V4L2_PIX_FMT_YUV444M);
+    CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_S_FMT, &fmt));
+    v4l.out_sizeimages[0] = fmt.fmt.pix_mp.plane_fmt[0].sizeimage;
+    v4l.out_strides[0] = fmt.fmt.pix_mp.plane_fmt[0].bytesperline;
+    DEBUG("Out plane - size: %d, stride: %d", v4l.out_sizeimages[0], v4l.out_strides[0]);
 
     memset(&fmt, 0, sizeof(fmt));
     fmt.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
-    fmt.fmt.pix_mp.width = ctx.width;
-    fmt.fmt.pix_mp.height = ctx.height;
+    fmt.fmt.pix_mp.width = v4l.width;
+    fmt.fmt.pix_mp.height = v4l.height;
     fmt.fmt.pix_mp.pixelformat = V4L2_PIX_FMT_YUV444M;
     fmt.fmt.pix_mp.num_planes = 3;
-    CALL(v4l2_ioctl(ctx.fd, VIDIOC_S_FMT, &fmt), cleanup);
-    for (int i = 0; i < fmt.fmt.pix_mp.num_planes; i++)
-    {
-        DEBUG("In plane[%d] - stride: %d", i, fmt.fmt.pix_mp.plane_fmt[i].bytesperline);
-        DEBUG("In Plane[%d] - sizeimage: %d", i, fmt.fmt.pix_mp.plane_fmt[i].sizeimage);
-    }
-    ctx.outplane_num_planes = fmt.fmt.pix_mp.num_planes;
-    for (uint32_t j = 0; j < ctx.outplane_num_planes; j++)
-    {
-        ctx.outplane_planefmts[j] = planefmts[j];
-        ctx.outplane_planefmts[j].stride = fmt.fmt.pix_mp.plane_fmt[j].bytesperline;
-        ctx.outplane_planefmts[j].sizeimage = fmt.fmt.pix_mp.plane_fmt[j].sizeimage;
+    CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_S_FMT, &fmt), cleanup);
+    for (int i = 0; i < fmt.fmt.pix_mp.num_planes; i++) {
+        v4l.in_sizeimages[i] = fmt.fmt.pix_mp.plane_fmt[i].sizeimage;
+        v4l.in_strides[i] = fmt.fmt.pix_mp.plane_fmt[i].bytesperline;
+        DEBUG("In Plane[%d] - size: %d, stride: %d", i, v4l.in_sizeimages[i], v4l.in_strides[i]);
     }
 
-    ret = req_buffers_on_output_plane(&ctx, V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE,
-        ctx.outplane_mem_type, 10);
-    CHECK_ERROR(ret, "Error in requesting buffers on output plane", cleanup);
+    struct v4l2_requestbuffers req;
+    memset(&req, 0, sizeof(req));
+    req.count = V4L_MAX_IN_BUFS;
+    req.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
+    req.memory = V4L2_MEMORY_MMAP;
+    V4L_CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_REQBUFS, &req), cleanup);
+    ASSERT_INT(req.count, >, V4L_MAX_IN_BUFS, cleanup);
+    ASSERT_INT(req.count, <=, 0, cleanup);
+    DEBUG("v4l.in_bufs_count: %d, v4l.outplane_num_buffers %d", req.count, v4l.outplane_num_buffers);
+    v4l.outplane_buffers = new Buffer *[req.count];
+    for (uint32_t i = 0; i < req.count; ++i)
+    {
+        v4l.outplane_buffers[i] = new Buffer (V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE, V4L2_MEMORY_MMAP,
+            3, i);
+    }
+    v4l.outplane_num_buffers = req.count;
 
-    /* Query the status of requested buffers
-    ** For each requested buffer, export buffer
-    ** and map it for MMAP memory.
-    */
-
-    for (uint32_t i = 0; i < ctx.outplane_num_buffers; ++i)
+    for (uint32_t i = 0; i < v4l.outplane_num_buffers; ++i)
     {
         memset(&outplane_v4l2_buf, 0, sizeof (struct v4l2_buffer));
         memset(outputplanes, 0, sizeof (struct v4l2_plane));
         outplane_v4l2_buf.index = i;
-        outplane_v4l2_buf.type = ctx.outplane_buf_type;
-        outplane_v4l2_buf.memory = ctx.outplane_mem_type;
+        outplane_v4l2_buf.type = v4l.outplane_buf_type;
+        outplane_v4l2_buf.memory = v4l.outplane_mem_type;
         outplane_v4l2_buf.m.planes = outputplanes;
-        outplane_v4l2_buf.length = ctx.outplane_num_planes;
+        outplane_v4l2_buf.length = 3;
 
-        ret = v4l2_ioctl(ctx.fd, VIDIOC_QUERYBUF, &outplane_v4l2_buf);
+        ret = v4l2_ioctl(v4l.dev_id, VIDIOC_QUERYBUF, &outplane_v4l2_buf);
         CHECK_ERROR(ret, "Error in querying for "<< i <<
             "th buffer outputplane", cleanup);
 
         for (uint32_t j = 0; j < outplane_v4l2_buf.length; ++j)
         {
-            ctx.outplane_buffers[i]->planes[j].length =
+            v4l.outplane_buffers[i]->planes[j].length =
                 outplane_v4l2_buf.m.planes[j].length;
-            ctx.outplane_buffers[i]->planes[j].mem_offset =
+            v4l.outplane_buffers[i]->planes[j].mem_offset =
                 outplane_v4l2_buf.m.planes[j].m.mem_offset;
         }
 
         memset(&outplane_expbuf, 0, sizeof (struct v4l2_exportbuffer));
-        outplane_expbuf.type = ctx.outplane_buf_type;
+        outplane_expbuf.type = v4l.outplane_buf_type;
         outplane_expbuf.index = i;
 
-        for (uint32_t j = 0; j < ctx.outplane_num_planes; ++j)
+        for (uint32_t j = 0; j < 3; ++j)
         {
             outplane_expbuf.plane = j;
-            ret = v4l2_ioctl(ctx.fd, VIDIOC_EXPBUF, &outplane_expbuf);
+            ret = v4l2_ioctl(v4l.dev_id, VIDIOC_EXPBUF, &outplane_expbuf);
             CHECK_ERROR(ret, "Error in exporting "<< i <<
                 "th index buffer outputplane", cleanup);
 
-            ctx.outplane_buffers[i]->planes[j].fd = outplane_expbuf.fd;
+            v4l.outplane_buffers[i]->planes[j].dev_id = outplane_expbuf.fd;
         }
 
-        if (ctx.outplane_buffers[i]->map())
+        if (v4l.outplane_buffers[i]->map())
         {
             cerr << "Buffer mapping error on output plane" << endl;
-            ctx.in_error = 1;
+            v4l.in_error = 1;
             goto cleanup;
         }
 
     }
 
-    // Request buffers on capture plane.
+    memset(&req, 0, sizeof(req));
+    req.count = V4L_MAX_OUT_BUFS;
+    req.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+    req.memory = V4L2_MEMORY_MMAP;
+    V4L_CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_REQBUFS, &req), cleanup);
+    ASSERT_INT(req.count, >, V4L_MAX_OUT_BUFS, cleanup);
+    ASSERT_INT(req.count, <=, 0, cleanup);
+    DEBUG("v4l.out_bufs_count: %d", req.count);
+    v4l.capplane_buffers = new Buffer *[req.count];
+    for (uint32_t i = 0; i < req.count; ++i)
+    {
+        v4l.capplane_buffers[i] = new Buffer (V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE, V4L2_MEMORY_MMAP,
+            1, i);
+    }
+    v4l.capplane_num_buffers = req.count;
 
-    ret = req_buffers_on_capture_plane(&ctx, V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE,
-        ctx.capplane_mem_type, 6);
-    CHECK_ERROR(ret, "Error in requesting buffers on capture plane", cleanup);
 
-    /* Query the status of requested buffers
-    ** For each requested buffer, export buffer
-    ** and map it for MMAP memory.
-    */
-
-    for (uint32_t i = 0; i < ctx.capplane_num_buffers; ++i)
+    for (uint32_t i = 0; i < v4l.capplane_num_buffers; ++i)
     {
         memset(&capplane_v4l2_buf, 0, sizeof (struct v4l2_buffer));
         memset(captureplanes, 0, sizeof (struct v4l2_plane));
         capplane_v4l2_buf.index = i;
-        capplane_v4l2_buf.type = ctx.capplane_buf_type;
-        capplane_v4l2_buf.memory = ctx.capplane_mem_type;
+        capplane_v4l2_buf.type = v4l.capplane_buf_type;
+        capplane_v4l2_buf.memory = v4l.capplane_mem_type;
         capplane_v4l2_buf.m.planes = captureplanes;
-        capplane_v4l2_buf.length = ctx.capplane_num_planes;
+        capplane_v4l2_buf.length = 1;
 
-        ret = v4l2_ioctl(ctx.fd, VIDIOC_QUERYBUF, &capplane_v4l2_buf);
+        ret = v4l2_ioctl(v4l.dev_id, VIDIOC_QUERYBUF, &capplane_v4l2_buf);
         CHECK_ERROR(ret, "Error in querying for "<< i <<
             "th buffer captureplane", cleanup);
 
         for (uint32_t j = 0; j < capplane_v4l2_buf.length; ++j)
         {
-            ctx.capplane_buffers[i]->planes[j].length =
+            v4l.capplane_buffers[i]->planes[j].length =
                 capplane_v4l2_buf.m.planes[j].length;
-            ctx.capplane_buffers[i]->planes[j].mem_offset =
+            v4l.capplane_buffers[i]->planes[j].mem_offset =
                 capplane_v4l2_buf.m.planes[j].m.mem_offset;
         }
 
         memset(&capplane_expbuf, 0, sizeof (struct v4l2_exportbuffer));
-        capplane_expbuf.type = ctx.capplane_buf_type;
+        capplane_expbuf.type = v4l.capplane_buf_type;
         capplane_expbuf.index = i;
 
-        for (uint32_t j = 0; j < ctx.capplane_num_planes; ++j)
+        for (uint32_t j = 0; j < 1; ++j)
         {
             capplane_expbuf.plane = j;
-            ret = v4l2_ioctl(ctx.fd, VIDIOC_EXPBUF, &capplane_expbuf);
+            ret = v4l2_ioctl(v4l.dev_id, VIDIOC_EXPBUF, &capplane_expbuf);
             CHECK_ERROR(ret, "Error in exporting "<< i <<
                 "th index buffer captureplane", cleanup);
 
-            ctx.capplane_buffers[i]->planes[j].fd = capplane_expbuf.fd;
+            v4l.capplane_buffers[i]->planes[j].dev_id = capplane_expbuf.fd;
         }
 
-        if (ctx.capplane_buffers[i]->map())
+        if (v4l.capplane_buffers[i]->map())
         {
             cerr << "Buffer mapping error on capture plane" << endl;
-            ctx.in_error = 1;
+            v4l.in_error = 1;
             goto cleanup;
         }
     }
 
-    /* Subscribe to EOS event, triggered
-    ** when zero sized buffer is enquequed
-    ** on output plane.
-    */
-    //ret = subscribe_event(ctx.fd, V4L2_EVENT_EOS, 0, 0);
-    //CHECK_ERROR(ret, "Error in subscribing to EOS change", cleanup);
+    enum v4l2_buf_type type;
+    type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
+    V4L_CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_STREAMON, &type), cleanup);
+    v4l.outplane_streamon = 1;
 
-    /* Set streaming on both plane
-    ** Start stream processing on output plane and capture
-    ** plane by setting the streaming status ON.
-    */
-
-    ret = v4l2_ioctl(ctx.fd, VIDIOC_STREAMON, &ctx.outplane_buf_type);
-    CHECK_ERROR(ret, "Error in setting streaming status ON output plane", cleanup);
-
-    ctx.outplane_streamon = 1;
-
-    ret = v4l2_ioctl (ctx.fd, VIDIOC_STREAMON, &ctx.capplane_buf_type);
+    type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+    V4L_CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_STREAMON, &type), cleanup);
     CHECK_ERROR(ret, "Error in setting streaming status ON capture plane", cleanup);
+    v4l.capplane_streamon = 1;
 
-    ctx.capplane_streamon = 1;
+    struct v4l2_buffer in_buf;
+    struct v4l2_plane in_planes[3];
+    DEBUG("v4l.outplane_num_buffers: %d", v4l.outplane_num_buffers);
+    for (uint32_t i = 0; i < v4l.outplane_num_buffers; ++i) {
+        Buffer* buffer = v4l.outplane_buffers[i];
+        CALL(read_video_frame(*buffer));
 
-    /* Create DQ Capture loop thread
-    ** and set the callback function to dq_thread.
-    */
-
-    pthread_mutex_lock(&ctx.queue_lock);
-    pthread_create(&ctx.enc_dq_thread, NULL, dq_thread, &ctx);
-    ctx.dqthread_running = true;
-    pthread_mutex_unlock(&ctx.queue_lock);
-
-    // First enqueue all the empty buffers on capture plane.
-
-    for (uint32_t i = 0; i < ctx.capplane_num_buffers; ++i)
-    {
-        struct v4l2_buffer queue_cap_v4l2_buf;
-        struct v4l2_plane queue_cap_planes[MAX_PLANES];
-        Buffer *buffer;
-
-        memset(&queue_cap_v4l2_buf, 0, sizeof (struct v4l2_buffer));
-        memset(queue_cap_planes, 0, MAX_PLANES * sizeof (struct v4l2_plane));
-
-        buffer = ctx.capplane_buffers[i];
-        queue_cap_v4l2_buf.index = i;
-        queue_cap_v4l2_buf.m.planes = queue_cap_planes;
-
-        ret = q_buffer(&ctx, queue_cap_v4l2_buf, buffer, ctx.capplane_buf_type,
-                ctx.capplane_mem_type, ctx.capplane_num_planes);
-        CHECK_ERROR(ret, "Error while queueing buffer on capture plane", cleanup);
+        memset(&in_buf, 0, sizeof(in_buf));
+        memset(in_planes, 0, sizeof(in_planes));
+        in_buf.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
+        in_buf.memory = V4L2_MEMORY_MMAP;
+        in_buf.index = i;
+        in_buf.length = 3;
+        in_buf.m.planes = in_planes;
+        in_buf.m.planes[0].bytesused = buffer->planes[0].bytesused;
+        in_buf.m.planes[1].bytesused = buffer->planes[1].bytesused;
+        in_buf.m.planes[2].bytesused = buffer->planes[2].bytesused;
+        DEBUG("bytesused: %d, %d, %d", in_buf.m.planes[0].bytesused, in_buf.m.planes[1].bytesused,
+            in_buf.m.planes[2].bytesused);
+        for (int j = 0; j < 3; j++) {
+            CALL(
+                NvBufferMemSyncForDevice(buffer->planes[j].dev_id, j, (void **)&buffer->planes[j].data);
+            );
+        }
+        V4L_CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_QBUF, &in_buf), cleanup);
     }
 
-    /* Now read the raw data and enqueue buffers
-    ** on output plane. Exit loop in case file read is complete.
-    */
-
-    for (uint32_t i = 0; i < ctx.outplane_num_buffers; ++i)
-    {
-        struct v4l2_buffer v4l2_buf;
-        struct v4l2_plane planes[MAX_PLANES];
-        Buffer *buffer;
-
-        memset(&v4l2_buf, 0, sizeof (v4l2_buf));
-        memset(planes, 0, MAX_PLANES * sizeof (struct v4l2_plane));
-
-        buffer = ctx.outplane_buffers[i];
-        v4l2_buf.index = i;
-        v4l2_buf.m.planes = planes;
-
-        //ret = read_video_frame(ctx.input_file, *buffer);
-        ret = read_video_frame(*buffer);
-        if (ret < 0)
-        {
-            cerr << "Could not read complete frame from input file" << endl;
-            ctx.eos = true;
-            v4l2_buf.m.planes[0].m.userptr = 0;
-            v4l2_buf.m.planes[0].bytesused =
-                v4l2_buf.m.planes[1].bytesused =
-                v4l2_buf.m.planes[2].bytesused = 0;
-        }
-
-        if (ctx.outplane_mem_type == V4L2_MEMORY_MMAP ||
-                ctx.outplane_mem_type == V4L2_MEMORY_DMABUF)
-        {
-            for (uint32_t j = 0; j < buffer->n_planes; ++j)
-            {
-                ret = NvBufferMemSyncForDevice(buffer->planes[j].fd, j,
-                    (void **)&buffer->planes[j].data);
-                CHECK_ERROR(ret < 0,
-                    "Error while NvBufferMemSyncForDevice at output plane", cleanup);
-            }
-        }
-
-        /* Enqueue the buffer on output plane
-        ** It is necessary to queue an empty buffer
-        ** to signal EOS to the encoder.
-        */
-        ret = q_buffer(&ctx, v4l2_buf, buffer, ctx.outplane_buf_type,
-            ctx.outplane_mem_type, ctx.outplane_num_planes);
-        CHECK_ERROR(ret, "Error while queueing buffer on output plane", cleanup);
-
-        if (v4l2_buf.m.planes[0].bytesused == 0)
-        {
-            cout << "File read complete." << endl;
-            ctx.eos = true;
-            break;
-        }
-    }
-
+    DEBUG("encoder_process_blocking");
     // Dequeue and queue loop on output plane.
-
-    ret = encoder_process_blocking(ctx);
+    ret = encoder_process_blocking();
     CHECK_ERROR(ret < 0, "Encoder is in error", cleanup);
 
-    /* For blocking mode, after getting EOS on output plane, wait
-    ** till all the buffers are successfully from the capture plane.
-    */
-    wait_for_dqthread(ctx, -1);
-
-    // Cleanup and exit.
-
 cleanup:
-    if (ctx.fd != -1)
+    if (v4l.dev_id != -1)
     {
 
         // Stream off on both planes.
 
-        ret = v4l2_ioctl(ctx.fd, VIDIOC_STREAMOFF, &ctx.outplane_buf_type);
-        ctx.outplane_streamon = 0;
-        ret = v4l2_ioctl(ctx.fd, VIDIOC_STREAMOFF, &ctx.capplane_buf_type);
-        ctx.capplane_streamon = 0;
+        ret = v4l2_ioctl(v4l.dev_id, VIDIOC_STREAMOFF, &v4l.outplane_buf_type);
+        v4l.outplane_streamon = 0;
+        ret = v4l2_ioctl(v4l.dev_id, VIDIOC_STREAMOFF, &v4l.capplane_buf_type);
+        v4l.capplane_streamon = 0;
 
         // Unmap MMAPed buffers.
 
-        for (uint32_t i = 0; i < ctx.outplane_num_buffers; ++i)
+        for (uint32_t i = 0; i < v4l.outplane_num_buffers; ++i)
         {
-            ctx.outplane_buffers[i]->unmap();
+            v4l.outplane_buffers[i]->unmap();
         }
-        for (uint32_t i = 0; i < ctx.capplane_num_buffers; ++i)
+        for (uint32_t i = 0; i < v4l.capplane_num_buffers; ++i)
         {
-            ctx.capplane_buffers[i]->unmap();
+            v4l.capplane_buffers[i]->unmap();
         }
 
-        // Request 0 buffers on both planes.
-
-        ret = req_buffers_on_output_plane(&ctx, V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE,
-            ctx.outplane_mem_type, 0);
-        ret = req_buffers_on_capture_plane(&ctx, V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE,
-            ctx.capplane_mem_type, 0);
-
-        // Close the opened V4L2 device.
-
-        ret = v4l2_close(ctx.fd);
+        ret = v4l2_close(v4l.dev_id);
         if (ret)
         {
             cerr << "Unable to close the device" << endl;
-            ctx.in_error = 1;
+            v4l.in_error = 1;
         }
 
     }
 
-    //ctx.input_file->close();
-    ctx.output_file->close();
+    //v4l.input_file->close();
+    v4l.output_file->close();
 
-    //delete ctx.input_file;
-    delete ctx.output_file;
+    //delete v4l.input_file;
+    delete v4l.output_file;
 
-    if (ctx.in_error)
+    if (v4l.in_error)
     {
         cerr << "Encoder is in error << endl" << endl;
     }

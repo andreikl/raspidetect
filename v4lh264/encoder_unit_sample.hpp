@@ -57,28 +57,27 @@ public:
     /**
      * Holds the buffer plane format.
      */
-    typedef struct
+    /*typedef struct
     {
-        uint32_t width;             /**< Holds the width of the plane in pixels. */
-        uint32_t height;            /**< Holds the height of the plane in pixels. */
+        uint32_t width;
+        uint32_t height;
 
-        uint32_t bytesperpixel;     /**< Holds the bytes used to represent one
-                                      pixel in the plane. */
-        uint32_t stride;            /**< Holds the stride of the plane in bytes. */
-        uint32_t sizeimage;         /**< Holds the size of the plane in bytes. */
-    } BufferPlaneFormat;
+        uint32_t bytesperpixel;
+        uint32_t stride;
+        uint32_t sizeimage;
+    } BufferPlaneFormat;*/
 
     /**
      * Holds the buffer plane parameters.
      */
     typedef struct
     {
-        BufferPlaneFormat fmt;      /**< Holds the format of the plane. */
+        //BufferPlaneFormat fmt;
 
         unsigned char *data;        /**< Holds a pointer to the plane memory. */
         uint32_t bytesused;         /**< Holds the number of valid bytes in the plane. */
 
-        int fd;                     /**< Holds the file descriptor (FD) of the plane of the
+        int dev_id;                     /**< Holds the file descriptor (FD) of the plane of the
                                       exported buffer, in the case of V4L2 MMAP buffers. */
         uint32_t mem_offset;        /**< Holds the offset of the first valid byte
                                       from the data pointer. */
@@ -89,7 +88,7 @@ public:
         uint32_t index);
 
     Buffer(enum v4l2_buf_type buf_type, enum v4l2_memory memory_type,
-           uint32_t n_planes, BufferPlaneFormat *fmt, uint32_t index);
+           uint32_t n_planes, uint32_t index);
 
      ~Buffer();
 
@@ -116,35 +115,30 @@ public:
     BufferPlane planes[MAX_PLANES]; /**< Holds the data pointer, plane file
                                         descriptor (FD), plane format, etc. */
 
-    /**
-     * Fills the Buffer::BufferPlaneFormat array.
-     */
-    static int fill_buffer_plane_format(uint32_t *num_planes,
-            Buffer::BufferPlaneFormat *planefmts,
-            uint32_t width, uint32_t height, uint32_t raw_pixfmt);
-
 private:
 
     bool mapped;
 
 };
 
-/**
- * @brief Struct defining the encoder context.
- * The video encoder device node is `/dev/nvhost-msenc`. The category name
- * for the encoder is \c "NVENC".
- *
- * The context stores the information for encoding.
- * Refer to [V4L2 Video Encoder](group__V4L2Enc.html) for more information on the encoder.
- */
-typedef struct
-{
+#define V4L_MAX_IN_BUFS 10
+#define V4L_MAX_OUT_BUFS 6
+
+struct v4l_encoder_plane_t {
+    uint8_t *buf;
+    int len;
+    int offset;
+    int fd;
+};
+
+struct v4l_encoder_state_t {
+    ///-------------- to delete -------
+
     uint32_t encode_pixfmt;
     uint32_t raw_pixfmt;
     uint32_t width;
     uint32_t height;
     uint32_t capplane_num_planes;
-    uint32_t outplane_num_planes;
     uint32_t capplane_num_buffers;
     uint32_t outplane_num_buffers;
 
@@ -155,8 +149,8 @@ typedef struct
     enum v4l2_memory capplane_mem_type;
     enum v4l2_buf_type outplane_buf_type;
     enum v4l2_buf_type capplane_buf_type;
-    Buffer::BufferPlaneFormat outplane_planefmts[MAX_PLANES];
-    Buffer::BufferPlaneFormat capplane_planefmts[MAX_PLANES];
+    //Buffer::BufferPlaneFormat outplane_planefmts[MAX_PLANES];
+    //Buffer::BufferPlaneFormat capplane_planefmts[MAX_PLANES];
 
     Buffer **outplane_buffers;
     Buffer **capplane_buffers;
@@ -176,8 +170,20 @@ typedef struct
     bool dqthread_running;
     bool outplane_streamon;
     bool capplane_streamon;
-    int fd;
-} context_t;
+    int dev_id;
+
+    ///-------------- to delete -------
+
+    int out_sizeimages[1];
+    int out_strides[1];
+    int in_sizeimages[3];
+    int in_strides[3];
+
+    struct v4l_encoder_plane_t in_bufs[V4L_MAX_IN_BUFS][3];
+    struct v4l_encoder_plane_t out_bufs[V4L_MAX_OUT_BUFS];
+    int in_bufs_count;
+    int out_bufs_count;
+};
 
 /**
  * @brief Reads the raw data from a file to the buffer structure.
@@ -203,152 +209,6 @@ static int read_video_frame(ifstream * stream, Buffer & buffer);
 static int write_encoded_frame(ofstream * stream, Buffer * buffer);
 
 /**
- * @brief Sets the format on the encoder capture plane.
- *
- * Calls the \c VIDIOC_S_FMT IOCTL internally on the capture plane.
- *
- * @param[in] ctx Reference to the encoder context struct created.
- * @param[in] sizeimage Size of the encoded bitstream
- * @return 0 for success, -1 otherwise.
- */
-static int set_capture_plane_format(context_t& ctx, uint32_t sizeimage);
-
-/**
- * @brief Sets the format on the encoder output plane.
- *
- * Calls the \c VIDIOC_S_FMT IOCTL internally on the output plane.
- *
- * @param[in] ctx Reference to the encoder context struct created.
- * @return 0 for success, -1 otherwise.
- */
-static int set_output_plane_format(context_t& ctx);
-
-/**
- * @brief Requests for buffers on the encoder capture plane.
- *
- * Calls the \c VIDIOC_REQBUFS IOCTL internally on the capture plane.
- *
- * @param[in] ctx Pointer to the encoder context struct created.
- * @param[in] buf_type Type of buffer, one of the enum v4l2_buf_type.
- * @param[in] mem_type Memory type of the plane, one of the
- *                     enum v4l2_memory mem_type, here V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE
- * @param[in] num_buffers Number of buffers to be requested.
- * @return 0 for success, -1 otherwise.
- */
-static int req_buffers_on_capture_plane(context_t * ctx, enum v4l2_buf_type buf_type,
-		enum v4l2_memory mem_type, int num_buffers);
-
-/**
- * @brief Requests for buffers on the encoder output plane.
- *
- * Calls the \c VIDIOC_REQBUFS IOCTL internally on the output plane.
- *
- * @param[in] ctx Pointer to the encoder context struct created.
- * @param[in] buf_type Type of buffer, one of the enum v4l2_buf_type.
- * @param[in] mem_type Memory type of the plane, one of the
- *                     enum v4l2_memory mem_type, here V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE
- * @param[in] num_buffers Number of buffers to be requested.
- * @return 0 for success, -1 otherwise.
- */
-static int req_buffers_on_output_plane (context_t * ctx, enum v4l2_buf_type buf_type,
-		enum v4l2_memory mem_type, int num_buffers);
-
-/**
- * @brief Subscribes to an V4L2 event
- *
- * Calls the \c VIDIOC_SUBSCRIBE_EVENT IOCTL internally
- *
- * @param[in] fd context FD
- * @param[in] type Type of the event
- * @param[in] id ID of the event source
- * @param[in] flags Event flags
- * @return 0 for success, -1 otherwise.
- */
-static int subscribe_event(int fd, uint32_t type, uint32_t id, uint32_t flags);
-
-/**
- * @brief Queues a buffer on the plane.
- *
- * This method calls \c VIDIOC_QBUF IOCTL internally.
- *
- * @param[in] ctx Pointer to the encoder context struct created.
- * @param[in] v4l2_buf A reference to the \c v4l2_buffer structure to use for queueing.
- * @param[in] buffer A pointer to the \c %Buffer object.
- * @param[in] buf_type Type of buffer, one of the enum v4l2_buf_type.
- * @param[in] mem_type Memory type of the plane, one of the
- *                     enum v4l2_memory mem_type
- * @param[in] num_planes Number of planes in the buffer.
- * @return 0 for success, -1 otherwise.
- */
-static int q_buffer(context_t * ctx, struct v4l2_buffer &v4l2_buf, Buffer * buffer,
-    enum v4l2_buf_type buf_type, enum v4l2_memory memory_type, int num_planes);
-
-/**
- * @brief Dequeues a buffer from the plane.
- *
- * This method calls \c VIDIOC_DQBUF IOCTL internally.
- * This is a blocking call. This call returns when a buffer is successfully
- * dequeued or timeout is reached. If the buffer is not NULL, returns the
- * Buffer object at the index returned by VIDIOC_DQBUF IOCTL
- *
- * @param[in] ctx Pointer to the encoder context struct created.
- * @param[in] v4l2_buf A reference to the \c v4l2_buffer structure to use for dequeueing.
- * @param[in] buffer A double pointer to the \c %Buffer object associated with the dequeued
- *                   buffer. Can be NULL.
- * @param[in] buf_type Type of buffer, one of the enum v4l2_buf_type.
- * @param[in] mem_type Memory type of the plane, one of the
- *                     enum v4l2_memory mem_type
- * @param[in] num_retries Number of times to try dequeuing a buffer before
- *                        a failure is returned.
- * @return 0 for success, -1 otherwise.
- */
-static int dq_buffer(context_t * ctx, struct v4l2_buffer &v4l2_buf, Buffer ** buffer,
-	enum v4l2_buf_type buf_type, enum v4l2_memory memory_type, uint32_t num_retries);
-
-/**
- * @brief Callback function when enc_cap_thread is created.
- *
- * This is a callback function of the capture loop thread created.
- * The function runs until signaled to stop, or error
- * is encountered. On successful dequeue of a buffer from the plane,
- * the method calls capture_plane_callback.
- *
- * Setting the stream to off automatically stops the thread.
- *
- * @param[in] arg A pointer to the application data.
- */
-static void * dq_thread(void *arg);
-
-/**
- * @brief DQ callback function.
- *
- * This is a callback function type method that is called by the DQ Thread when
- * it successfully dequeues a buffer from the plane.
- *
- * Setting the stream to off automatically stops the thread.
- *
- * @param[in] v4l2_buf A reference to the \c v4l2_buffer structure to use for dequeueing.
- * @param[in] buffer A pointer to the \c %Buffer object associated with the dequeued
- *                   buffer. Can be NULL.
- * @param[in] arg A pointer to the application data.
- */
-static bool
-capture_plane_callback(struct v4l2_buffer *v4l2_buf, Buffer * buffer, void *arg);
-
-/**
- * @brief Waits for the DQ Thread to stop.
- *
- * This method waits until the DQ Thread stops or timeout is reached.
- *
- * @sa dq_thread
- *
- * @param[in] ctx Reference to the encoder context struct created.
- * @param[in] max_wait_ms Maximum wait time, in milliseconds.
- * @return 0 for success, -1 otherwise.
- */
-static int wait_for_dqthread(context_t& ctx, uint32_t max_wait_ms);
-
-/**
  * @brief Encode processing function for blocking mode.
  *
  * Function loop to DQ and EnQ buffers on output plane
@@ -359,4 +219,4 @@ static int wait_for_dqthread(context_t& ctx, uint32_t max_wait_ms);
  *         EOS is detected by the encoder and all the buffers are dequeued;
  *         else the encode process continues running.
  */
-static int encoder_process_blocking(context_t& ctx);
+static int encoder_process_blocking();
