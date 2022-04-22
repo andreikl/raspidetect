@@ -1,6 +1,7 @@
 V4L = 1
 H264_ENCODER_RASPBERRY = 0 #TODO: to check
 H264_ENCODER_JETSON = 1
+H264_ENCODER_JETSON_WRAP = 0 #use wrap for unit test
 CONTROL = 0
 RFB = 1
 SDL = 1
@@ -46,7 +47,11 @@ ifeq ($(H264_ENCODER_RASPBERRY), 1)
 	OBJ += mmal_encoder.o
 endif
 
-ifeq ($(H264_ENCODER_JETSON), 1) 
+ifeq ($(H264_ENCODER_JETSON), 1)
+	ifeq ($(H264_ENCODER_JETSON_WRAP), 1)
+		COMMON += -DV4L_ENCODER_WRAP
+	endif
+
 	COMMON += -DV4L_ENCODER
 	COMMON += `pkg-config --cflags libv4l2`
 	LDFLAGS += `pkg-config --libs libv4l2`
@@ -99,7 +104,7 @@ endif
 ifeq ($(CMOCKA), 1) 
 	TEST_COMMON = $(COMMON) -DCMOCKA `pkg-config --cflags cmocka`
 	TEST_LDFLAGS = $(LDFLAGS) `pkg-config --libs cmocka`
-# stat
+#	stat
 	TEST_LDFLAGS += -Wl,--wrap=__xstat
 	TEST_LDFLAGS += -Wl,--wrap=open
 	TEST_LDFLAGS += -Wl,--wrap=close
@@ -113,7 +118,7 @@ ifeq ($(CMOCKA), 1)
 	TEST_LDFLAGS += -Wl,--wrap=SDL_GetWindowSurface
 	TEST_LDFLAGS += -Wl,--wrap=SDL_FreeSurface
 	TEST_LDFLAGS += -Wl,--wrap=SDL_CreateRGBSurfaceFrom
-# SDL_BlitSurface
+#	SDL_BlitSurface
 	TEST_LDFLAGS += -Wl,--wrap=SDL_UpperBlit
 	TEST_LDFLAGS += -Wl,--wrap=SDL_UpdateWindowSurface
 	TEST_OBJ = test.o

@@ -5,31 +5,8 @@
 #define V4L_MAX_IN_BUFS 10
 #define V4L_MAX_OUT_BUFS 6
 
-#define V4L_CALL_2(call, error) \
-{ \
-    int __res = call; \
-    if (__res != 0) { \
-        CALL_MESSAGE(call); \
-        goto error; \
-    } \
-}
-
-#define V4L_CALL_1(call) \
-{ \
-    int __res = call; \
-    if (__res != 0) { \
-        CALL_MESSAGE(call); \
-    } \
-}
-
-#define V4L_CALL_X(...) GET_3RD_ARG(__VA_ARGS__, V4L_CALL_2, V4L_CALL_1, )
-
-#define V4L_CALL(...) V4L_CALL_X(__VA_ARGS__)(__VA_ARGS__)
-
 struct v4l_encoder_plane_t {
     uint8_t *buf;
-    int len;
-    int offset;
     int fd;
 };
 
@@ -39,10 +16,14 @@ struct v4l_encoder_state_t {
     char dev_name[20];
     int dev_id;
 
-    int out_sizeimages[1];
-    int out_strides[1];
+    int in_offsets[3];
+    int in_lengths[3];
     int in_sizeimages[3];
     int in_strides[3];
+    int out_sizeimages[1];
+    int out_strides[1];
+    int out_offsets[1];
+    int out_lengths[1];
 
     struct v4l_encoder_plane_t in_bufs[V4L_MAX_IN_BUFS][3];
     struct v4l_encoder_plane_t out_bufs[V4L_MAX_OUT_BUFS];

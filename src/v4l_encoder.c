@@ -118,15 +118,27 @@ static int ioctl_enum(int fd, int request, void *arg)
     return res;
 }
 
+static int ioctl_again(int fd, int request, void *arg)
+{
+    int res = v4l2_ioctl(fd, request, arg);
+    if (res == -1) {
+        if (errno == EAGAIN) {
+            res = -2;
+        } else 
+            res = -1;
+    } 
+    return res;
+}
+
 static void v4l2_clean_memory() {
     if (v4l.out_bufs[0].buf != MAP_FAILED) {
-        CALL(munmap(v4l.out_bufs[0].buf, v4l.out_bufs[0].len));
+        CALL(munmap(v4l.out_bufs[0].buf, v4l.out_lengths[0]));
         v4l.out_bufs[0].buf = MAP_FAILED;
     }
     for (int i = 0; i < V4L_MAX_IN_BUFS; i++)
         for (int j = 0; i < 3; i++) {
             if (v4l.in_bufs[i][j].buf != MAP_FAILED) {
-                CALL(munmap(v4l.in_bufs[i][j].buf, v4l.in_bufs[i][j].len));
+                CALL(munmap(v4l.in_bufs[i][j].buf, v4l.in_lengths[j]));
                 v4l.in_bufs[i][j].buf = MAP_FAILED;
             }
         }
@@ -217,7 +229,7 @@ static int v4l_init()
     // O_NONBLOCK - nv sample opens in block mode
     CALL(v4l.dev_id = v4l2_open(v4l.dev_name, O_RDWR), cleanup);
     struct v4l2_capability cap;
-    V4L_CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_QUERYCAP, &cap), cleanup);
+    CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_QUERYCAP, &cap), cleanup);
     //strncpy(v4l.app->camera_name, (const char *)cap.card, 32);
     //DEBUG("v4l.app->camera_name: %s", v4l.app->camera_name);
     DEBUG("cap.capabilities: %d", cap.capabilities);
@@ -343,10 +355,9 @@ static int v4l_start(int input_format, int output_format)
     fmt.fmt.pix_mp.height = v4l.app->video_height;
     fmt.fmt.pix_mp.pixelformat = v4l_output_format->internal_format;
     fmt.fmt.pix_mp.num_planes = 1;
-    V4L_CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_S_FMT, &fmt), cleanup);
+    CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_S_FMT, &fmt), cleanup);
     v4l.out_sizeimages[0] = fmt.fmt.pix_mp.plane_fmt[0].sizeimage;
     v4l.out_strides[0] = fmt.fmt.pix_mp.plane_fmt[0].bytesperline;
-    DEBUG("Out plane - size: %d, stride: %d", v4l.out_sizeimages[0], v4l.out_strides[0]);
 
     memset(&fmt, 0, sizeof(fmt));
     fmt.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
@@ -359,33 +370,27 @@ static int v4l_start(int input_format, int output_format)
     // DEBUG("fmt.fmt.pix_mp.height[%d]", fmt.fmt.pix_mp.height);
     // DEBUG("fmt.fmt.pix_mp.pixelformat[%d]", fmt.fmt.pix_mp.pixelformat);
     // DEBUG("fmt.fmt.pix_mp.num_planes[%d]", fmt.fmt.pix_mp.num_planes);
-    V4L_CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_S_FMT, &fmt), cleanup);
+    CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_S_FMT, &fmt), cleanup);
     for (int i = 0; i < fmt.fmt.pix_mp.num_planes; i++) {
         v4l.in_sizeimages[i] = fmt.fmt.pix_mp.plane_fmt[i].sizeimage;
         v4l.in_strides[i] = fmt.fmt.pix_mp.plane_fmt[i].bytesperline;
-
-        DEBUG("In Plane[%d] - size: %d, stride: %d", i, v4l.in_sizeimages[i], v4l.in_strides[i]);
     }
-
     //https://docs.nvidia.com/jetson/l4t-multimedia/group__V4L2Enc.html
     // only V4L2_MEMORY_MMAP is supported
     // MEMORY               OUTPUT PLANE 	CAPTURE PLANE
     // V4L2_MEMORY_MMAP     Y           	    Y
     // V4L2_MEMORY_DMABUF   Y           	    N
     // V4L2_MEMORY_USERPTR  N           	    N
-
     struct v4l2_requestbuffers req;
     memset(&req, 0, sizeof(req));
     req.count = v4l.in_bufs_count;
     req.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
     req.memory = V4L2_MEMORY_MMAP;
-    V4L_CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_REQBUFS, &req), cleanup);
+    CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_REQBUFS, &req), cleanup);
     ASSERT_INT(req.count, >, V4L_MAX_IN_BUFS, cleanup);
     ASSERT_INT(req.count, <=, 0, cleanup);
-    DEBUG("v4l.in_bufs_count before: %d", v4l.in_bufs_count);
+    DEBUG("v4l.in_bufs_count: %d", req.count);
     v4l.in_bufs_count = req.count;
-    DEBUG("v4l.in_bufs_count after: %d", v4l.in_bufs_count);
-
 
     struct v4l2_buffer buf;
     struct v4l2_plane planes[3];
@@ -398,34 +403,31 @@ static int v4l_start(int input_format, int output_format)
         buf.memory = V4L2_MEMORY_MMAP;
         buf.m.planes = planes;
         buf.length = 3;
-        V4L_CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_QUERYBUF, &buf), cleanup);
-        for (int j = 0; j < buf.length; j++) {
-            v4l.in_bufs[i][j].len = buf.m.planes[j].length;
-            v4l.in_bufs[i][j].offset = buf.m.planes[j].m.mem_offset;
-            if (i == 0) {
-                DEBUG("In plane[%d] - offset: %d, length: %d", j,
-                    v4l.in_bufs[i][j].offset, v4l.in_bufs[i][j].len);
+        CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_QUERYBUF, &buf), cleanup);
+
+        if (i == 0) {
+            for (int j = 0; j < buf.length; j++) {
+                v4l.in_lengths[j] = buf.m.planes[j].length;
+                v4l.in_offsets[j] = buf.m.planes[j].m.mem_offset;
             }
         }
 
+        memset(&expbuf, 0, sizeof(expbuf));
+        expbuf.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
+        expbuf.index = i;
         for (int j = 0; j < 3; j++) {
-            memset(&expbuf, 0, sizeof(expbuf));
-            expbuf.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
-            expbuf.index = i;
             expbuf.plane = j;
-            V4L_CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_EXPBUF, &expbuf), cleanup);
+            CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_EXPBUF, &expbuf), cleanup);
             v4l.in_bufs[i][j].fd = expbuf.fd;
-            //DEBUG("In plane[%d] - fd: %d", j, v4l.in_bufs[i][j].fd);
         }
         for (int j = 0; j < 3; j++) {
             v4l.in_bufs[i][j].buf = mmap(NULL,
-                v4l.in_bufs[i][j].len,
+                v4l.in_lengths[j],
                 PROT_READ | PROT_WRITE,
                 MAP_SHARED,
                 v4l.in_bufs[i][j].fd,
-                v4l.in_bufs[i][j].offset
+                v4l.in_offsets[j]
             );
-            //DEBUG("In plane[%d] - buf: %p", j, v4l.in_bufs[i][j].buf);
             if (v4l.in_bufs[i][j].buf == MAP_FAILED) {
                 CALL_MESSAGE(mmap);
                 goto cleanup;
@@ -433,16 +435,25 @@ static int v4l_start(int input_format, int output_format)
         }
     }
 
+    DEBUG("In Planes: %d - sizes: %d, %d, %d - strides: %d, %d, %d",
+        fmt.fmt.pix_mp.num_planes,
+        v4l.in_sizeimages[0], v4l.in_sizeimages[1], v4l.in_sizeimages[2],
+        v4l.in_strides[0], v4l.in_strides[1], v4l.in_strides[2]);
+
+    DEBUG("In Planes: %d - offsets: %d, %d, %d - sizes: %d, %d, %d",
+        fmt.fmt.pix_mp.num_planes,
+        v4l.in_offsets[0], v4l.in_offsets[1], v4l.in_offsets[2],
+        v4l.in_lengths[0], v4l.in_lengths[1], v4l.in_lengths[2]);
+
     memset(&req, 0, sizeof(req));
     req.count = v4l.out_bufs_count;
     req.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
     req.memory = V4L2_MEMORY_MMAP;
-    V4L_CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_REQBUFS, &req), cleanup);
+    CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_REQBUFS, &req), cleanup);
     ASSERT_INT(req.count, >, V4L_MAX_OUT_BUFS, cleanup);
     ASSERT_INT(req.count, <=, 0, cleanup);
-    DEBUG("v4l.out_bufs_count before: %d", v4l.out_bufs_count);
+    DEBUG("v4l.out_bufs_count: %d", req.count);
     v4l.out_bufs_count = req.count;
-    DEBUG("v4l.iout_bufs_count after: %d", v4l.out_bufs_count);
 
     for (int i = 0; i < v4l.out_bufs_count; i++) {
         memset(&buf, 0, sizeof(buf));
@@ -452,26 +463,24 @@ static int v4l_start(int input_format, int output_format)
         buf.memory = V4L2_MEMORY_MMAP;
         buf.m.planes = planes;
         buf.length = 1;
-        V4L_CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_QUERYBUF, &buf), cleanup);
-        v4l.out_bufs[i].len = buf.m.planes[0].length;
-        v4l.out_bufs[i].offset = buf.m.planes[0].m.mem_offset;
+        CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_QUERYBUF, &buf), cleanup);
         if (i == 0) {
-            DEBUG("Out plane[%d] - offset: %d, length: %d", 0,
-                v4l.out_bufs[i].offset, v4l.out_bufs[i].len);
+            v4l.out_lengths[0] = buf.m.planes[0].length;
+            v4l.out_offsets[0] = buf.m.planes[0].m.mem_offset;
         }
         memset(&expbuf, 0, sizeof(expbuf));
         expbuf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
         expbuf.index = i;
         expbuf.plane = 0;
-        V4L_CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_EXPBUF, &expbuf), cleanup);
+        CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_EXPBUF, &expbuf), cleanup);
         v4l.out_bufs[i].fd = expbuf.fd;
 
         v4l.out_bufs[i].buf = mmap(NULL,
-            v4l.out_bufs[i].len,
+            v4l.out_lengths[0],
             PROT_READ | PROT_WRITE,
             MAP_SHARED,
             v4l.out_bufs[i].fd,
-            v4l.out_bufs[i].offset
+            v4l.out_offsets[0]
         );
         if (v4l.out_bufs[i].buf == MAP_FAILED) {
             CALL_MESSAGE(mmap);
@@ -479,14 +488,16 @@ static int v4l_start(int input_format, int output_format)
         }
     }
 
+    DEBUG("Out plane - size: %d, stride: %d", v4l.out_sizeimages[0], v4l.out_strides[0]);
+    DEBUG("Out plane - offset: %d, length: %d", v4l.out_offsets[0], v4l.out_lengths[0]);
+
     enum v4l2_buf_type type;
     type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
-    V4L_CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_STREAMON, &type), cleanup);
+    CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_STREAMON, &type), cleanup);
 
     type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
-    V4L_CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_STREAMON, &type), cleanup);
+    CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_STREAMON, &type), cleanup);
 
-    /*DEBUG("queue output frame");
     struct v4l2_buffer out_buf;
     struct v4l2_plane out_plane;
     for (int i = 0; i < v4l.out_bufs_count; i++) {
@@ -497,8 +508,8 @@ static int v4l_start(int input_format, int output_format)
         out_buf.index = i;
         out_buf.length = 1;
         out_buf.m.planes = &out_plane;
-        V4L_CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_QBUF, &out_buf), cleanup);
-    }*/
+        CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_QBUF, &out_buf), cleanup);
+    }
 
     return 0;
 
@@ -520,35 +531,38 @@ static int v4l_is_started()
 
 static int v4l_process_frame(uint8_t *buffer)
 {
-    DEBUG("v4l_process_frame");
     ASSERT_PTR(v4l_input_format, ==, NULL, cleanup);
     ASSERT_PTR(v4l_output_format, ==, NULL, cleanup);
 
+    int res = 0;
     struct v4l2_buffer in_buf;
     struct v4l2_plane in_planes[3];
+    memset(&in_buf, 0, sizeof(in_buf));
+    memset(in_planes, 0, sizeof(in_planes));
+    in_buf.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
+    in_buf.memory = V4L2_MEMORY_MMAP;
+    in_buf.length = 3;
+    in_buf.m.planes = in_planes;
+
     struct v4l2_buffer out_buf;
     struct v4l2_plane out_plane;
+    memset(&out_buf, 0, sizeof(out_buf));
+    memset(&out_plane, 0, sizeof(out_plane));
+    out_buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+    out_buf.memory = V4L2_MEMORY_MMAP;
+    out_buf.length = 1;
+    out_buf.m.planes = &out_plane;
 
-    if (v4l.in_curr_buf == v4l.in_bufs_count) {
-        v4l.in_curr_buf--;
-
-        DEBUG("dequeue input frame");
-        for (int i = 0; i < 1; i++) {
-            memset(&in_buf, 0, sizeof(in_buf));
-            memset(in_planes, 0, sizeof(in_planes));
-            in_buf.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
-            in_buf.memory = V4L2_MEMORY_MMAP;
-            in_buf.m.planes = in_planes;
-            V4L_CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_DQBUF, &in_buf), cleanup);
-            for (int i = 0; i < 3; i++) {
-                DEBUG("In plane[%d] - bytesused: %d", i, in_buf.m.planes[i].bytesused);
-            }
-        }
+    int cb = v4l.in_curr_buf + 1;
+    if (cb >= v4l.in_bufs_count) {
+        CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_DQBUF, &in_buf), cleanup);
+        cb = in_buf.index;
     }
+    else
+        v4l.in_curr_buf++;
 
-    int cb = v4l.in_curr_buf++;
-    DEBUG("queue input frame, current buf %d, next buf: %d", cb, v4l.in_curr_buf);
-    /*uint8_t *yi = v4l.in_bufs[cb][0].buf;
+    DEBUG("queue input frame, current buf %d", cb);
+    uint8_t *yi = v4l.in_bufs[cb][0].buf;
     uint8_t *ui = v4l.in_bufs[cb][1].buf;
     uint8_t *vi = v4l.in_bufs[cb][2].buf;
     for (int i = 0, y = 0; y < v4l.app->video_height; y++) {
@@ -564,56 +578,32 @@ static int v4l_process_frame(uint8_t *buffer)
             ui[x + 1] = (u01 & 0xF0) >> 4;
             vi[x + 1] = (v01 & 0xF0) >> 4;
         }
-        yi = v4l.in_bufs[cb][0].buf + v4l.in_bufs[cb][0].stride * y;
-        ui = v4l.in_bufs[cb][1].buf + v4l.in_bufs[cb][1].stride * y;
-        vi = v4l.in_bufs[cb][2].buf + v4l.in_bufs[cb][2].stride * y;
-    }*/
+        yi = v4l.in_bufs[cb][0].buf + v4l.in_strides[0] * y;
+        ui = v4l.in_bufs[cb][1].buf + v4l.in_strides[1] * y;
+        vi = v4l.in_bufs[cb][2].buf + v4l.in_strides[2] * y;
+    }
 
-    memset(&in_buf, 0, sizeof(in_buf));
-    memset(in_planes, 0, 3 * sizeof(in_planes[0]));
-    in_buf.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
-    in_buf.memory = V4L2_MEMORY_MMAP;
     in_buf.index = cb;
-    in_buf.length = 3;
-    in_buf.m.planes = in_planes;
     in_buf.m.planes[0].bytesused = v4l.in_strides[0] * v4l.app->video_height;
     in_buf.m.planes[1].bytesused = v4l.in_strides[1] * v4l.app->video_height;
     in_buf.m.planes[2].bytesused = v4l.in_strides[2] * v4l.app->video_height;
-    DEBUG("bytesused: %d, %d, %d", in_buf.m.planes[0].bytesused, in_buf.m.planes[1].bytesused,
-        in_buf.m.planes[2].bytesused);
     for (int i = 0; i < 3; i++) {
         CALL(NvBufferMemSyncForDevice(v4l.in_bufs[cb][i].fd, i, (void **)&v4l.in_bufs[cb][i].buf),
             cleanup);
     }
-    V4L_CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_QBUF, &in_buf), cleanup);
-    
-    // DEBUG("dequeue output frame");
-    // memset(&out_buf, 0, sizeof(out_buf));
-    // memset(&out_plane, 0, sizeof(out_plane));
-    // out_buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
-    // out_buf.memory = V4L2_MEMORY_MMAP;
-    // out_buf.index = 0;
-    // out_buf.length = 1;
-    // out_buf.m.planes = &out_plane;
-    // int res = 0;
-    // V4L_CALL(res = v4l2_ioctl(v4l.dev_id, VIDIOC_DQBUF, &out_buf), cleanup);
-    // DEBUG("Out plane[%d] - bytes used shouldn't be 0: %d", 0, out_buf.m.planes[0].bytesused);
-    /*CALL(
-        NvBufferMemSyncForDevice(v4l.out_bufs[i].fd, 0, (void **)&v4l.out_bufs[i].buf),
-        cleanup);*/
-
-
-    // struct timeval tv;
-    // fd_set rfds;
-    // FD_ZERO(&rfds);
-    // FD_SET(v4l.dev_id, &rfds);
-    // tv.tv_sec = 2;
-    // tv.tv_usec = 0;
-    // CALL(res = select(v4l.dev_id + 1, &rfds, NULL, NULL, &tv), cleanup);
-    // if (res == 0) {
-    //     errno = ETIME;
-    //     goto cleanup;
-    // }
+    CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_QBUF, &in_buf), cleanup);
+   
+    CALL(res = ioctl_again(v4l.dev_id, VIDIOC_DQBUF, &out_buf), cleanup);
+    if (res != -2) {
+        DEBUG("Out plane[%d] - bytes used: %d", 0, out_buf.m.planes[0].bytesused);
+        CALL(NvBufferMemSyncForDevice(
+            v4l.out_bufs[out_buf.index].fd,
+            0,
+            (void **)&v4l.out_bufs[out_buf.index].buf
+        ), cleanup);
+        out_buf.m.planes[0].bytesused = 0;
+        CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_QBUF, &out_buf), cleanup);
+    }
     return 0;
 
 cleanup:
