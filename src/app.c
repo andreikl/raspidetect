@@ -46,8 +46,8 @@ const char *video_outputs[] = {
 const char* app_get_video_format_str(int format)
 {
     int size = ARRAY_SIZE(video_formats);
-    ASSERT_INT(format, <, 0, error);
-    ASSERT_INT(format, >=, size, error);
+    ASSERT_INT(format, >, 0, error);
+    ASSERT_INT(format, <=, size, error);
     return video_formats[format];
 
 error:
@@ -58,8 +58,8 @@ error:
 const char* app_get_video_output_str(int output)
 {
     int size = ARRAY_SIZE(video_outputs);
-    ASSERT_INT(output, <, 0, error);
-    ASSERT_INT(output, >=, size, error);
+    ASSERT_INT(output, >, 0, error);
+    ASSERT_INT(output, <=, size, error);
     return video_outputs[output];
 
 error:
@@ -80,8 +80,8 @@ int app_get_video_format_int(const char* format)
 
 int app_get_video_output_int(const char* output)
 {
-    ASSERT_PTR(output, ==, NULL, error);
-    ASSERT_INT((int)strlen(output), >, MAX_STRING, error);
+    ASSERT_PTR(output, !=, NULL, error);
+    ASSERT_INT((int)strlen(output), <, MAX_STRING, error);
 
     int res = 0;
     const char coma = ',';

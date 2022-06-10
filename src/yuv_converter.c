@@ -36,7 +36,7 @@ static void yuv_cleanup()
 
 static int yuv_init()
 {
-    ASSERT_PTR(yuv.buffer, !=, NULL, cleanup);
+    ASSERT_PTR(yuv.buffer, ==, NULL, cleanup);
 
     int len = yuv.app->video_width * yuv.app->video_height * 3;
     uint8_t *data = malloc(len);
@@ -69,7 +69,7 @@ static int yuv_is_started()
 
 static int yuv_process_frame(uint8_t *buffer)
 {
-    ASSERT_PTR(yuv.buffer, ==, NULL, cleanup);
+    ASSERT_PTR(yuv.buffer, !=, NULL, cleanup);
     int plane = yuv.app->video_width * yuv.app->video_height;
     int planes = plane * 2;
     uint8_t * res = yuv.buffer;

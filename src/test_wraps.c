@@ -16,16 +16,6 @@
 // along with this program; if not, write to the Free Software Foundation,
 // Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
-#define WRAP_DEBUG(format, ...) \
-{ \
-    if (wrap_verbose) \
-        fprintf(stderr, "WRAP: %s:%s, "#format"\n", __FILE__, __FUNCTION__, ##__VA_ARGS__); \
-}
-
-#ifdef V4L_ENCODER
-   #include "v4l_encoder.h"
-#endif
-
 int __wrap___xstat(int ver, const char * filename, struct stat * stat_buf)
 {
 #ifndef V4L_ENCODER_WRAP
@@ -74,229 +64,95 @@ int __wrap_select(int nfds,
 }
 
 #ifdef V4L
-    #include "linux/videodev2.h"
 
-    static uint8_t *image = NULL;
-    static int image_width = 0;
-    static int image_height = 0;
-    int __wrap_ioctl(int fd, int request, void *arg)
-    {
-        if (request == (int)VIDIOC_QUERYCAP) {
-            WRAP_DEBUG("request: %s", "VIDIOC_QUERYCAP");
-            struct v4l2_capability *cap = arg;
-            strncpy((char *)cap->card, "test", 32);
-            cap->capabilities = V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_STREAMING;
-            return 0;
-        }
-        else if (request == (int)VIDIOC_ENUM_FMT) {
-            WRAP_DEBUG("request: %s", "VIDIOC_ENUM_FMT");
-            struct v4l2_fmtdesc *fmt = arg;
-            if (fmt->index == 0) {
-                fmt->pixelformat = V4L2_PIX_FMT_YUYV;
-                return 0;
-            }
-            else {
-                errno = EINVAL;
-                return -1;
-            }
-        }
-        else if (request == (int)VIDIOC_ENUM_FRAMESIZES) {
-            WRAP_DEBUG("request: %s", "VIDIOC_ENUM_FRAMESIZES");
-            struct v4l2_frmsizeenum *frmsize = arg;
-            if (frmsize->index == 0) {
-                frmsize->type = V4L2_FRMSIZE_TYPE_STEPWISE;
-                frmsize->stepwise.step_width = 16;
-                frmsize->stepwise.step_height = 16;
-                frmsize->stepwise.min_width = 320;
-                frmsize->stepwise.min_height = 256;
-                frmsize->stepwise.max_width = 1024;
-                frmsize->stepwise.max_height = 768;
-                return 0;
-            }
-            else {
-                errno = EINVAL;
-                return -1;
-            }
-        }
-        else if (request == (int)VIDIOC_S_FMT) {
-            WRAP_DEBUG("request: %s", "VIDIOC_S_FMT");
-            struct v4l2_format *fmt = arg;
-            check_expected(fmt->fmt.pix.pixelformat);
-            check_expected(fmt->fmt.pix.width);
-            check_expected(fmt->fmt.pix.height);
-            image_width = fmt->fmt.pix.width;
-            image_height = fmt->fmt.pix.height;
-            return 0;
-        }
-        else if (request == (int)VIDIOC_REQBUFS) {
-            WRAP_DEBUG("request: %s", "VIDIOC_REQBUFS");
-            return 0;
-        }
-        else if (request == (int)VIDIOC_QBUF) {
-            WRAP_DEBUG("request: %s", "VIDIOC_QBUF");
-            struct v4l2_buffer *buf = arg;
-            assert_int_equal(buf->length, image_width * image_height * 2);
-            image = (uint8_t *)buf->m.userptr;
-            return 0;
-        }
-        else if (request == (int)VIDIOC_STREAMON) {
-            WRAP_DEBUG("request: %s", "VIDIOC_STREAMON");
-            return 0;
-        }
-        else if (request == (int)VIDIOC_STREAMOFF) {
-            WRAP_DEBUG("request: %s", "VIDIOC_STREAMOFF");
-            return 0;
-        }
-        else if (request == (int)VIDIOC_DQBUF) {
-            WRAP_DEBUG("request: %s", "VIDIOC_DQBUF");
-            uint8_t *index = image;
-            int row_length = image_width << 1;
-            for (int i = 0; i < image_height; i++)
-                for (int j = 0; j < row_length; j += 2, index += 2) {
-                    *index = (i & 0x8) == 0? 0: 255;
-                }
+static uint8_t *image = NULL;
+static int image_width = 0;
+static int image_height = 0;
+int __wrap_ioctl(int fd, int request, void *arg)
+{
+    if (request == (int)VIDIOC_QUERYCAP) {
+        WRAP_DEBUG("request: %s", "VIDIOC_QUERYCAP");
+        struct v4l2_capability *cap = arg;
+        strncpy((char *)cap->card, "test", 32);
+        cap->capabilities = V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_STREAMING;
+        return 0;
+    }
+    else if (request == (int)VIDIOC_ENUM_FMT) {
+        WRAP_DEBUG("request: %s", "VIDIOC_ENUM_FMT");
+        struct v4l2_fmtdesc *fmt = arg;
+        if (fmt->index == 0) {
+            fmt->pixelformat = V4L2_PIX_FMT_YUYV;
             return 0;
         }
         else {
-            WRAP_DEBUG("request: %d", request);
+            errno = EINVAL;
+            return -1;
         }
-        errno = EAGAIN;
-        return -1;
     }
-
-    int __wrap_v4l2_open(const char * file, int oflag, ...)
-    {
-#ifndef V4L_ENCODER_WRAP
-        if (strcmp(file, V4L_H264_ENCODER) == 0) {
-            int res = __real_v4l2_open(file, oflag);
-            WRAP_DEBUG("real v4l2_open, file: %s, res: %d", file, res);
-            return res;
-        }
-#endif
-        WRAP_DEBUG("v4l2_open, file: %s", file);
-        return 1;
-    }
-
-    int __wrap_v4l2_ioctl(int fd, int request, void * arg)
-    {
-#ifndef V4L_ENCODER_WRAP
-        if (request == (int)VIDIOC_QUERYCAP) {
-            WRAP_DEBUG("real v4l2_ioctl, request: VIDIOC_QUERYCAP, fd: %d", fd);
-        }
-        else if (request == (int)VIDIOC_ENUM_FMT) {
-            WRAP_DEBUG("real v4l2_ioctl, request: VIDIOC_ENUM_FMT, fd: %d", fd);
-        }
-        else if (request == (int)VIDIOC_ENUM_FRAMESIZES) {
-            WRAP_DEBUG("real v4l2_ioctl, request: VIDIOC_ENUM_FRAMESIZES, fd: %d", fd);
-        }
-        else if (request == (int)VIDIOC_S_FMT) {
-            WRAP_DEBUG("real v4l2_ioctl, request: %s", "VIDIOC_S_FMT");
-        }
-        else if (request == (int)VIDIOC_REQBUFS) {
-            WRAP_DEBUG("real request: %s", "VIDIOC_REQBUFS");
-        }
-        else if (request == (int)VIDIOC_QUERYBUF) {
-            WRAP_DEBUG("real request: %s", "VIDIOC_QUERYBUF");
-        }
-        else if (request == (int)VIDIOC_EXPBUF) {
-            WRAP_DEBUG("real request: %s", "VIDIOC_EXPBUF");
-        }
-        else if (request == (int)VIDIOC_STREAMON) {
-            WRAP_DEBUG("real request: %s", "VIDIOC_STREAMON");
-        }
-        else if (request == (int)VIDIOC_STREAMOFF) {
-            WRAP_DEBUG("real request: %s", "VIDIOC_STREAMOFF");
-        }
-        else if (request == (int)VIDIOC_QBUF) {
-            WRAP_DEBUG("real v4l2_ioctl, request: VIDIOC_QBUF, fd: %d", fd);
-        }
-        else if (request == (int)VIDIOC_DQBUF) {
-            WRAP_DEBUG("real v4l2_ioctl, request: VIDIOC_DQBUF, fd: %d", fd);
-        }
-        else {
-            WRAP_DEBUG("real v4l2_ioctl, request: %d, fd: %d", request, fd);
-        }
-        return __real_v4l2_ioctl(fd, request, arg);
-#endif
-
-        if (request == (int)VIDIOC_QUERYCAP) {
-            WRAP_DEBUG("request: %s", "VIDIOC_QUERYCAP");
-            struct v4l2_capability *cap = arg;
-            strncpy((char *)cap->card, "test_encoder", 32);
-            cap->capabilities = V4L2_CAP_VIDEO_M2M_MPLANE | V4L2_CAP_STREAMING;
-            return 0;
-        }
-        else if (request == (int)VIDIOC_ENUM_FMT) {
-            WRAP_DEBUG("request: %s", "VIDIOC_ENUM_FMT");
-            struct v4l2_fmtdesc *fmt = arg;
-            if (fmt->index == 0 && fmt->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) {
-                fmt->pixelformat = V4L2_PIX_FMT_YUV444M;
-                return 0;
-            }
-            if (fmt->index == 0 && fmt->type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE) {
-                fmt->pixelformat = V4L2_PIX_FMT_H264;
-                return 0;
-            }
-            else {
-                errno = EINVAL;
-                return -1;
-            }
-        }
-        else if (request == (int)VIDIOC_ENUM_FRAMESIZES) {
-            WRAP_DEBUG("request %s", "VIDIOC_ENUM_FRAMESIZES");
-            struct v4l2_frmsizeenum *frmsize = arg;
-            if (frmsize->index == 0) {
-                frmsize->type = V4L2_FRMSIZE_TYPE_STEPWISE;
-                frmsize->stepwise.step_width = 16;
-                frmsize->stepwise.step_height = 16;
-                frmsize->stepwise.min_width = 320;
-                frmsize->stepwise.min_height = 256;
-                frmsize->stepwise.max_width = 1024;
-                frmsize->stepwise.max_height = 768;
-                return 0;
-            }
-            else {
-                errno = EINVAL;
-                return -1;
-            }
-        }
-        else if (request == (int)VIDIOC_S_FMT) {
-            WRAP_DEBUG("request: %s", "VIDIOC_S_FMT");
-            return 0;
-        }
-        else if (request == (int)VIDIOC_QBUF) {
-            WRAP_DEBUG("request: %s", "VIDIOC_QBUF");
-            struct v4l2_buffer *buf = arg;
-            assert_int_equal(buf->length, image_width * image_height * 2);
-            image = (uint8_t *)buf->m.userptr;
-            return 0;
-        }
-        else if (request == (int)VIDIOC_STREAMON) {
-            WRAP_DEBUG("request: %s", "VIDIOC_STREAMON");
-            return 0;
-        }
-        else if (request == (int)VIDIOC_STREAMOFF) {
-            WRAP_DEBUG("request: %s", "VIDIOC_STREAMOFF");
-            return 0;
-        }
-        else if (request == (int)VIDIOC_DQBUF) {
-            WRAP_DEBUG("request: %s", "VIDIOC_DQBUF");
-            uint8_t *index = image;
-            int row_length = image_width << 1;
-            for (int i = 0; i < image_height; i++)
-                for (int j = 0; j < row_length; j += 2, index += 2) {
-                    *index = (i & 0x8) == 0? 0: 255;
-                }
+    else if (request == (int)VIDIOC_ENUM_FRAMESIZES) {
+        WRAP_DEBUG("request: %s", "VIDIOC_ENUM_FRAMESIZES");
+        struct v4l2_frmsizeenum *frmsize = arg;
+        if (frmsize->index == 0) {
+            frmsize->type = V4L2_FRMSIZE_TYPE_STEPWISE;
+            frmsize->stepwise.step_width = 16;
+            frmsize->stepwise.step_height = 16;
+            frmsize->stepwise.min_width = 320;
+            frmsize->stepwise.min_height = 256;
+            frmsize->stepwise.max_width = 1024;
+            frmsize->stepwise.max_height = 768;
             return 0;
         }
         else {
-            WRAP_DEBUG("request: %d", request);
+            errno = EINVAL;
+            return -1;
         }
-        errno = EAGAIN;
-        return -1;
     }
-#endif
-
+    else if (request == (int)VIDIOC_S_FMT) {
+        WRAP_DEBUG("request: %s", "VIDIOC_S_FMT");
+        struct v4l2_format *fmt = arg;
+        check_expected(fmt->fmt.pix.pixelformat);
+        check_expected(fmt->fmt.pix.width);
+        check_expected(fmt->fmt.pix.height);
+        image_width = fmt->fmt.pix.width;
+        image_height = fmt->fmt.pix.height;
+        return 0;
+    }
+    else if (request == (int)VIDIOC_REQBUFS) {
+        WRAP_DEBUG("request: %s", "VIDIOC_REQBUFS");
+        return 0;
+    }
+    else if (request == (int)VIDIOC_QBUF) {
+        WRAP_DEBUG("request: %s", "VIDIOC_QBUF");
+        struct v4l2_buffer *buf = arg;
+        assert_int_equal(buf->length, image_width * image_height * 2);
+        image = (uint8_t *)buf->m.userptr;
+        return 0;
+    }
+    else if (request == (int)VIDIOC_STREAMON) {
+        WRAP_DEBUG("request: %s", "VIDIOC_STREAMON");
+        return 0;
+    }
+    else if (request == (int)VIDIOC_STREAMOFF) {
+        WRAP_DEBUG("request: %s", "VIDIOC_STREAMOFF");
+        return 0;
+    }
+    else if (request == (int)VIDIOC_DQBUF) {
+        WRAP_DEBUG("request: %s", "VIDIOC_DQBUF");
+        uint8_t *index = image;
+        int row_length = image_width << 1;
+        for (int i = 0; i < image_height; i++)
+            for (int j = 0; j < row_length; j += 2, index += 2) {
+                *index = (i & 0x8) == 0? 0: 255;
+            }
+        return 0;
+    }
+    else {
+        WRAP_DEBUG("request: %d", request);
+    }
+    errno = EAGAIN;
+    return -1;
+}
+#endif //V4L
 
 #ifdef SDL
 #include <SDL.h>

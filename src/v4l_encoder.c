@@ -6,6 +6,15 @@
 #include "linux/videodev2.h"
 #include "sys/mman.h"
 
+// wrapper to allow to run test on platform where h264 Jetson encoder isn't available
+#ifdef V4L_ENCODER_WRAP
+    int NvBufferMemSyncForDevice(int dmabuf_fd, unsigned int plane, void **pVirtAddr)
+    {
+        DEBUG("wrap NvBufferMemSyncForDevice, fd: %d, plane: %d", dmabuf_fd, plane);
+        return 0;
+    }
+#endif
+
 static struct format_mapping_t v4l_input_formats[] = {
     {
         .format = VIDEO_FORMAT_YUV422,
@@ -23,85 +32,18 @@ static struct format_mapping_t v4l_output_formats[] = {
 
 static struct format_mapping_t *v4l_input_format = NULL;
 static struct format_mapping_t *v4l_output_format = NULL;
-
 static struct v4l_encoder_state_t v4l = {
     .app = NULL,
     .dev_id = -1,
-    .in_bufs[0][0].buf = MAP_FAILED,
-    .in_bufs[0][0].fd = -1,
-    .in_bufs[0][1].buf = MAP_FAILED,
-    .in_bufs[0][1].fd = -1,
-    .in_bufs[0][2].buf = MAP_FAILED,
-    .in_bufs[0][2].fd = -1,
-    .in_bufs[1][0].buf = MAP_FAILED,
-    .in_bufs[1][0].fd = -1,
-    .in_bufs[1][1].buf = MAP_FAILED,
-    .in_bufs[1][1].fd = -1,
-    .in_bufs[1][2].buf = MAP_FAILED,
-    .in_bufs[1][2].fd = -1,
-    .in_bufs[2][0].buf = MAP_FAILED,
-    .in_bufs[2][0].fd = -1,
-    .in_bufs[2][1].buf = MAP_FAILED,
-    .in_bufs[2][1].fd = -1,
-    .in_bufs[2][2].buf = MAP_FAILED,
-    .in_bufs[2][2].fd = -1,
-    .in_bufs[3][0].buf = MAP_FAILED,
-    .in_bufs[3][0].fd = -1,
-    .in_bufs[3][1].buf = MAP_FAILED,
-    .in_bufs[3][1].fd = -1,
-    .in_bufs[3][2].buf = MAP_FAILED,
-    .in_bufs[3][2].fd = -1,
-    .in_bufs[4][0].buf = MAP_FAILED,
-    .in_bufs[4][0].fd = -1,
-    .in_bufs[4][1].buf = MAP_FAILED,
-    .in_bufs[4][1].fd = -1,
-    .in_bufs[4][2].buf = MAP_FAILED,
-    .in_bufs[4][2].fd = -1,
-    .in_bufs[5][0].buf = MAP_FAILED,
-    .in_bufs[5][0].fd = -1,
-    .in_bufs[5][1].buf = MAP_FAILED,
-    .in_bufs[5][1].fd = -1,
-    .in_bufs[5][2].buf = MAP_FAILED,
-    .in_bufs[5][2].fd = -1,
-    .in_bufs[6][0].buf = MAP_FAILED,
-    .in_bufs[6][0].fd = -1,
-    .in_bufs[6][1].buf = MAP_FAILED,
-    .in_bufs[6][1].fd = -1,
-    .in_bufs[6][2].buf = MAP_FAILED,
-    .in_bufs[6][2].fd = -1,
-    .in_bufs[7][0].buf = MAP_FAILED,
-    .in_bufs[7][0].fd = -1,
-    .in_bufs[7][1].buf = MAP_FAILED,
-    .in_bufs[7][1].fd = -1,
-    .in_bufs[7][2].buf = MAP_FAILED,
-    .in_bufs[7][2].fd = -1,
-    .in_bufs[8][0].buf = MAP_FAILED,
-    .in_bufs[8][0].fd = -1,
-    .in_bufs[8][1].buf = MAP_FAILED,
-    .in_bufs[8][1].fd = -1,
-    .in_bufs[8][2].buf = MAP_FAILED,
-    .in_bufs[8][2].fd = -1,
-    .in_bufs[9][0].buf = MAP_FAILED,
-    .in_bufs[9][0].fd = -1,
-    .in_bufs[9][1].buf = MAP_FAILED,
-    .in_bufs[9][1].fd = -1,
-    .in_bufs[9][2].buf = MAP_FAILED,
-    .in_bufs[9][2].fd = -1,
-    .out_bufs[0].buf = MAP_FAILED,
-    .out_bufs[0].fd = -1,
-    .out_bufs[1].buf = MAP_FAILED,
-    .out_bufs[1].fd = -1,
-    .out_bufs[2].buf = MAP_FAILED,
-    .out_bufs[2].fd = -1,
-    .out_bufs[3].buf = MAP_FAILED,
-    .out_bufs[3].fd = -1,
-    .out_bufs[4].buf = MAP_FAILED,
-    .out_bufs[4].fd = -1,
-    .out_bufs[5].buf = MAP_FAILED,
-    .out_bufs[5].fd = -1,
+    .in_bufs = {
+        REP(0, 0, 10, { {MAP_FAILED, -1}, {MAP_FAILED, -1}, {MAP_FAILED, -1} })
+    },
+    .out_bufs = { REP(0, 0, 3, { MAP_FAILED, -1 }) },
     .in_bufs_count = V4L_MAX_IN_BUFS,
     .out_bufs_count = V4L_MAX_OUT_BUFS,
-    .in_curr_buf = 0
+    .in_curr_buf = 0,
+    .out_buf = NULL,
+    .out_buf_used = 0
 };
 
 extern struct filter_t filters[MAX_FILTERS];
@@ -149,6 +91,10 @@ static void v4l_cleanup()
     if (v4l.dev_id != -1) {
         CALL(close(v4l.dev_id));
         v4l.dev_id = -1;
+    }
+
+    if (v4l.out_buf) {
+        free(v4l.out_buf);
     }
 
     v4l2_clean_memory();
@@ -217,25 +163,23 @@ cleanup:
 
 static int v4l_init()
 {
-    ASSERT_INT(v4l.dev_id, !=, -1, cleanup);
+    ASSERT_INT(v4l.dev_id, ==, -1, cleanup);
 
     int res = 0;
     sprintf(v4l.dev_name, V4L_H264_ENCODER);
 
     struct stat st;
     CALL(stat(v4l.dev_name, &st), cleanup);
-    ASSERT_INT(S_ISCHR(st.st_mode), ==, 0, cleanup);
+    ASSERT_INT(S_ISCHR(st.st_mode), !=, 0, cleanup);
 
     // O_NONBLOCK - nv sample opens in block mode
     CALL(v4l.dev_id = v4l2_open(v4l.dev_name, O_RDWR), cleanup);
     struct v4l2_capability cap;
-    CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_QUERYCAP, &cap), cleanup);
-    //strncpy(v4l.app->camera_name, (const char *)cap.card, 32);
-    //DEBUG("v4l.app->camera_name: %s", v4l.app->camera_name);
-    DEBUG("cap.capabilities: %d", cap.capabilities);
+    GEN_CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_QUERYCAP, &cap), cleanup);
+    //DEBUG("cap.capabilities: %d", cap.capabilities);
 
-    ASSERT_INT((cap.capabilities & V4L2_CAP_VIDEO_M2M_MPLANE), ==, 0, cleanup);
-    ASSERT_INT((cap.capabilities & V4L2_CAP_STREAMING), ==, 0, cleanup);
+    ASSERT_INT((cap.capabilities & V4L2_CAP_VIDEO_M2M_MPLANE), !=, 0, cleanup);
+    ASSERT_INT((cap.capabilities & V4L2_CAP_STREAMING), !=, 0, cleanup);
 
     int is_found = 0;
     int formats_len = ARRAY_SIZE(v4l_input_formats);
@@ -310,6 +254,12 @@ static int v4l_init()
 
         fmt.index++;
         CALL(res = ioctl_enum(v4l.dev_id, VIDIOC_ENUM_FMT, &fmt), cleanup);
+
+        v4l.out_buf = malloc(V4L_OUT_BUFFER_SIZE);
+        if (!v4l.out_buf) {
+            CALL_MESSAGE(malloc(V4L_OUT_BUFFER_SIZE));
+            goto cleanup;
+        }
     }
     if (!is_found) {
         errno = EOPNOTSUPP;
@@ -326,7 +276,7 @@ cleanup:
 
 static int v4l_start(int input_format, int output_format)
 {
-    ASSERT_PTR(v4l_input_format, !=, NULL, cleanup);
+    ASSERT_PTR(v4l_input_format, ==, NULL, cleanup);
     int formats_len = ARRAY_SIZE(v4l_input_formats);
     for (int i = 0; i < formats_len; i++) {
         struct format_mapping_t *f = v4l_input_formats + i;
@@ -335,9 +285,9 @@ static int v4l_start(int input_format, int output_format)
             break;
         }
     }
-    ASSERT_PTR(v4l_input_format, ==, NULL, cleanup);
+    ASSERT_PTR(v4l_input_format, !=, NULL, cleanup);
 
-    ASSERT_PTR(v4l_output_format, !=, NULL, cleanup);
+    ASSERT_PTR(v4l_output_format, ==, NULL, cleanup);
     formats_len = ARRAY_SIZE(v4l_output_formats);
     for (int i = 0; i < formats_len; i++) {
         struct format_mapping_t *f = v4l_output_formats + i;
@@ -346,7 +296,7 @@ static int v4l_start(int input_format, int output_format)
             break;
         }
     }
-    ASSERT_PTR(v4l_output_format, ==, NULL, cleanup);
+    ASSERT_PTR(v4l_output_format, !=, NULL, cleanup);
 
     struct v4l2_format fmt;
     memset(&fmt, 0, sizeof(fmt));
@@ -355,7 +305,7 @@ static int v4l_start(int input_format, int output_format)
     fmt.fmt.pix_mp.height = v4l.app->video_height;
     fmt.fmt.pix_mp.pixelformat = v4l_output_format->internal_format;
     fmt.fmt.pix_mp.num_planes = 1;
-    CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_S_FMT, &fmt), cleanup);
+    GEN_CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_S_FMT, &fmt), cleanup);
     v4l.out_sizeimages[0] = fmt.fmt.pix_mp.plane_fmt[0].sizeimage;
     v4l.out_strides[0] = fmt.fmt.pix_mp.plane_fmt[0].bytesperline;
 
@@ -370,7 +320,7 @@ static int v4l_start(int input_format, int output_format)
     // DEBUG("fmt.fmt.pix_mp.height[%d]", fmt.fmt.pix_mp.height);
     // DEBUG("fmt.fmt.pix_mp.pixelformat[%d]", fmt.fmt.pix_mp.pixelformat);
     // DEBUG("fmt.fmt.pix_mp.num_planes[%d]", fmt.fmt.pix_mp.num_planes);
-    CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_S_FMT, &fmt), cleanup);
+    GEN_CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_S_FMT, &fmt), cleanup);
     for (int i = 0; i < fmt.fmt.pix_mp.num_planes; i++) {
         v4l.in_sizeimages[i] = fmt.fmt.pix_mp.plane_fmt[i].sizeimage;
         v4l.in_strides[i] = fmt.fmt.pix_mp.plane_fmt[i].bytesperline;
@@ -386,9 +336,9 @@ static int v4l_start(int input_format, int output_format)
     req.count = v4l.in_bufs_count;
     req.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
     req.memory = V4L2_MEMORY_MMAP;
-    CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_REQBUFS, &req), cleanup);
-    ASSERT_INT(req.count, >, V4L_MAX_IN_BUFS, cleanup);
-    ASSERT_INT(req.count, <=, 0, cleanup);
+    GEN_CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_REQBUFS, &req), cleanup);
+    ASSERT_INT(req.count, <=, V4L_MAX_IN_BUFS, cleanup);
+    ASSERT_INT(req.count, >, 0, cleanup);
     DEBUG("v4l.in_bufs_count: %d", req.count);
     v4l.in_bufs_count = req.count;
 
@@ -403,7 +353,7 @@ static int v4l_start(int input_format, int output_format)
         buf.memory = V4L2_MEMORY_MMAP;
         buf.m.planes = planes;
         buf.length = 3;
-        CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_QUERYBUF, &buf), cleanup);
+        GEN_CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_QUERYBUF, &buf), cleanup);
 
         if (i == 0) {
             for (int j = 0; j < buf.length; j++) {
@@ -417,7 +367,7 @@ static int v4l_start(int input_format, int output_format)
         expbuf.index = i;
         for (int j = 0; j < 3; j++) {
             expbuf.plane = j;
-            CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_EXPBUF, &expbuf), cleanup);
+            GEN_CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_EXPBUF, &expbuf), cleanup);
             v4l.in_bufs[i][j].fd = expbuf.fd;
         }
         for (int j = 0; j < 3; j++) {
@@ -449,9 +399,9 @@ static int v4l_start(int input_format, int output_format)
     req.count = v4l.out_bufs_count;
     req.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
     req.memory = V4L2_MEMORY_MMAP;
-    CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_REQBUFS, &req), cleanup);
-    ASSERT_INT(req.count, >, V4L_MAX_OUT_BUFS, cleanup);
-    ASSERT_INT(req.count, <=, 0, cleanup);
+    GEN_CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_REQBUFS, &req), cleanup);
+    ASSERT_INT(req.count, <=, V4L_MAX_OUT_BUFS, cleanup);
+    ASSERT_INT(req.count, >, 0, cleanup);
     DEBUG("v4l.out_bufs_count: %d", req.count);
     v4l.out_bufs_count = req.count;
 
@@ -463,7 +413,7 @@ static int v4l_start(int input_format, int output_format)
         buf.memory = V4L2_MEMORY_MMAP;
         buf.m.planes = planes;
         buf.length = 1;
-        CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_QUERYBUF, &buf), cleanup);
+        GEN_CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_QUERYBUF, &buf), cleanup);
         if (i == 0) {
             v4l.out_lengths[0] = buf.m.planes[0].length;
             v4l.out_offsets[0] = buf.m.planes[0].m.mem_offset;
@@ -472,7 +422,7 @@ static int v4l_start(int input_format, int output_format)
         expbuf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
         expbuf.index = i;
         expbuf.plane = 0;
-        CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_EXPBUF, &expbuf), cleanup);
+        GEN_CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_EXPBUF, &expbuf), cleanup);
         v4l.out_bufs[i].fd = expbuf.fd;
 
         v4l.out_bufs[i].buf = mmap(NULL,
@@ -493,10 +443,10 @@ static int v4l_start(int input_format, int output_format)
 
     enum v4l2_buf_type type;
     type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
-    CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_STREAMON, &type), cleanup);
+    GEN_CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_STREAMON, &type), cleanup);
 
     type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
-    CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_STREAMON, &type), cleanup);
+    GEN_CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_STREAMON, &type), cleanup);
 
     struct v4l2_buffer out_buf;
     struct v4l2_plane out_plane;
@@ -508,7 +458,7 @@ static int v4l_start(int input_format, int output_format)
         out_buf.index = i;
         out_buf.length = 1;
         out_buf.m.planes = &out_plane;
-        CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_QBUF, &out_buf), cleanup);
+        GEN_CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_QBUF, &out_buf), cleanup);
     }
 
     return 0;
@@ -531,8 +481,8 @@ static int v4l_is_started()
 
 static int v4l_process_frame(uint8_t *buffer)
 {
-    ASSERT_PTR(v4l_input_format, ==, NULL, cleanup);
-    ASSERT_PTR(v4l_output_format, ==, NULL, cleanup);
+    ASSERT_PTR(v4l_input_format, !=, NULL, cleanup);
+    ASSERT_PTR(v4l_output_format, !=, NULL, cleanup);
 
     int res = 0;
     struct v4l2_buffer in_buf;
@@ -555,7 +505,7 @@ static int v4l_process_frame(uint8_t *buffer)
 
     int cb = v4l.in_curr_buf + 1;
     if (cb >= v4l.in_bufs_count) {
-        CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_DQBUF, &in_buf), cleanup);
+        GEN_CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_DQBUF, &in_buf), cleanup);
         cb = in_buf.index;
     }
     else
@@ -591,18 +541,32 @@ static int v4l_process_frame(uint8_t *buffer)
         CALL(NvBufferMemSyncForDevice(v4l.in_bufs[cb][i].fd, i, (void **)&v4l.in_bufs[cb][i].buf),
             cleanup);
     }
-    CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_QBUF, &in_buf), cleanup);
+    GEN_CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_QBUF, &in_buf), cleanup);
    
     CALL(res = ioctl_again(v4l.dev_id, VIDIOC_DQBUF, &out_buf), cleanup);
     if (res != -2) {
-        DEBUG("Out plane[%d] - bytes used: %d", 0, out_buf.m.planes[0].bytesused);
+        ASSERT_INT(out_buf.m.planes[0].bytesused, !=, 0, cleanup);
         CALL(NvBufferMemSyncForDevice(
             v4l.out_bufs[out_buf.index].fd,
             0,
             (void **)&v4l.out_bufs[out_buf.index].buf
         ), cleanup);
+
+        ASSERT_INT(v4l.out_buf_used + out_buf.m.planes[0].bytesused,
+            <,
+            V4L_OUT_BUFFER_SIZE,
+            cleanup);
+        
+        memcpy(v4l.out_buf, v4l.out_bufs[out_buf.index].buf, out_buf.m.planes[0].bytesused);
+        v4l.out_buf_used += out_buf.m.planes[0].bytesused;
+
+        /*char buffer[MAX_STRING];
+        static int index = 0;
+        sprintf(buffer, "data%d", index++);
+        utils_write_file(buffer, v4l.out_bufs[out_buf.index].buf, out_buf.m.planes[0].bytesused);*/
+
         out_buf.m.planes[0].bytesused = 0;
-        CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_QBUF, &out_buf), cleanup);
+        GEN_CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_QBUF, &out_buf), cleanup);
     }
     return 0;
 
@@ -624,13 +588,16 @@ static int v4l_stop()
 
 static uint8_t *v4l_get_buffer(int *in_format, int *out_format, int *length)
 {
-    ASSERT_PTR(v4l_input_format, ==, NULL, cleanup);
-    ASSERT_PTR(v4l_output_format, ==, NULL, cleanup);
+    ASSERT_PTR(v4l_input_format, !=, NULL, cleanup);
+    ASSERT_PTR(v4l_output_format, !=, NULL, cleanup);
     if (in_format)
         *in_format = v4l_input_format->format;
     if (out_format)
         *out_format = v4l_output_format->format;
-    return v4l.out_bufs[0].buf;
+    if (length)
+        *length = v4l.out_buf_used;
+    v4l.out_buf_used = 0;
+    return v4l.out_buf;
 
 cleanup:
     if (errno == 0)
@@ -669,7 +636,6 @@ void v4l_encoder_construct(struct app_state_t *app)
         filters[i].is_started = v4l_is_started;
         filters[i].stop = v4l_stop;
         filters[i].process_frame = v4l_process_frame;
-
 
         filters[i].get_buffer = v4l_get_buffer;
         filters[i].get_in_formats = v4l_get_in_formats;

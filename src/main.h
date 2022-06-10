@@ -87,7 +87,7 @@
 
 #define ASSERT_INT(value, condition, expectation, error) \
 { \
-    if (value condition expectation) { \
+    if (!(value condition expectation)) { \
         fprintf(stderr, "ERROR: assert "#value"(%d) "#condition" "#expectation"(%d)\n%s:%d - %s\n", \
             value, expectation, __FILE__, __LINE__, __FUNCTION__); \
         goto error; \
@@ -96,7 +96,7 @@
 
 #define ASSERT_LNG(value, condition, expectation, error) \
 { \
-    if (value condition expectation) { \
+    if (!(value condition expectation)) { \
         fprintf(stderr, "ERROR: assert "#value"(%ld) "#condition" "#expectation"(%ld)\n%s:%d - %s\n", \
             value, (long int)expectation, __FILE__, __LINE__, __FUNCTION__); \
         goto error; \
@@ -105,7 +105,7 @@
 
 #define ASSERT_PTR(value, condition, expectation, error) \
 { \
-    if (value condition expectation) { \
+    if (!(value condition expectation)) { \
         fprintf(stderr, "ERROR: assert "#value"(%p) "#condition" "#expectation"(%p)\n%s:%d - %s\n", \
             value, expectation, __FILE__, __LINE__, __FUNCTION__); \
         goto error; \
@@ -150,12 +150,50 @@
 
 #define CALL(...) CALL_X(__VA_ARGS__)(__VA_ARGS__)
 
+#define GEN_CALL_2(call, error) \
+{ \
+    int __res = call; \
+    if (__res != 0) { \
+        CALL_MESSAGE(call); \
+        goto error; \
+    } \
+}
+
+#define GEN_CALL_1(call) \
+{ \
+    int __res = call; \
+    if (__res != 0) { \
+        CALL_MESSAGE(call); \
+    } \
+}
+
+#define GEN_CALL_X(...) GET_3RD_ARG(__VA_ARGS__, GEN_CALL_2, GEN_CALL_1, )
+
+#define GEN_CALL(...) GEN_CALL_X(__VA_ARGS__)(__VA_ARGS__)
+
 #define LAMBDA(LAMBDA$_ret, LAMBDA$_args, LAMBDA$_body) \
 ({ \
     LAMBDA$_ret LAMBDA$__anon$ LAMBDA$_args \
     LAMBDA$_body \
     LAMBDA$__anon$; \
 })
+
+#define REP0(...)
+#define REP1(...) __VA_ARGS__
+#define REP2(...) REP1(__VA_ARGS__), __VA_ARGS__
+#define REP3(...) REP2(__VA_ARGS__), __VA_ARGS__
+#define REP4(...) REP3(__VA_ARGS__), __VA_ARGS__
+#define REP5(...) REP4(__VA_ARGS__), __VA_ARGS__
+#define REP6(...) REP5(__VA_ARGS__), __VA_ARGS__
+#define REP7(...) REP6(__VA_ARGS__), __VA_ARGS__
+#define REP8(...) REP7(__VA_ARGS__), __VA_ARGS__
+#define REP9(...) REP8(__VA_ARGS__), __VA_ARGS__
+#define REP10(...) REP9(__VA_ARGS__), __VA_ARGS__
+
+#define REP(HUNDREDS, TENS, ONES, ...) \
+    REP##ONES(__VA_ARGS__) \
+    REP##HUNDREDS(REP10(REP10(__VA_ARGS__))) \
+    REP##TENS(REP10(__VA_ARGS__))
 
 #include <stdint.h>    //uint32_t
 #include <stdio.h>     // fprintf

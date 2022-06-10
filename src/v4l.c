@@ -150,7 +150,7 @@ cleanup:
 
 static int v4l_init()
 {
-    ASSERT_INT(v4l.dev_id, !=, -1, cleanup);
+    ASSERT_INT(v4l.dev_id, ==, -1, cleanup);
 
     int res = 0;
     sprintf(v4l.dev_name, "/dev/video%d", v4l.app->camera_num);
@@ -179,15 +179,15 @@ static int v4l_init()
     };
     CALL(stat(v4l.dev_name, &st), cleanup);
 
-    ASSERT_INT(S_ISCHR(st.st_mode), ==, 0, cleanup);
+    ASSERT_INT(S_ISCHR(st.st_mode), !=, 0, cleanup);
     CALL(v4l.dev_id = open(v4l.dev_name, O_RDWR | O_NONBLOCK, 0), cleanup);
 
     struct v4l2_capability cap;
     CALL(ioctl_wait(v4l.dev_id, VIDIOC_QUERYCAP, &cap), cleanup);
     strncpy(v4l.app->camera_name, (const char *)cap.card, 32);
-    ASSERT_INT((cap.capabilities & V4L2_CAP_VIDEO_CAPTURE), ==, 0, cleanup);
-    ASSERT_INT((cap.capabilities & V4L2_CAP_STREAMING), ==, 0, cleanup);
-    //ASSERT_INT((cap.capabilities & V4L2_CAP_READWRITE), ==, 0, cleanup);
+    ASSERT_INT((cap.capabilities & V4L2_CAP_VIDEO_CAPTURE), !=, 0, cleanup);
+    ASSERT_INT((cap.capabilities & V4L2_CAP_STREAMING), !=, 0, cleanup);
+    //ASSERT_INT((cap.capabilities & V4L2_CAP_READWRITE), !=, 0, cleanup);
 
     int is_found = 0;
     int formats_len = ARRAY_SIZE(v4l_formats);
@@ -239,7 +239,7 @@ cleanup:
 
 static int v4l_start(int format)
 {
-    ASSERT_PTR(v4l_format, !=, NULL, cleanup);
+    ASSERT_PTR(v4l_format, ==, NULL, cleanup);
     int formats_len = ARRAY_SIZE(v4l_formats);
     for (int i = 0; i < formats_len; i++) {
         struct format_mapping_t *f = v4l_formats + i;
@@ -248,7 +248,7 @@ static int v4l_start(int format)
             break;
         }
     }
-    ASSERT_PTR(v4l_format, ==, NULL, cleanup);
+    ASSERT_PTR(v4l_format, !=, NULL, cleanup);
 
     struct v4l2_format fmt;
     memset(&fmt, 0, sizeof(fmt));
@@ -293,7 +293,7 @@ static int v4l_is_started()
 
 static int v4l_process_frame()
 {
-    ASSERT_PTR(v4l_format, ==, NULL, cleanup);
+    ASSERT_PTR(v4l_format, !=, NULL, cleanup);
 
     int res;
     struct timeval tv;
@@ -348,7 +348,7 @@ cleanup:
 
 static uint8_t *v4l_get_buffer(int *format, int *length)
 {
-    ASSERT_PTR(v4l_format, ==, NULL, cleanup);
+    ASSERT_PTR(v4l_format, !=, NULL, cleanup);
     if (format)
         *format = v4l_format->format;
     if (length)

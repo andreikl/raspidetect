@@ -166,65 +166,30 @@ fail_open:
     return NULL;
 }
 
-// write Netpbm video
-void utils_write_file(const char *path, unsigned char *data, int width, int height)
+int utils_write_file(const char *path, const uint8_t *data, int len)
 {
-    FILE* fstream;
-    size_t written;
-    unsigned char buffer[MAX_DATA];
-    int i = 0, j = 0, size = width * height;
-    unsigned char b;
-
-#ifdef DEBUG
-    clock_t start_time = clock();
-#endif
-
-    if (path[0] == '-') {
+    FILE* fstream = NULL;
+    if (strcmp(path, "stdout") == 0) {
         fstream = stdout;
     }
     else {
-        fstream = fopen(path, "w");
+        fstream = fopen(path, "a");
+        if (fstream == NULL)
+            CALL_MESSAGE(fopen(path, "a"));
     }
-
-
-    fprintf(fstream, "P6\n%d %d\n255\n", width, height);
-    while (j < size) {
-        if (i + 3 >= MAX_DATA) {
-            written += fwrite(buffer, 1, i, fstream);
-            i = 0;
-        }
-
-        b = data[j];
-#ifdef DEBUG
-        if (b == 255) {
-            buffer[i] = b;
-            buffer[i + 1] = (unsigned char)0;
-            buffer[i + 2] = (unsigned char)0;
-        }
-        else {
-            buffer[i] = b;
-            buffer[i + 1] = b;
-            buffer[i + 2] = b;
-        }
-#else
-        buffer[i] = b;
-        buffer[i + 1] = b;
-        buffer[i + 2] = b;
-#endif
-        i += 3; j++;
-    }
-    if (i > 0) {
-        written += fwrite(buffer, 1, i, fstream);
-    }
-
-    if (path[0] != '-') {
+    int written = fwrite(data, len, 1, fstream) * len;
+    if (fstream && strcmp(path, "stdout") != 0) {
         fclose(fstream);
     }
+    if (len <= 0 || written != len) {
+        CALL_CUSTOM_MESSAGE("The file wasn't written, length: ", len);
+        goto cleanup;
+    }
+    return 0;
 
-#ifdef DEBUG
-    double diff = (double)(clock() - start_time) / CLOCKS_PER_SEC;
-    DEBUG("elapsed %f ms", diff);
-#endif
+cleanup:
+    if (!errno) errno = EAGAIN;
+    return -1;
 }
 
 void utils_get_cpu_load(char * buffer, struct cpu_state_t *cpu)

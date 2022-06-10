@@ -1,7 +1,10 @@
 V4L = 1
-H264_ENCODER_RASPBERRY = 0 #TODO: to check
-H264_ENCODER_JETSON = 1
-H264_ENCODER_JETSON_WRAP = 0 #use wrap for unit test
+# TODO: to check
+H264_ENCODER_RASPBERRY = 0
+H264_ENCODER_JETSON = 0
+# It allows to run test on platform where h264 Jetson encoder isn't available
+# the test code generates static h264 buffers which were recorder on Jetson platform
+H264_ENCODER_JETSON_WRAP = 1
 CONTROL = 0
 RFB = 1
 SDL = 1
@@ -48,16 +51,23 @@ ifeq ($(H264_ENCODER_RASPBERRY), 1)
 endif
 
 ifeq ($(H264_ENCODER_JETSON), 1)
-	ifeq ($(H264_ENCODER_JETSON_WRAP), 1)
-		COMMON += -DV4L_ENCODER_WRAP
-	endif
-
 	COMMON += -DV4L_ENCODER
 	COMMON += `pkg-config --cflags libv4l2`
 	LDFLAGS += `pkg-config --libs libv4l2`
 	LDFLAGS += -L/usr/lib/aarch64-linux-gnu/tegra -L/usr/lib/aarch64-linux-gnu
 	LDFLAGS += -lnvbuf_utils
 	OBJ += v4l_encoder.o
+endif
+
+ifeq ($(H264_ENCODER_JETSON_WRAP), 1)
+	COMMON += -DV4L_ENCODER -DV4L_ENCODER_WRAP
+	OBJ += v4l_encoder.o
+	ifeq ($(CMOCKA), 1)
+		TEST_LDFLAGS += -Wl,--wrap=v4l2_open
+		TEST_LDFLAGS += -Wl,--wrap=v4l2_ioctl
+		TEST_LDFLAGS += -Wl,--wrap=mmap
+		TEST_LDFLAGS += -Wl,--wrap=munmap
+	endif
 endif
 
 ifeq ($(CONTROL), 1) 
@@ -103,15 +113,14 @@ endif
 
 ifeq ($(CMOCKA), 1) 
 	TEST_COMMON = $(COMMON) -DCMOCKA `pkg-config --cflags cmocka`
-	TEST_LDFLAGS = $(LDFLAGS) `pkg-config --libs cmocka`
+	TEST_LDFLAGS += $(LDFLAGS) `pkg-config --libs cmocka`
 #	stat
 	TEST_LDFLAGS += -Wl,--wrap=__xstat
 	TEST_LDFLAGS += -Wl,--wrap=open
 	TEST_LDFLAGS += -Wl,--wrap=close
 	TEST_LDFLAGS += -Wl,--wrap=select
 	TEST_LDFLAGS += -Wl,--wrap=ioctl
-	TEST_LDFLAGS += -Wl,--wrap=v4l2_open
-	TEST_LDFLAGS += -Wl,--wrap=v4l2_ioctl
+# SDL	
 	TEST_LDFLAGS += -Wl,--wrap=SDL_Init
 	TEST_LDFLAGS += -Wl,--wrap=SDL_CreateWindow
 	TEST_LDFLAGS += -Wl,--wrap=SDL_DestroyWindow

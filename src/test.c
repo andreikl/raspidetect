@@ -25,10 +25,21 @@
 #include <setjmp.h> //jmp_buf
 #include <cmocka.h>
 
+#ifdef V4L_ENCODER
+   #include "v4l_encoder.h"
+   #include "linux/videodev2.h"
+#endif
+
 #define TEST_DEBUG(format, ...) \
 { \
     if (test_verbose) \
         fprintf(stderr, "TEST: %s:%s, "#format"\n", __FILE__, __FUNCTION__, ##__VA_ARGS__); \
+}
+
+#define WRAP_DEBUG(format, ...) \
+{ \
+    if (wrap_verbose) \
+        fprintf(stderr, "WRAP: %s:%s, "#format"\n", __FILE__, __FUNCTION__, ##__VA_ARGS__); \
 }
 
 KHASH_MAP_INIT_STR(argvs_hash_t, char*)
@@ -43,6 +54,9 @@ struct filter_t filters[MAX_FILTERS];
 struct output_t outputs[MAX_OUTPUTS];
 
 #include "test_wraps.c"
+#ifdef V4L_ENCODER
+    #include "test_v4l_encoder_wraps.c"
+#endif
 
 static int test_setup(void **state)
 {
@@ -156,7 +170,7 @@ int main(int argc, char **argv)
 
     const struct CMUnitTest tests[] = {
         cmocka_unit_test_setup(test_utils_init, test_verbose_false),
-        cmocka_unit_test_setup(test_file_loop, test_verbose_false),
+        cmocka_unit_test_setup(test_file_loop, test_verbose_true),
 #ifdef SDL
         cmocka_unit_test_setup(test_sdl_loop, test_verbose_false)
 #endif //SDL

@@ -52,7 +52,7 @@ int utils_read_int_value(const char name[], int def_value);
 
 int utils_fill_buffer(const char *path, char *buffer, int buffer_size, size_t *read);
 void *utils_read_file(const char *path, size_t *len);
-void utils_write_file(const char *path, unsigned char *data, int width, int height);
+int utils_write_file(const char *path, const uint8_t *data, int len);
 
 void utils_get_cpu_load(char * buffer, struct cpu_state_t *cpu);
 void utils_get_memory_load(char * buffer, struct memory_state_t *memory);
