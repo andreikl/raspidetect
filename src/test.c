@@ -117,7 +117,7 @@ static void test_file_loop(void **state)
     //will_return(__wrap_ioctl, 3);
 
     CALL(res = app_init(app), error);
-    for (int i = 0; i < 20; i++) {
+    for (int i = 0; i < 15; i++) {
         CALL(res = output->process_frame());
         if (res == -1 && errno != ETIME)
             break;            
@@ -170,7 +170,7 @@ int main(int argc, char **argv)
 
     const struct CMUnitTest tests[] = {
         cmocka_unit_test_setup(test_utils_init, test_verbose_false),
-        cmocka_unit_test_setup(test_file_loop, test_verbose_true),
+        cmocka_unit_test_setup(test_file_loop, test_verbose_false),
 #ifdef SDL
         cmocka_unit_test_setup(test_sdl_loop, test_verbose_false)
 #endif //SDL

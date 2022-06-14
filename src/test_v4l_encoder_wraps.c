@@ -16,9 +16,14 @@
 // along with this program; if not, write to the Free Software Foundation,
 // Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
+#define VIDEO_PATH "./h264_test_video"
 static int encoder_width = 0;
 static int encoder_height = 0;
+static int encoder_buffer = -1;
 static void* buffers[V4L_MAX_IN_BUFS + V4L_MAX_OUT_BUFS] = {0};
+static int out_buffers[V4L_MAX_OUT_BUFS] = {0};
+char buffer[MAX_STRING];
+
 
 int __wrap_v4l2_open(const char * file, int oflag, ...)
 {
@@ -133,16 +138,23 @@ int __wrap_v4l2_ioctl(int fd, int request, void * arg)
     else if (request == (int)VIDIOC_QBUF) {
         WRAP_DEBUG("request: %s", "VIDIOC_QBUF");
         struct v4l2_buffer *buf = arg;
-        if (buf->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE)
+        if (buf->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) {
             assert_int_equal(buf->length, 3);
+            assert_in_range(buf->length, 0, V4L_MAX_IN_BUFS);
+        }
         else
-            if (buf->type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE)
+            if (buf->type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE) {
                 assert_int_equal(buf->length, 1);
+                assert_in_range(buf->index, 0, V4L_MAX_OUT_BUFS);
+                assert_int_equal(out_buffers[buf->index], 0);
+                out_buffers[buf->index] = 1;
+            }
 
         return 0;
     }
     else if (request == (int)VIDIOC_STREAMON) {
         WRAP_DEBUG("request: %s", "VIDIOC_STREAMON");
+        encoder_buffer = 1;
         return 0;
     }
     else if (request == (int)VIDIOC_STREAMOFF) {
@@ -151,11 +163,32 @@ int __wrap_v4l2_ioctl(int fd, int request, void * arg)
     }
     else if (request == (int)VIDIOC_DQBUF) {
         WRAP_DEBUG("request: %s", "VIDIOC_DQBUF");
-        uint8_t *index = image;
-        int row_length = image_width << 1;
-        for (int i = 0; i < image_height; i++)
-            for (int j = 0; j < row_length; j += 2, index += 2) {
-                *index = (i & 0x8) == 0? 0: 255;
+        struct v4l2_buffer *buf = arg;
+        if (buf->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE)
+            assert_int_equal(buf->length, 3);
+        else
+            if (buf->type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE) {
+                assert_int_equal(buf->length, 1);
+                int index = 0;
+                while (index < V4L_MAX_OUT_BUFS && out_buffers[index] == 0)
+                    index++;
+                assert_in_range(index, 0, V4L_MAX_OUT_BUFS);
+                assert_in_range(encoder_buffer, 0, 19);
+
+                size_t read = 0;
+                //CALL(getcwd(buffer, MAX_STRING));
+                //fprintf(stderr, "current directory: %s\n", buffer);
+                sprintf(buffer, VIDEO_PATH"/data%d.bin", encoder_buffer++);
+                //fprintf(stderr, "path: %s\n", buffer);
+                CALL(utils_fill_buffer(
+                    buffer,
+                    buffers[index],
+                    encoder_width * encoder_height,
+                    &read
+                ));
+                buf->index = index;
+                buf->m.planes[0].bytesused = read;
+                out_buffers[buf->index] = 0;
             }
         return 0;
     }

@@ -63,9 +63,8 @@ int utils_read_int_value(const char name[], int def_value)
 int utils_fill_buffer(const char *path, char *buffer, int buffer_size, size_t *read)
 {
     FILE *fstream = fopen(path, "r");
-
     if (fstream == NULL) {
-        fprintf(stderr, "ERROR: opening the file. (filename: %s)\n", path);
+        CALL_MESSAGE(fopen(path, "r"));
         return EXIT_FAILURE;
     }
 
@@ -131,7 +130,7 @@ void *utils_read_file(const char *path, size_t *len)
         fstream = fopen(path, "r");
     }
     if (fstream == NULL) {
-        fprintf(stderr, "ERROR: Failed to open file. path: %s", path);
+        CALL_MESSAGE(fopen(path, "r"));
         goto fail_open;
     }
 
