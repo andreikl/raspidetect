@@ -33,7 +33,6 @@ static struct format_mapping_t v4l_formats[] = {
 static struct format_mapping_t *v4l_format = NULL;
 
 static struct v4l_state_t v4l = {
-    .app = NULL,
     .dev_id = -1,
     .v4l_buf = NULL,
     .v4l_buf_len = -1,
@@ -41,6 +40,7 @@ static struct v4l_state_t v4l = {
     .buffer_len = -1,
 };
 
+extern struct app_state_t app;
 extern struct input_t input;
 
 static int ioctl_wait(int fd, int request, void *arg)
@@ -98,17 +98,17 @@ static int v4l_is_supported_resolution(int format)
     while (res >= 0) {
         if (frmsize.type == V4L2_FRMSIZE_TYPE_DISCRETE) {
             if (
-                frmsize.discrete.width == v4l.app->video_width &&
-                frmsize.discrete.height == v4l.app->video_height
+                frmsize.discrete.width == app.video_width &&
+                frmsize.discrete.height == app.video_height
             ) {
                 is_found = 1;
             }
             if (
-                frmsize.discrete.width > v4l.app->camera_max_width || 
-                frmsize.discrete.height > v4l.app->camera_max_height
+                frmsize.discrete.width > app.camera_max_width || 
+                frmsize.discrete.height > app.camera_max_height
             ) {
-                v4l.app->camera_max_width = frmsize.discrete.width;
-                v4l.app->camera_max_height = frmsize.discrete.height;
+                app.camera_max_width = frmsize.discrete.width;
+                app.camera_max_height = frmsize.discrete.height;
             }
             // DEBUG("V4L2_FRMSIZE_TYPE_DISCRETE %dx%d",
             //     frmsize.discrete.width, frmsize.discrete.height);
@@ -118,21 +118,21 @@ static int v4l_is_supported_resolution(int format)
             frmsize.type == V4L2_FRMSIZE_TYPE_CONTINUOUS
         ) {
             if (
-                v4l.app->video_width % frmsize.stepwise.step_width == 0 &&
-                v4l.app->video_height % frmsize.stepwise.step_height == 0 &&
-                v4l.app->video_width >= frmsize.stepwise.min_width &&
-                v4l.app->video_height >= frmsize.stepwise.min_height &&
-                v4l.app->video_width <= frmsize.stepwise.max_width &&
-                v4l.app->video_height <= frmsize.stepwise.max_height
+                app.video_width % frmsize.stepwise.step_width == 0 &&
+                app.video_height % frmsize.stepwise.step_height == 0 &&
+                app.video_width >= frmsize.stepwise.min_width &&
+                app.video_height >= frmsize.stepwise.min_height &&
+                app.video_width <= frmsize.stepwise.max_width &&
+                app.video_height <= frmsize.stepwise.max_height
             ) {
                 is_found = 1;
             }
             if (
-                frmsize.stepwise.max_width > v4l.app->camera_max_width || 
-                frmsize.stepwise.max_height > v4l.app->camera_max_height
+                frmsize.stepwise.max_width > app.camera_max_width || 
+                frmsize.stepwise.max_height > app.camera_max_height
             ) {
-                v4l.app->camera_max_width = frmsize.stepwise.max_width;
-                v4l.app->camera_max_height = frmsize.stepwise.max_height;
+                app.camera_max_width = frmsize.stepwise.max_width;
+                app.camera_max_height = frmsize.stepwise.max_height;
             }
             // DEBUG("V4L2_FRMSIZE_TYPE_STEPWISE %dx%d",
             //     frmsize.stepwise.max_width, frmsize.stepwise.max_height);
@@ -153,9 +153,9 @@ static int v4l_init()
     ASSERT_INT(v4l.dev_id, ==, -1, cleanup);
 
     int res = 0;
-    sprintf(v4l.dev_name, "/dev/video%d", v4l.app->camera_num);
+    sprintf(v4l.dev_name, "/dev/video%d", app.camera_num);
 
-    int len = v4l.app->video_width * v4l.app->video_height * 2;
+    int len = app.video_width * app.video_height * 2;
     uint8_t *data = malloc(len);
     if (data == NULL) {
         errno = ENOMEM;
@@ -184,7 +184,7 @@ static int v4l_init()
 
     struct v4l2_capability cap;
     CALL(ioctl_wait(v4l.dev_id, VIDIOC_QUERYCAP, &cap), cleanup);
-    strncpy(v4l.app->camera_name, (const char *)cap.card, 32);
+    strncpy(app.camera_name, (const char *)cap.card, 32);
     ASSERT_INT((cap.capabilities & V4L2_CAP_VIDEO_CAPTURE), !=, 0, cleanup);
     ASSERT_INT((cap.capabilities & V4L2_CAP_STREAMING), !=, 0, cleanup);
     //ASSERT_INT((cap.capabilities & V4L2_CAP_READWRITE), !=, 0, cleanup);
@@ -206,14 +206,13 @@ static int v4l_init()
                     cleanup);
 
                 if (f->is_supported) {
-                    if (v4l.app->verbose)
-                        DEBUG("input pixel format(%c%c%c%c) and resolution(%dx%d) have been found!",
-                            GET_B(fmt.pixelformat),
-                            GET_G(fmt.pixelformat),
-                            GET_R(fmt.pixelformat),
-                            GET_A(fmt.pixelformat),
-                            v4l.app->video_width,
-                            v4l.app->video_height);
+                    DEBUG("input pixel format(%c%c%c%c) and resolution(%dx%d) have been found!",
+                        GET_B(fmt.pixelformat),
+                        GET_G(fmt.pixelformat),
+                        GET_R(fmt.pixelformat),
+                        GET_A(fmt.pixelformat),
+                        app.video_width,
+                        app.video_height);
 
                     is_found = 1;
                 }
@@ -253,8 +252,8 @@ static int v4l_start(int format)
     struct v4l2_format fmt;
     memset(&fmt, 0, sizeof(fmt));
     fmt.type = v4l_format->internal_format;
-    fmt.fmt.pix.width = v4l.app->video_width;
-    fmt.fmt.pix.height = v4l.app->video_height;
+    fmt.fmt.pix.width = app.video_width;
+    fmt.fmt.pix.height = app.video_height;
     fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_YUYV;
     fmt.fmt.pix.field = V4L2_FIELD_INTERLACED;
     CALL(ioctl_enum(v4l.dev_id, VIDIOC_S_FMT, &fmt), cleanup);
@@ -370,7 +369,6 @@ static int v4l_get_formats(const struct format_mapping_t *formats[])
 
 void v4l_construct(struct app_state_t *app)
 {
-    v4l.app = app;
     input.name = "v4l";
     input.context = &v4l;
     input.init = v4l_init;

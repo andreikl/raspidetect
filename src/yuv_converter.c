@@ -19,11 +19,11 @@ static struct format_mapping_t yuv_output_formats[] = {
 };
 
 static struct yuv_converter_state_t yuv = {
-    .app = NULL,
     .buffer = NULL,
     .buffer_length = -1
 };
 
+extern struct app_state_t app;
 extern struct filter_t filters[MAX_FILTERS];
 
 static void yuv_cleanup()
@@ -38,7 +38,7 @@ static int yuv_init()
 {
     ASSERT_PTR(yuv.buffer, ==, NULL, cleanup);
 
-    int len = yuv.app->video_width * yuv.app->video_height * 3;
+    int len = app.video_width * app.video_height * 3;
     uint8_t *data = malloc(len);
     data = malloc(len);
     if (data == NULL) {
@@ -70,7 +70,7 @@ static int yuv_is_started()
 static int yuv_process_frame(uint8_t *buffer)
 {
     ASSERT_PTR(yuv.buffer, !=, NULL, cleanup);
-    int plane = yuv.app->video_width * yuv.app->video_height;
+    int plane = app.video_width * app.video_height;
     int planes = plane * 2;
     uint8_t * res = yuv.buffer;
     for (int i = 0, j = 0; i < planes; i += 4, j += 2) {
@@ -121,15 +121,13 @@ static int yuv_get_out_formats(const struct format_mapping_t *formats[])
     return ARRAY_SIZE(yuv_output_formats);
 }
 
-void yuv_converter_construct(struct app_state_t *app)
+void yuv_converter_construct()
 {
     int i = 0;
     while (i < MAX_FILTERS && filters[i].context != NULL)
         i++;
 
     if (i != MAX_FILTERS) {
-        yuv.app = app;
-
         filters[i].name = "yuv_converter";
         filters[i].context = &app;
         filters[i].init = yuv_init;

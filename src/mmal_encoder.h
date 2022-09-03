@@ -37,10 +37,10 @@ struct mmal_state_t {
 };
 
 int mmal_get_capabilities(int camera_num, char *camera_name, int *width, int *height );
-int camera_encode_buffer(app_state_t *app, char *buffer, int length);
-int camera_open(app_state_t *app);
-void camera_cleanup(app_state_t *app);
-int camera_create_h264_encoder(app_state_t *app);
-int camera_cleanup_h264_encoder(app_state_t *app);
+int camera_encode_buffer(char *buffer, int length);
+int camera_open();
+void camera_cleanup();
+int camera_create_h264_encoder();
+int camera_cleanup_h264_encoder();
 
 #endif //mmal_h

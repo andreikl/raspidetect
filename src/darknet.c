@@ -18,7 +18,9 @@
 
 #include "main.h"
 
-int darknet_process(app_state_t *state)
+extern struct app_state_t app;
+
+int darknet_process()
 {
     DEBUG("darknet start");
 
@@ -54,7 +56,7 @@ int darknet_process(app_state_t *state)
     return 0;
 }
 
-int darknet_create(app_state_t *state)
+int darknet_create()
 {
     state->dn.dn_net = load_network(state->config_path, state->model_path, 0);
     if (!state->dn.dn_net) {
@@ -69,7 +71,7 @@ int darknet_create(app_state_t *state)
     return 0;
 }
 
-void darknet_destroy(app_state_t *state)
+void darknet_destroy()
 {
     if (state->dn.dn_net) {
         free_network(state->dn.dn_net);

@@ -18,76 +18,74 @@
 
 #include "main.h"
 
-int overlay_create(struct app_state_t *app)
+int overlay_create()
 {
-    app->overlay_stride = cairo_format_stride_for_width(CAIRO_FORMAT_ARGB32, app->overlay_width);
-    app->overlay_buffer = malloc(app->overlay_stride * app->overlay_height);
-    app->cairo_surface = cairo_image_surface_create_for_data(app->overlay_buffer,
+    app.overlay_stride = cairo_format_stride_for_width(CAIRO_FORMAT_ARGB32, app.overlay_width);
+    app.overlay_buffer = malloc(app.overlay_stride * app.overlay_height);
+    app.cairo_surface = cairo_image_surface_create_for_data(app.overlay_buffer,
         CAIRO_FORMAT_ARGB32,
-        app->overlay_width,
-        app->overlay_height,
-        app->overlay_stride);
-    if (!app->cairo_surface) {
+        app.overlay_width,
+        app.overlay_height,
+        app.overlay_stride);
+    if (!app.cairo_surface) {
         fprintf(stderr, "ERROR: Failed to create cairo surface");
         return -1;
     }
-    app->cairo_context = cairo_create(app->cairo_surface);
-    if (!app->cairo_context) {
+    app.cairo_context = cairo_create(app.cairo_surface);
+    if (!app.cairo_context) {
         fprintf(stderr, "ERROR: Failed to create cairo context");
         return -1;
     }
-    if (app->verbose) {
-        DEBUG("overlay_stride %d", app->overlay_stride);
-    }
+    DEBUG("overlay_stride %d", app.overlay_stride);
 
     return 0;
 }
 
-void overlay_print(struct app_state_t *app, const char *text)
+void overlay_print(const char *text)
 {
-    pthread_mutex_lock(&app->buffer_mutex);
-    cairo_rectangle(app->cairo_context, 0.0, 0.0, app->overlay_width, app->overlay_height);
-    cairo_set_source_rgba(app->cairo_context, 0.0, 0.0, 0.0, 1.0);
-    cairo_fill(app->cairo_context);
+    pthread_mutex_lock(&app.buffer_mutex);
+    cairo_rectangle(app.cairo_context, 0.0, 0.0, app.overlay_width, app.overlay_height);
+    cairo_set_source_rgba(app.cairo_context, 0.0, 0.0, 0.0, 1.0);
+    cairo_fill(app.cairo_context);
 
-    cairo_set_source_rgba(app->cairo_context, 1.0, 1.0, 1.0, 1.0);
-    cairo_set_line_width(app->cairo_context, 1);
-    cairo_move_to(app->cairo_context, 0.0, 10.0);
-    cairo_set_font_size(app->cairo_context, 10.0);
-    cairo_show_text(app->cairo_context, text);
+    cairo_set_source_rgba(app.cairo_context, 1.0, 1.0, 1.0, 1.0);
+    cairo_set_line_width(app.cairo_context, 1);
+    cairo_move_to(app.cairo_context, 0.0, 10.0);
+    cairo_set_font_size(app.cairo_context, 10.0);
+    cairo_show_text(app.cairo_context, text);
 
     int n = 0;
-    for (int i = 0; i < app->worker_total_objects; i++) {
-        if(app->worker_scores[i] > THRESHOLD) {
+    for (int i = 0; i < app.worker_total_objects; i++) {
+        if(app.worker_scores[i] > THRESHOLD) {
             n++;
-            float *box = &app->worker_boxes[i * 4];
-            int x1 = (int)(box[0] * app->width);
-            int y1 = (int)(box[0] * app->height);
-            int x2 = (int)(box[2] * app->width);
-            int y2 = (int)(box[3] * app->height);
-            cairo_move_to(app->cairo_context, x1, y1);
-            cairo_line_to(app->cairo_context, x2, y1);
-            cairo_line_to(app->cairo_context, x2, y2);
-            cairo_line_to(app->cairo_context, x1, y2);
-            cairo_line_to(app->cairo_context, x1, y1);
-            cairo_stroke(app->cairo_context);
+            float *box = &app.worker_boxes[i * 4];
+            int x1 = (int)(box[0] * app.width);
+            int y1 = (int)(box[0] * app.height);
+            int x2 = (int)(box[2] * app.width);
+            int y2 = (int)(box[3] * app.height);
+            cairo_move_to(app.cairo_context, x1, y1);
+            cairo_line_to(app.cairo_context, x2, y1);
+            cairo_line_to(app.cairo_context, x2, y2);
+            cairo_line_to(app.cairo_context, x1, y2);
+            cairo_line_to(app.cairo_context, x1, y1);
+            cairo_stroke(app.cairo_context);
         }
     }
-    app->worker_objects = n;
+    app.worker_objects = n;
 
-    pthread_mutex_unlock(&app->buffer_mutex);
+    pthread_mutex_unlock(&app.buffer_mutex);
 }
 
-void overlay_destroy(struct app_state_t *app)
+void overlay_destroy()
 {
-    if (app->cairo_context != NULL) {
-        cairo_destroy(app->cairo_context);
+    if (app.cairo_context != NULL) {
+        cairo_destroy(app.cairo_context);
     }
-    if (app->cairo_surface != NULL) {
-        cairo_surface_destroy(app->cairo_surface);
+    if (app.cairo_surface != NULL) {
+        cairo_surface_destroy(app.cairo_surface);
     }
-    if (app->cairo_surface != NULL) {
-        free(app->overlay_buffer);
+    if (app.cairo_surface != NULL) {
+        free(app.overlay_buffer);
     }
 }
 
@@ -95,8 +93,8 @@ void overlay_destroy(struct app_state_t *app)
 // {
 //     int32_t* source_data = (int32_t*)buffer->data;
 //     int32_t* dest_data = (int32_t*)output_buffer->data;
-//     int32_t* overlay_data = (int32_t*)app->overlay_buffer;
-//     int size = app->width * app->height;
+//     int32_t* overlay_data = (int32_t*)app.overlay_buffer;
+//     int size = app.width * app.height;
 //     uint32_t data_old, data_new, data_overlay, result = 0;
 //     data_old = data_new = source_data[0];
 //     for (int i = 0, xy_index = 0, res_index = 0, bits = 0; i < size; i++, bits += 24) {

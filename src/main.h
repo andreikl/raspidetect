@@ -114,7 +114,8 @@
 
 #define DEBUG(format, ...) \
 { \
-    fprintf(stderr, "%s:%s, "#format"\n", __FILE__, __FUNCTION__, ##__VA_ARGS__); \
+    if (app.verbose) \
+        fprintf(stderr, "%s:%d - %s, "#format"\n", __FILE__, __LINE__, __FUNCTION__, ##__VA_ARGS__); \
 }
 
 #define CALL_MESSAGE(call) \
@@ -125,8 +126,8 @@
 
 #define CALL_CUSTOM_MESSAGE(call, res) \
 { \
-    fprintf(stderr, "ERROR: "#call" returned error: (%d)\n%s:%d - %s\n", \
-        res, __FILE__, __LINE__, __FUNCTION__); \
+    fprintf(stderr, "ERROR: "#call" returned error: %s (%d)\n%s:%d - %s\n", \
+        strerror(res), res, __FILE__, __LINE__, __FUNCTION__); \
 }
 
 #define CALL_2(call, error) \
@@ -337,10 +338,12 @@ struct output_t {
     struct filter_reference_t filters[MAX_FILTERS];
 
     int (*init)();
-    void (*cleanup)();
-
+    int (*start)();
+    int (*is_started)();
     int (*process_frame)();
+    int (*stop)();
     int (*get_formats)(const struct format_mapping_t *formats[]);
+    void (*cleanup)();
 };
 
 struct app_state_t {

@@ -223,7 +223,7 @@ static int openvg_font_convert_glyphs(openvg_font_t *font, unsigned int char_hei
 }
 
 // Find a font in cache, or create a new entry in the cache.
-static openvg_font_t *openvg_find_font(app_state_t *state, const char *text, uint32_t text_size)
+static openvg_font_t *openvg_find_font(const char *text, uint32_t text_size)
 {
     int ptsize = text_size << 6; // freetype takes size in points, in 26.6 format.
 
@@ -252,16 +252,16 @@ static openvg_font_t *openvg_find_font(app_state_t *state, const char *text, uin
 
     // load the font
     int res;
-    res = FT_New_Memory_Face(state->openvg.font_lib,
-        state->openvg.font_data,
-        state->openvg.font_len,
+    res = FT_New_Memory_Face(app.openvg.font_lib,
+        app.openvg.font_data,
+        app.openvg.font_len,
         0,
         &font->font.ft_face);
     if (res) {
         fprintf(stderr, "Failed to load font from memory: %d, data: %p, len: %d\n",
             res,
-            state->openvg.font_data,
-            state->openvg.font_len);
+            app.openvg.font_data,
+            app.openvg.font_len);
         goto font;
     }
 
@@ -319,10 +319,10 @@ static void openvg_draw_chars(openvg_font_t *font, const char *text, int char_co
     vgDrawGlyphs(font->vg_font, char_count, openvg_glyph_indices, openvg_adjustments_x, openvg_adjustments_y, VG_FILL_PATH, VG_FALSE);
 }
 
-int dispmanx_init(app_state_t *state)
+int dispmanx_init()
 {
     int res;
-    res = graphics_get_display_size(0, &state->openvg.display_width, &state->openvg.display_height);
+    res = graphics_get_display_size(0, &app.openvg.display_width, &app.openvg.display_height);
     if (res < 0) {
         fprintf(stderr, "ERROR: Failed to get display size: 0x%x\n", res);
         return -1;
@@ -330,12 +330,12 @@ int dispmanx_init(app_state_t *state)
 
     VC_RECT_T src_rect, dst_rect;
     src_rect.x = src_rect.y = 0;
-    src_rect.width = state->openvg.display_width << 16;
-    src_rect.height = state->openvg.display_height << 16;
+    src_rect.width = app.openvg.display_width << 16;
+    src_rect.height = app.openvg.display_height << 16;
 
     dst_rect.x = dst_rect.y = 0;
-    dst_rect.width = state->openvg.display_width;
-    dst_rect.height = state->openvg.display_height;
+    dst_rect.width = app.openvg.display_width;
+    dst_rect.height = app.openvg.display_height;
 
     DISPMANX_DISPLAY_HANDLE_T dispmanx_display = vc_dispmanx_display_open(0);
     if (dispmanx_display == DISPMANX_NO_HANDLE) {
@@ -361,13 +361,13 @@ int dispmanx_init(app_state_t *state)
         0, //clamp
         0); //transform
     if (dispmanx_element == DISPMANX_NO_HANDLE) {
-        fprintf(stderr, "ERROR: Could not add native screen %dx%d\n", state->openvg.display_width, state->openvg.display_height);
+        fprintf(stderr, "ERROR: Could not add native screen %dx%d\n", app.openvg.display_width, app.openvg.display_height);
         return -1;
     }
 
-	state->openvg.u.native_window.element = dispmanx_element;
-	state->openvg.u.native_window.width = state->openvg.display_width;
-	state->openvg.u.native_window.height = state->openvg.display_height;
+	app.openvg.u.native_window.element = dispmanx_element;
+	app.openvg.u.native_window.width = app.openvg.display_width;
+	app.openvg.u.native_window.height = app.openvg.display_height;
     res = vc_dispmanx_update_submit_sync(dispmanx_update);
     if (res) {
         fprintf(stderr, "ERROR: Could not submit sync for screen 0, res: %d\n", res);
@@ -377,11 +377,11 @@ int dispmanx_init(app_state_t *state)
     return 0;
 }
 
-void dispmanx_destroy(app_state_t *state)
+void dispmanx_destroy()
 {
     DISPMANX_UPDATE_HANDLE_T current_update = vc_dispmanx_update_start(0);
     if (current_update != 0) {
-        int res = vc_dispmanx_element_remove(current_update, state->openvg.u.native_window.element);
+        int res = vc_dispmanx_element_remove(current_update, app.openvg.u.native_window.element);
         if (res) {
             fprintf(stderr, "ERROR: Could not remove dispmanx element 0x%x\n", res);
         }
@@ -392,17 +392,17 @@ void dispmanx_destroy(app_state_t *state)
     }
 }
 
-int openvg_init(app_state_t *state)
+int openvg_init()
 {
     EGLBoolean egl_res;
 
-    state->openvg.display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
-    if (state->openvg.display == EGL_NO_DISPLAY) {
+    app.openvg.display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
+    if (app.openvg.display == EGL_NO_DISPLAY) {
         fprintf(stderr, "ERROR: Failed to get egl display: 0x%x\n", eglGetError());
         return -1;
     }
 
-    egl_res = eglInitialize(state->openvg.display, &state->openvg.egl_maj, &state->openvg.egl_min);
+    egl_res = eglInitialize(app.openvg.display, &app.openvg.egl_maj, &app.openvg.egl_min);
     if (!egl_res)
     {
         fprintf(stderr, "ERROR: Failed to initilise egl display: 0x%x\n", eglGetError());
@@ -421,7 +421,7 @@ int openvg_init(app_state_t *state)
         EGL_NONE
     };
 
-    egl_res = eglChooseConfig(state->openvg.display, attribs, &config, 1, &nconfigs);
+    egl_res = eglChooseConfig(app.openvg.display, attribs, &config, 1, &nconfigs);
     if (egl_res == EGL_FALSE || nconfigs == 0) {
         fprintf(stderr, "ERROR: GRAPHICS_RESOURCE_RGB888 isn't supported\n");
         return -1;
@@ -433,76 +433,74 @@ int openvg_init(app_state_t *state)
         return -1;
     }
 
-    state->openvg.context = eglCreateContext(state->openvg.display, config, EGL_NO_CONTEXT, 0);
-    if (!state->openvg.context) {
+    app.openvg.context = eglCreateContext(app.openvg.display, config, EGL_NO_CONTEXT, 0);
+    if (!app.openvg.context) {
         fprintf(stderr, "ERROR: Failed to create OpenVg context: 0x%x\n", eglGetError());
         return -1;
     }
 
     int res;
-    res = FT_Init_FreeType(&state->openvg.font_lib);
+    res = FT_Init_FreeType(&app.openvg.font_lib);
     if (res != 0) {
         fprintf(stderr, "ERROR: Failed to initialise FreeType library\n");
         return -1;
     }
 
-    state->openvg.font_data = utils_read_file(FONT_PATH, &state->openvg.font_len);
-    if (state->openvg.font_data == NULL || state->openvg.font_len == 0) {
+    app.openvg.font_data = utils_read_file(FONT_PATH, &app.openvg.font_len);
+    if (app.openvg.font_data == NULL || app.openvg.font_len == 0) {
         fprintf(stderr, "ERROR: Failed to load font. path: %s\n", FONT_PATH);
         return -1;
     }
 
-	state->openvg.surface = eglCreateWindowSurface(state->openvg.display, config, &state->openvg.u.native_window, NULL);
-	if (state->openvg.surface == EGL_NO_SURFACE) {
+	app.openvg.surface = eglCreateWindowSurface(app.openvg.display, config, &app.openvg.u.native_window, NULL);
+	if (app.openvg.surface == EGL_NO_SURFACE) {
         fprintf(stderr, "ERROR: Failed to create egl surface: %d (res: EGL_NO_SURFACE)\n", glGetError());
         return -1;
 
     }
 
 	// connect the context to the surface
-	egl_res = eglMakeCurrent(state->openvg.display, state->openvg.surface, state->openvg.surface, state->openvg.context);
+	egl_res = eglMakeCurrent(app.openvg.display, app.openvg.surface, app.openvg.surface, app.openvg.context);
     if (egl_res == EGL_FALSE) {
         fprintf(stderr, "ERROR: Failed to connect to surface (res: EGL_FALSE)\n");
         return -1;
     }
 
-    state->openvg.video_buffer.c = malloc((state->width * state->height) << 1);
-    if (!state->openvg.video_buffer.c) {
+    app.openvg.video_buffer.c = malloc((app.width * app.height) << 1);
+    if (!app.openvg.video_buffer.c) {
         fprintf(stderr, "ERROR: Failed to allocate memory for video buffer\n");
         return -1;
     }
 
-    eglSwapInterval(state->openvg.display, 1);
-    egl_res = eglSurfaceAttrib(state->openvg.display, state->openvg.surface, EGL_SWAP_BEHAVIOR, EGL_BUFFER_PRESERVED);
+    eglSwapInterval(app.openvg.display, 1);
+    egl_res = eglSurfaceAttrib(app.openvg.display, app.openvg.surface, EGL_SWAP_BEHAVIOR, EGL_BUFFER_PRESERVED);
     if (!egl_res) {
         fprintf(stderr, "ERROR: Failed to set surface attribute: 0x%x\n", eglGetError());
         return -1;
     }
 
-    if (state->verbose) {
-        DEBUG("Supported EGL APIS: %s", eglQueryString(state->openvg.display, EGL_CLIENT_APIS));
-        DEBUG("EGL API %d.%d", state->openvg.egl_maj, state->openvg.egl_min);
-    }
+    DEBUG("Supported EGL APIS: %s", eglQueryString(app.openvg.display, EGL_CLIENT_APIS));
+    DEBUG("EGL API %d.%d", app.openvg.egl_maj, app.openvg.egl_min);
    
     return 0;
 }
 
-void openvg_destroy(app_state_t *state)
+void openvg_destroy()
 {
-    if (state->openvg.video_buffer.c) {
-        free(state->openvg.video_buffer.c);
+    if (app.openvg.video_buffer.c) {
+        free(app.openvg.video_buffer.c);
     }
    
-    if (state->openvg.context != NULL) {
-        eglDestroyContext(state->openvg.display, state->openvg.context);
+    if (app.openvg.context != NULL) {
+        eglDestroyContext(app.openvg.display, app.openvg.context);
     }
 
-    if (state->openvg.display != NULL) {
-        eglTerminate(state->openvg.display);
+    if (app.openvg.display != NULL) {
+        eglTerminate(app.openvg.display);
     }
 
-    if (state->openvg.font_data != NULL) {
-        free(state->openvg.font_data);
+    if (app.openvg.font_data != NULL) {
+        free(app.openvg.font_data);
     }
 
     while (openvg_fonts != NULL) {
@@ -518,13 +516,11 @@ void openvg_destroy(app_state_t *state)
         openvg_fonts = next;
     }
 
-    FT_Done_FreeType(state->openvg.font_lib);
+    FT_Done_FreeType(app.openvg.font_lib);
 }
 
 // Render text.
-int openvg_draw_text(app_state_t *state,
-                        float x,
-                        float y,
+int openvg_draw_text(float x, float y,
                         const char *text,
                         uint32_t text_length,
                         uint32_t text_size,
@@ -543,7 +539,7 @@ int openvg_draw_text(app_state_t *state,
     vgSetPaint(fg, VG_FILL_PATH);
 
     //transform y from normal coordinates
-    y = state->openvg.display_height - y - FLOAT_FROM_26_6(font->ft_face->size->metrics.height);
+    y = app.openvg.display_height - y - FLOAT_FROM_26_6(font->ft_face->size->metrics.height);
 
     y -= FLOAT_FROM_26_6(font->ft_face->size->metrics.descender);
 
@@ -577,7 +573,7 @@ int openvg_draw_text(app_state_t *state,
     return 0;
 }
 
-int openvg_draw_boxes(app_state_t *state, VGfloat colour[4])
+int openvg_draw_boxes(VGfloat colour[4])
 {
     VGPath path = vgCreatePath(VG_PATH_FORMAT_STANDARD,
         VG_PATH_DATATYPE_F,
@@ -596,18 +592,18 @@ int openvg_draw_boxes(app_state_t *state, VGfloat colour[4])
     //vgSeti(VG_STROKE_JOIN_STYLE, VG_JOIN_MITER);
 
     int n = 0;
-    for (int i = 0; i < state->worker_total_objects; i++) {
-        if(state->worker_scores[i] > THRESHOLD) {
+    for (int i = 0; i < app.worker_total_objects; i++) {
+        if(app.worker_scores[i] > THRESHOLD) {
             n++;
-            float *box = &state->worker_boxes[i * 4];
-            int x1 = box[0] * state->width;
-            int y1 = state->height - box[0] * state->height;
-            int x2 = box[2] * state->width;
-            int y2 = state->height - box[3] * state->height;
+            float *box = &app.worker_boxes[i * 4];
+            int x1 = box[0] * app.width;
+            int y1 = app.height - box[0] * app.height;
+            int x2 = box[2] * app.width;
+            int y2 = app.height - box[3] * app.height;
             vguRect(path, x1, y1, x2 - x1, y1 - y2);
         }
     }
-    state->worker_objects = n;
+    app.worker_objects = n;
 
     vgDrawPath(path, VG_STROKE_PATH);
 
@@ -626,18 +622,18 @@ int openvg_draw_boxes(app_state_t *state, VGfloat colour[4])
 #define RB_555_MASK      (0b00000000000111110000000000011111)
 #define G_555_MASK       (0b01111111111000000111111111100000)
 
-int openvg_read_buffer(app_state_t *state)
+int openvg_read_buffer()
 {
-    vgReadPixels(state->openvg.video_buffer.c,
-                state->width << 1,
+    vgReadPixels(app.openvg.video_buffer.c,
+                app.width << 1,
                 VG_sRGB_565,
                 0, 0,
-                state->width, state->height);
+                app.width, app.height);
 
 #if defined(ENV32BIT)
-    int i = state->height >> 1;
-    int w = state->width >> 1, wb = state->width << 1;
-    int *start_ptr = state->openvg.video_buffer.i, *end_ptr = &state->openvg.video_buffer.i[w * (state->height - 1)];
+    int i = app.height >> 1;
+    int w = app.width >> 1, wb = app.width << 1;
+    int *start_ptr = app.openvg.video_buffer.i, *end_ptr = &app.openvg.video_buffer.i[w * (app.height - 1)];
     int* t = malloc(wb);
     while (i) {
         memcpy(t, start_ptr, wb);
@@ -649,7 +645,7 @@ int openvg_read_buffer(app_state_t *state)
     }
     free(t);
 
-    /*start_ptr = state->openvg.video_buffer.i; end_ptr = &state->openvg.video_buffer.i[(state->height * w) - 1];
+    /*start_ptr = app.openvg.video_buffer.i; end_ptr = &app.openvg.video_buffer.i[(app.height * w) - 1];
     int v;
     while (end_ptr != start_ptr) {
         v = *start_ptr;

@@ -12,8 +12,6 @@ struct v4l_encoder_plane_t {
 };
 
 struct v4l_encoder_state_t {
-    struct app_state_t *app;
-
     char dev_name[20];
     int dev_id;
 
@@ -36,6 +34,6 @@ struct v4l_encoder_state_t {
     int out_buf_used;
 };
 
-void v4l_encoder_construct(struct app_state_t *app);
+void v4l_encoder_construct();
 
 #endif //v4l_encoder_h

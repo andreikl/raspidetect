@@ -126,13 +126,16 @@ static struct format_mapping_t rfb_formats[] = {
 };
 
 struct rfb_state_t rfb = {
-    .app = NULL,
     .output = NULL,
-    .serv_socket = -1,
+    .server_socket = -1,
     .client_socket = -1,
-    .thread_res = -1
+    .thread_res = -1,
+    .client_semaphore_res = -1
 };
 
+extern struct app_state_t app;
+extern struct input_t input;
+extern struct filter_t filters[MAX_FILTERS];
 extern struct output_t outputs[MAX_OUTPUTS];
 extern int is_abort;
 
@@ -141,19 +144,20 @@ static struct rfb_buffer_update_message_t update_message;
 static void *rfb_function(void *data)
 {
     int res;
-    const int one = 1;    
-    if (rfb.app->verbose) {
-        DEBUG("RFB thread has been started");
-    }
+    const int one = 1;
+
+    DEBUG("RFB thread has been started");
+
     while (!is_abort) {
         struct sockaddr_in client_addr;
         int addres_len = sizeof(client_addr);
 
         CALL(rfb.client_socket = accept(
-            rfb.serv_socket,
+            rfb.server_socket,
             (struct sockaddr *)&client_addr, 
             (socklen_t *)&addres_len
-        ));
+        ), fatal_error);
+
         // stop RFB thread
         if (is_abort)
             return NULL;
@@ -172,9 +176,7 @@ static void *rfb_function(void *data)
         CALL(recv(rfb.client_socket, client_rfb_version, sizeof(client_rfb_version), 0),
             rfb_error);
 
-        if (rfb.app->verbose) {
-            DEBUG("Client rfb version. %s", client_rfb_version);
-        }
+        DEBUG("Client rfb version. %s", client_rfb_version);
 
         struct rfb_security_message_t security = {
             .types_count = 1,
@@ -189,9 +191,7 @@ static void *rfb_function(void *data)
             sizeof(client_security_type), 0
         ), rfb_error);
 
-        if (rfb.app->verbose) {
-            DEBUG("Client rfb security type. %d", client_security_type);
-        }
+        DEBUG("Client rfb security type. %d", client_security_type);
     
         uint32_t success = 0;
         CALL(send(rfb.client_socket, (char *)&success, sizeof(success), 0), rfb_error);
@@ -199,13 +199,11 @@ static void *rfb_function(void *data)
         uint8_t shared_flag;
         CALL(recv(rfb.client_socket, (char *)&shared_flag, sizeof(shared_flag), 0), rfb_error);
 
-        if (rfb.app->verbose) {    
-            DEBUG("Client rfb shared flag. %d", shared_flag);
-        }
-    
+        DEBUG("Client rfb shared flag. %d", shared_flag);
+
         struct rfb_server_init_message_t init_message = {
-            .framebuffer_width = htons(rfb.app->video_width),
-            .framebuffer_height = htons(rfb.app->video_height),
+            .framebuffer_width = htons(app.video_width),
+            .framebuffer_height = htons(app.video_height),
             .pixel_format.big_endian = 1,
             .pixel_format.true_color = 1,
             .pixel_format.red_max = htons(31),
@@ -216,12 +214,12 @@ static void *rfb_function(void *data)
             .pixel_format.blue_shift = 0,
             .name_length = htonl(sizeof(init_message.name))
         };
-        if (rfb.app->video_format == VIDEO_FORMAT_YUV422) {
+        if (app.video_format == VIDEO_FORMAT_YUV422) {
             init_message.pixel_format.bpp = 16;
             init_message.pixel_format.depth = 16;
         }
         else {
-            DEBUG_INT("Video format isn't supported", rfb.app->video_format);
+            DEBUG("Video format isn't supported %d", app.video_format);
             errno = EINVAL;
             goto rfb_error;
         }
@@ -241,9 +239,7 @@ static void *rfb_function(void *data)
             struct rfb_type_request_message_t type;
             CALL(res = recv(rfb.client_socket, (char *)&type, sizeof(type), 0), rfb_error);
             if (res == 0) {
-                if (rfb.app->verbose)
-                    DEBUG("Client has closed the connection");
-                break;
+                DEBUG("Client has closed the connection");
             }
 
             if (type.message_type == RFBSetPixelFormat)  {
@@ -273,7 +269,10 @@ static void *rfb_function(void *data)
             } else if (type.message_type == RFBFramebufferUpdateRequest) {
                 CALL(recv(rfb.client_socket, (char *)&buffer_update, sizeof(buffer_update), 0),
                     rfb_error);
-                /*if (camera_encode_buffer(app, rfb.app->openvg.video_buffer.c, ((rfb.app->width * rfb.app->height) << 1))) {
+                CALL(sem_post(&rfb.client_semaphore), rfb_error);
+
+                //TODO: to delete
+                /*if (camera_encode_buffer(app, app.openvg.video_buffer.c, ((app.width * app.height) << 1))) {
                     fprintf(stderr, 
                         "ERROR: camera_encode_buffer failed to encode h264 buffer.\n");
                     goto rfb_error;
@@ -314,6 +313,7 @@ static void *rfb_function(void *data)
         } while (1);
 
 rfb_error:
+        // TODO: to delete
         // if (camera_destroy_h264_encoder(app)) {
         //     fprintf(stderr, "ERROR: camera_destroy_h264_encoder failed\n");
         // }
@@ -323,6 +323,8 @@ rfb_error:
             rfb.client_socket = -1;
         }
     }
+
+fatal_error:    
     return NULL;
 }
 
@@ -333,36 +335,76 @@ static int rfb_init()
     update_message.number_of_rectangles = htons(1);
     update_message.x = htons(0);
     update_message.y = htons(0);
-    update_message.width = htons(rfb.app->video_width);
-    update_message.height = htons(rfb.app->video_height);
+    update_message.width = htons(app.video_width);
+    update_message.height = htons(app.video_height);
     update_message.encoding_type = htonl(RFBEncodingH264);
+    return 0;
+}
 
-    CALL(rfb.serv_socket = socket(AF_INET, SOCK_STREAM, 0), cleanup);
+static int rfb_start()
+{
+    ASSERT_INT(rfb.client_socket, ==, -1, cleanup);
+    ASSERT_INT(rfb.server_socket, ==, -1, cleanup);
+
+    CALL(rfb.server_socket = socket(AF_INET, SOCK_STREAM, 0), cleanup);
 
     const int one = 1;
-    CALL(setsockopt(rfb.serv_socket, SOL_SOCKET, SO_REUSEADDR, (char *)&one, sizeof(one)), cleanup);
+    CALL(setsockopt(rfb.server_socket, SOL_SOCKET, SO_REUSEADDR, (char *)&one, sizeof(one)), cleanup);
 
     struct sockaddr_in serv_addr;
     memset(&serv_addr, 0, sizeof(serv_addr));
     serv_addr.sin_addr.s_addr = INADDR_ANY;
-    serv_addr.sin_port = htons(rfb.app->port);
+    serv_addr.sin_port = htons(app.port);
     serv_addr.sin_family = AF_INET;
-    CALL(bind(rfb.serv_socket, (struct sockaddr *)&serv_addr, sizeof(serv_addr)), cleanup);
-    CALL(listen(rfb.serv_socket, RFB_MAX_CONNECTIONS), cleanup);
+    CALL(bind(rfb.server_socket, (struct sockaddr *)&serv_addr, sizeof(serv_addr)), cleanup);
+    CALL(listen(rfb.server_socket, RFB_MAX_CONNECTIONS), cleanup);
 
-    /*rfb.thread_res = pthread_create(&rfb.thread, NULL, rfb_function, NULL);
+    rfb.thread_res = pthread_create(&rfb.thread, NULL, rfb_function, NULL);
     if (rfb.thread_res) {
-        CALL_CUSTOM_MESSAGE(pthread_create(&rfb.thread, NULL, rfb_function, NULL), rfb.thread_res);
+        CALL_CUSTOM_MESSAGE(pthread_create, rfb.thread_res);
         goto cleanup;
-    }*/
+    }
+
+    rfb.client_semaphore_res = sem_init(&rfb.client_semaphore, 0, 0);
+    if (rfb.client_semaphore_res) {
+        CALL_CUSTOM_MESSAGE(sem_init, rfb.client_semaphore_res);
+        goto cleanup;
+    }
     return 0;
+
 cleanup:
     errno = EAGAIN;
     return -1;
 }
 
-int rfb_send_frame()
+static int rfb_is_started()
 {
+    return rfb.client_socket != -1 && rfb.server_socket != -1? 1: 0;
+}
+
+int rfb_process_frame()
+{
+    int res = 0;
+
+    DEBUG("wait for client to request buffer...");
+    CALL(sem_wait(&rfb.client_semaphore), cleanup);
+
+    struct output_t *output = rfb.output;
+    if (!output->is_started()) CALL(output->start(), cleanup);
+    int in_format = output->start_format;
+    int out_format = output->start_format;
+    if (!input.is_started()) CALL(input.start(in_format), cleanup);
+    CALL(res = input.process_frame(), cleanup);
+    uint8_t *buffer = input.get_buffer(NULL, NULL);
+    for (int k = 0; k < MAX_FILTERS && output->filters[k].out_format; k++) {
+        struct filter_t *filter = filters + output->filters[k].index;
+        in_format = out_format;
+        out_format = output->filters[k].out_format;
+        if (!filter->is_started()) CALL(filter->start(in_format, out_format), cleanup);
+        CALL(filter->process_frame(buffer), cleanup);
+        buffer = filter->get_buffer(NULL, NULL, NULL);
+    }
+
     // ----- fps
     static int frame_count = 0;
     static struct timespec t1;
@@ -373,17 +415,12 @@ int rfb_send_frame()
     clock_gettime(CLOCK_MONOTONIC, &t2);
     float d = (t2.tv_sec + t2.tv_nsec / 1000000000.0) - (t1.tv_sec + t1.tv_nsec / 1000000000.0);
     if (d > 0) {
-        rfb.app->rfb_fps = frame_count / d;
+        app.rfb_fps = frame_count / d;
     } else {
-        rfb.app->rfb_fps = frame_count;
+        app.rfb_fps = frame_count;
     }
     frame_count++;
     // -----
-
-    /*if (sem_wait(&rfb.app->mmal.h264_semaphore)) {
-        fprintf(stderr, "ERROR: sem_wait failed to wait worker_semaphore with error (%d)\n", errno); 
-        return -1;
-    }*/
 
     if (send(rfb.client_socket, (char *)&update_message, sizeof(update_message), 0) < 0) {
         fprintf(stderr, "ERROR: Can't send frame message. res: %d\n", errno);
@@ -396,51 +433,85 @@ int rfb_send_frame()
     //DEBUG("t: %d, e: %d, size: %d, len: %d", update_message.message_type,
     //  ntohl(update_message.encoding_type), sizeof(update_message), length);
 
-    /*res = pthread_mutex_lock(&rfb.app->mmal.h264_mutex);
+    /*res = pthread_mutex_lock(&app.mmal.h264_mutex);
     if (res) {
         fprintf(stderr, "ERROR: pthread_mutex_lock failed to lock h264 buffer with code %d\n", res);
         return -1;
     }*/
 
-    /*int32_t length = htonl(rfb.app->mmal.h264_buffer_length);
+    /*int32_t length = htonl(app.mmal.h264_buffer_length);
     if (send(rfb.client_socket, (char *)&length, sizeof(length), 0) < 0) {
         fprintf(stderr, "ERROR: send failed to send H264 header. res: %d\n", errno);
         return -1;
     }*/
 
-    /*if (send(rfb.client_socket, rfb.app->mmal.h264_buffer, rfb.app->mmal.h264_buffer_length, 0) < 0) {
+    /*if (send(rfb.client_socket, app.mmal.h264_buffer, app.mmal.h264_buffer_length, 0) < 0) {
         fprintf(stderr, "ERROR: send failed to send frame. res: %d\n", errno);
         return -1;
     }*/
 
-    /*res = pthread_mutex_unlock(&rfb.app->mmal.h264_mutex);
+    /*res = pthread_mutex_unlock(&app.mmal.h264_mutex);
     if (res) {
         fprintf(stderr, "ERROR: pthread_mutex_unlock failed to unlock h264 buffer with code %d\n", res);
         return -1;
     }*/
-
     return 0;
+
+cleanup:
+    errno = EAGAIN;
+    return -1;
 }
 
-static void rfb_cleanup()
+static int rfb_stop()
 {
     // shutdown the server socket terminates accept call to wait incoming connections
-    if (rfb.serv_socket > 0) {
-        int res = shutdown(rfb.serv_socket, SHUT_RDWR);
+    if (rfb.server_socket > 0) {
+        int res = shutdown(rfb.server_socket, SHUT_RDWR);
         if (res == -1 && errno != ENOTCONN) {
-            CALL_MESSAGE(shutdown(rfb.serv_socket, SHUT_RDWR));
+            CALL_MESSAGE(shutdown(rfb.server_socket, SHUT_RDWR));
+            goto stop_error;
         }
     }
 
-    if (rfb.serv_socket > 0)
-        CALL(close(rfb.serv_socket));
+    if (rfb.client_socket > 0) {
+        CALL(close(rfb.client_socket), stop_error)
+        rfb.client_socket = -1;
+    }
+
+    if (rfb.server_socket > 0) {
+        CALL(close(rfb.server_socket), stop_error);
+        rfb.server_socket = -1;
+    }
 
     if (!rfb.thread_res) {
         int res = pthread_join(rfb.thread, NULL);
         if (res != 0) {
-            CALL_CUSTOM_MESSAGE(pthread_join(rfb.thread, NULL), res);
+            CALL_CUSTOM_MESSAGE(pthread_join, res);
+            goto stop_error;
         }
+        else
+            rfb.thread_res = -1;
     }
+
+    if (!rfb.client_semaphore_res) {
+        int res = sem_destroy(&rfb.client_semaphore);
+        if (res) {
+            CALL_CUSTOM_MESSAGE(sem_destroy, res);
+            goto stop_error;
+        }
+        else
+            rfb.client_semaphore_res = -1;
+    }
+    return 0;
+
+stop_error:
+    errno = EAGAIN;
+    return -1;
+}
+
+static void rfb_cleanup()
+{
+    rfb_stop();
 }
 
 static int rfb_get_formats(const struct format_mapping_t *formats[])
@@ -457,13 +528,15 @@ void rfb_construct(struct app_state_t *app)
         i++;
 
     if (i != MAX_OUTPUTS) {
-        rfb.app = app;
         rfb.output = outputs + i;
         outputs[i].name = "rfb";
         outputs[i].context = &rfb;
         outputs[i].init = rfb_init;
-        //outputs[i].render = sdl_render_yuv;
-        outputs[i].cleanup = rfb_cleanup;
+        outputs[i].start = rfb_start;
+        outputs[i].is_started = rfb_is_started;
+        outputs[i].process_frame = rfb_process_frame;
+        outputs[i].stop = rfb_stop;        
         outputs[i].get_formats = rfb_get_formats;
+        outputs[i].cleanup = rfb_cleanup;
     }
 }

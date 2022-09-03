@@ -58,6 +58,6 @@ void utils_get_cpu_load(char * buffer, struct cpu_state_t *cpu);
 void utils_get_memory_load(char * buffer, struct memory_state_t *memory);
 void utils_get_temperature(char * buffer, struct temperature_state_t *temperature);
 
-int utils_get_worker_buffer(struct app_state_t *app);
+int utils_get_worker_buffer();
 
 #endif //utils_h

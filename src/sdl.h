@@ -41,7 +41,6 @@
 #include <SDL.h>
 
 struct sdl_state_t {
-    struct app_state_t *app;
     struct output_t *output;
 
     uint8_t* buffer;
@@ -51,6 +50,6 @@ struct sdl_state_t {
     SDL_Surface *surface;
 };
 
-void sdl_construct(struct app_state_t *app);
+void sdl_construct();
 
 #endif // sdl_h

@@ -39,16 +39,14 @@ KHASH_T(argvs_hash_t) *h;
 int is_abort = 0;
 static int exit_code = EX_SOFTWARE;
 
+struct app_state_t app;
 struct input_t input;
 struct filter_t filters[MAX_FILTERS];
 struct output_t outputs[MAX_OUTPUTS];
 
 void *worker_function(void *data)
 {
-    struct app_state_t* app = (struct app_state_t*) data;
-    if (app->verbose) {
-        DEBUG("Worker thread has been started");
-    }
+    DEBUG("Worker thread has been started");
     while (!is_abort) {
         // ----- fps
         static int frame_count = 0;
@@ -60,20 +58,20 @@ void *worker_function(void *data)
         clock_gettime(CLOCK_MONOTONIC, &t2);
         float d = (t2.tv_sec + t2.tv_nsec / 1000000000.0) - (t1.tv_sec + t1.tv_nsec / 1000000000.0);
         if (d > 0) {
-            app->worker_fps = frame_count / d;
+            app.worker_fps = frame_count / d;
         } else {
-            app->worker_fps = frame_count;
+            app.worker_fps = frame_count;
         }
         frame_count++;
         // -----
 
     
-        CALL(sem_wait(&app->worker_semaphore));
+        CALL(sem_wait(&app.worker_semaphore));
 
 #ifdef TENSORFLOW
-        tensorflow_process(app);
+        tensorflow_process();
 #elif DARKNET
-        darknet_process(app);
+        darknet_process();
 #endif
     }
     return NULL;
@@ -119,48 +117,45 @@ static int main_function()
 {
     int res;
     char buffer[MAX_DATA];
-    struct app_state_t app;
 
-    app_set_default_state(&app);
-    app_construct(&app);
-    CALL(app_init(&app), error);
+    app_set_default_state();
+    app_construct();
+    CALL(app_init(), error);
 
-    if (app.verbose) {
-        DEBUG("camera_num: %d", app.camera_num);
-        DEBUG("camera_name: %s", app.camera_name);
-        DEBUG("camera max size: %d, %d", app.camera_max_width, app.camera_max_height);
-        DEBUG("video size: %d, %d", app.video_width, app.video_height);
-        DEBUG("video format: %s", app_get_video_format_str(app.video_format));
-        DEBUG("video output: %s", app_get_video_output_str(app.video_output));
-        DEBUG("window size: %d, %d", app.window_width, app.window_height);
-        DEBUG("worker size: %d, %d", app.worker_width, app.worker_height);
-    }
+    DEBUG("camera_num: %d", app.camera_num);
+    DEBUG("camera_name: %s", app.camera_name);
+    DEBUG("camera max size: %d, %d", app.camera_max_width, app.camera_max_height);
+    DEBUG("video size: %d, %d", app.video_width, app.video_height);
+    DEBUG("video format: %s", app_get_video_format_str(app.video_format));
+    DEBUG("video output: %s", app_get_video_output_str(app.video_output));
+    DEBUG("window size: %d, %d", app.window_width, app.window_height);
+    DEBUG("worker size: %d, %d", app.worker_width, app.worker_height);
 
 #ifdef CONTROL
-    if (control_init(&app)) {
+    if (control_init()) {
         fprintf(stderr, "ERROR: Failed to initialise control gpio\n");
         goto error;
     }
 #endif // CONTROL
 
 #ifdef OPENVG
-    if (dispmanx_init(&app)) {
+    if (dispmanx_init()) {
         fprintf(stderr, "ERROR: Failed to initialise dispmanx window\n");
         goto error;
     }
-    if (openvg_init(&app)) {
+    if (openvg_init()) {
         fprintf(stderr, "ERROR: Failed to initialise OpenVG\n");
         goto error;
     }
 #endif //OPENVG
 
 #ifdef TENSORFLOW
-    if (tensorflow_create(&app)) {
+    if (tensorflow_create()) {
         fprintf(stderr, "ERROR: Failed to create tensorflow\n");
         goto error;
     }
 #elif DARKNET
-    if (darknet_create(&app)) {
+    if (darknet_create()) {
         fprintf(stderr, "ERROR: Failed to create darknet\n");
         goto error;
     }
@@ -194,7 +189,7 @@ static int main_function()
     //     goto error;
     // }
 
-    res = pthread_mutex_init(&app.buffer_mutex, NULL);
+    res = pthread_mutex_init(app.buffer_mutex, NULL);
     if (res) {
         fprintf(stderr, "ERROR: pthread_mutex_init failed to init buffer_mutex with code: %d\n", res);
         goto error;
@@ -203,7 +198,7 @@ static int main_function()
     CALL(sem_init(&app.buffer_semaphore, 0, 0), error);
     CALL(sem_init(&app.worker_semaphore, 0, 0), error);
 
-    app.worker_thread_res = pthread_create(&app.worker_thread, NULL, worker_function, &app);
+    app.worker_thread_res = pthread_create(&app.worker_thread, NULL, worker_function);
     if (app.worker_thread_res) {
 	    fprintf(stderr,
             "ERROR: Failed to create worker thread, return code: %d\n", 
@@ -336,7 +331,7 @@ static int main_function()
 #endif //OPENVG
 
 #ifdef CONTROL
-        control_ssh_key(&app);
+        control_ssh_key();
 #endif // CONTROL
     }
     fprintf(stdout, "\n");
@@ -347,14 +342,14 @@ error:
     is_abort = 1;
 
 #ifdef CONTROL
-    control_destroy(&app);
+    control_destroy();
 #endif //CONTROL
 
     //TODO: move to something like camara start
     // if (app.video_output == VIDEO_OUTPUT_STDOUT) {
     //    CALL(res = utils_camera_cleanup_h264_encoder(&app));
 
-    app_cleanup(&app);
+    app_cleanup();
 
     DEBUG("worker_semaphore");
     CALL(sem_post(&app.worker_semaphore));
@@ -399,17 +394,16 @@ error:
     // }
 
 #ifdef TENSORFLOW
-    tensorflow_destroy(&app);
+    tensorflow_destroy();
 #elif DARKNET
-    darknet_destroy(&app);
+    darknet_destroy();
 #endif
 
 #ifdef OPENVG
-    openvg_destroy(&app);
-    dispmanx_destroy(&app);
+    openvg_destroy();
+    dispmanx_destroy();
 #endif
     DEBUG("exit");
-
     return exit_code;
 }
 

@@ -30,9 +30,10 @@ static struct format_mapping_t file_formats[] = {
 };
 
 struct file_state_t file = {
-    .app = NULL,
     .output = NULL
 };
+
+extern struct app_state_t app;
 extern struct input_t input;
 extern struct filter_t filters[MAX_FILTERS];
 extern struct output_t outputs[MAX_OUTPUTS];
@@ -65,7 +66,7 @@ static int file_process_frame()
             break;
     }
     if (length) {
-        return utils_write_file(file.app->output_path, buffer, length);
+        return utils_write_file(app.output_path, buffer, length);
     }
     return 0;
 
@@ -85,20 +86,20 @@ static int file_get_formats(const struct format_mapping_t *formats[])
     return ARRAY_SIZE(file_formats);
 }
 
-void file_construct(struct app_state_t *app)
+void file_construct()
 {
     int i = 0;
     while (i < MAX_OUTPUTS && outputs[i].context != NULL)
         i++;
 
     if (i != MAX_OUTPUTS) {
-        file.app = app;
         file.output = outputs + i;
         outputs[i].name = "file";
         outputs[i].context = &file;
         outputs[i].init = file_init;
-        outputs[i].process_frame = file_process_frame;
         outputs[i].cleanup = file_cleanup;
+
+        outputs[i].process_frame = file_process_frame;
         outputs[i].get_formats = file_get_formats;
     }
 }

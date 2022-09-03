@@ -32,7 +32,6 @@ static struct format_mapping_t sdl_formats[] = {
 };
 
 struct sdl_state_t sdl = {
-    .app = NULL,
     .output = NULL,
     .buffer = NULL,
     .buffer_len = 0,
@@ -40,6 +39,8 @@ struct sdl_state_t sdl = {
     //.renderer = NULL,
     .surface = NULL
 };
+
+extern struct app_state_t app;
 extern struct input_t input;
 extern struct filter_t filters[MAX_FILTERS];
 extern struct output_t outputs[MAX_OUTPUTS];
@@ -124,12 +125,20 @@ static int sdl_init()
 #endif //YUV_MEMORY_OPTIMIZATION
 
     SDL_INT_CALL(SDL_Init(SDL_INIT_VIDEO), cleanup);
+    return 0;
 
+cleanup:
+    if (!errno) errno = EAGAIN;
+    return -1;
+}
+
+static int sdl_start()
+{
     SDL_CALL(sdl.window = SDL_CreateWindow(
         "SDL Video viewer",
         SDL_WINDOWPOS_UNDEFINED,
         SDL_WINDOWPOS_UNDEFINED,
-        sdl.app->video_width, sdl.app->video_height,
+        app.video_width, app.video_height,
         0 //TODO: SDL_WINDOW_OPENGL
     ), cleanup);
 
@@ -139,7 +148,7 @@ static int sdl_init()
     //     SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC
     // ), cleanup);
 
-    int len = sdl.app->video_width * sdl.app->video_height * 3;
+    int len = app.video_width * app.video_height * 3;
     uint8_t *data = malloc(len);
     if (data == NULL) {
         errno = ENOMEM;
@@ -149,10 +158,10 @@ static int sdl_init()
     sdl.buffer = data;
     sdl.buffer_len = len;
     SDL_CALL(sdl.surface = SDL_CreateRGBSurfaceFrom(data,
-        sdl.app->video_width,
-        sdl.app->video_height,
+        app.video_width,
+        app.video_height,
         24,
-        sdl.app->video_width * 3,
+        app.video_width * 3,
         R_888_MASK, G_888_MASK, B_888_MASK, 0
     ), cleanup);
     SDL_SetEventFilter(filter, NULL);
@@ -161,6 +170,38 @@ static int sdl_init()
 cleanup:
     if (!errno) errno = EAGAIN;
     return -1;
+}
+
+static int sdl_is_started()
+{
+    return sdl.surface? 1: 0;
+}
+
+static int sdl_stop()
+{
+    if (sdl.surface) {
+        SDL_FreeSurface(sdl.surface);
+        sdl.surface = NULL;
+    }
+    if (sdl.buffer) {
+        free(sdl.buffer);
+        sdl.buffer = NULL;
+    }
+    /*if (sdl.renderer) {
+        SDL_DestroyRenderer(sdl.renderer);
+        sdl.renderer = NULL;
+    }*/
+    if (sdl.window) {
+        SDL_DestroyWindow(sdl.window);
+        sdl.window = NULL;
+    }
+    return 0;
+}
+
+static void sdl_cleanup()
+{
+    if (sdl_is_started()) sdl_stop();
+    SDL_Quit();
 }
 
 static int sdl_render()
@@ -189,6 +230,7 @@ static int sdl_process_frame()
 {
     int res = 0;
     struct output_t *output = sdl.output;
+    if (!output->is_started()) CALL(output->start(), cleanup);
     int in_format = output->start_format;
     int out_format = output->start_format;
     if (!input.is_started()) CALL(input.start(in_format), cleanup);
@@ -202,8 +244,8 @@ static int sdl_process_frame()
         CALL(filter->process_frame(buffer), cleanup);
         buffer = filter->get_buffer(NULL, NULL, NULL);
     }
-    int w = sdl.app->video_width;
-    int h = sdl.app->video_height;
+    int w = app.video_width;
+    int h = app.video_height;
     int size = w * h;
     for (int i = 0; i < size; i += w)
         for (int x = 0; x < w; x += 2) {
@@ -218,27 +260,6 @@ cleanup:
     return -1;
 }
 
-static void sdl_cleanup()
-{
-    if (sdl.surface) {
-        SDL_FreeSurface(sdl.surface);
-        sdl.surface = NULL;
-    }
-    if (sdl.buffer) {
-        free(sdl.buffer);
-        sdl.buffer = NULL;
-    }
-    /*if (sdl.renderer) {
-        SDL_DestroyRenderer(sdl.renderer);
-        sdl.renderer = NULL;
-    }*/
-    if (sdl.window) {
-        SDL_DestroyWindow(sdl.window);
-        sdl.window = NULL;
-    }
-    SDL_Quit();
-}
-
 static int sdl_get_formats(const struct format_mapping_t *formats[])
 {
     if (formats != NULL)
@@ -246,20 +267,22 @@ static int sdl_get_formats(const struct format_mapping_t *formats[])
     return ARRAY_SIZE(sdl_formats);
 }
 
-void sdl_construct(struct app_state_t *app)
+void sdl_construct()
 {
     int i = 0;
     while (i < MAX_OUTPUTS && outputs[i].context != NULL)
         i++;
 
     if (i != MAX_OUTPUTS) {
-        sdl.app = app;
         sdl.output = outputs + i;
         outputs[i].name = "sdl";
         outputs[i].context = &sdl;
         outputs[i].init = sdl_init;
-        outputs[i].process_frame = sdl_process_frame;
         outputs[i].cleanup = sdl_cleanup;
+        outputs[i].start = sdl_start;
+        outputs[i].is_started = sdl_is_started;        
+        outputs[i].stop = sdl_stop;        
+        outputs[i].process_frame = sdl_process_frame;
         outputs[i].get_formats = sdl_get_formats;
     }
 }

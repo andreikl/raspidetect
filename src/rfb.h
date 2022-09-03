@@ -2,15 +2,17 @@
 #define rfb_h
 
 struct rfb_state_t {
-    struct app_state_t *app;
     struct output_t *output;
 
     pthread_t thread;
     int thread_res;
-    int serv_socket;
+    int server_socket;
+
     int client_socket;
+    sem_t client_semaphore;
+    int client_semaphore_res;
 };
 
-void rfb_construct(struct app_state_t *app);
+void rfb_construct();
 
 #endif // rfb_h

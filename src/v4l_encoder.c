@@ -10,7 +10,7 @@
 #ifdef V4L_ENCODER_WRAP
     int NvBufferMemSyncForDevice(int dmabuf_fd, unsigned int plane, void **pVirtAddr)
     {
-        DEBUG("wrap NvBufferMemSyncForDevice, fd: %d, plane: %d", dmabuf_fd, plane);
+        //DEBUG("wrap NvBufferMemSyncForDevice, fd: %d, plane: %d", dmabuf_fd, plane);
         return 0;
     }
 #endif
@@ -33,7 +33,6 @@ static struct format_mapping_t v4l_output_formats[] = {
 static struct format_mapping_t *v4l_input_format = NULL;
 static struct format_mapping_t *v4l_output_format = NULL;
 static struct v4l_encoder_state_t v4l = {
-    .app = NULL,
     .dev_id = -1,
     .in_bufs = {
         REP(0, 0, 10, { {MAP_FAILED, -1}, {MAP_FAILED, -1}, {MAP_FAILED, -1} })
@@ -46,6 +45,7 @@ static struct v4l_encoder_state_t v4l = {
     .out_buf_used = 0
 };
 
+extern struct app_state_t app;
 extern struct filter_t filters[MAX_FILTERS];
 
 static int ioctl_enum(int fd, int request, void *arg)
@@ -111,17 +111,17 @@ static int v4l_is_supported_resolution(int format)
     while (res >= 0) {
         if (frmsize.type == V4L2_FRMSIZE_TYPE_DISCRETE) {
             if (
-                frmsize.discrete.width == v4l.app->video_width &&
-                frmsize.discrete.height == v4l.app->video_height
+                frmsize.discrete.width == app.video_width &&
+                frmsize.discrete.height == app.video_height
             ) {
                 is_found = 1;
             }
             if (
-                frmsize.discrete.width > v4l.app->camera_max_width || 
-                frmsize.discrete.height > v4l.app->camera_max_height
+                frmsize.discrete.width > app.camera_max_width || 
+                frmsize.discrete.height > app.camera_max_height
             ) {
-                v4l.app->camera_max_width = frmsize.discrete.width;
-                v4l.app->camera_max_height = frmsize.discrete.height;
+                app.camera_max_width = frmsize.discrete.width;
+                app.camera_max_height = frmsize.discrete.height;
             }
             // DEBUG("V4L2_FRMSIZE_TYPE_DISCRETE %dx%d",
             //     frmsize.discrete.width, frmsize.discrete.height);
@@ -131,21 +131,21 @@ static int v4l_is_supported_resolution(int format)
             frmsize.type == V4L2_FRMSIZE_TYPE_CONTINUOUS
         ) {
             if (
-                v4l.app->video_width % frmsize.stepwise.step_width == 0 &&
-                v4l.app->video_height % frmsize.stepwise.step_height == 0 &&
-                v4l.app->video_width >= frmsize.stepwise.min_width &&
-                v4l.app->video_height >= frmsize.stepwise.min_height &&
-                v4l.app->video_width <= frmsize.stepwise.max_width &&
-                v4l.app->video_height <= frmsize.stepwise.max_height
+                app.video_width % frmsize.stepwise.step_width == 0 &&
+                app.video_height % frmsize.stepwise.step_height == 0 &&
+                app.video_width >= frmsize.stepwise.min_width &&
+                app.video_height >= frmsize.stepwise.min_height &&
+                app.video_width <= frmsize.stepwise.max_width &&
+                app.video_height <= frmsize.stepwise.max_height
             ) {
                 is_found = 1;
             }
             if (
-                frmsize.stepwise.max_width > v4l.app->camera_max_width || 
-                frmsize.stepwise.max_height > v4l.app->camera_max_height
+                frmsize.stepwise.max_width > app.camera_max_width || 
+                frmsize.stepwise.max_height > app.camera_max_height
             ) {
-                v4l.app->camera_max_width = frmsize.stepwise.max_width;
-                v4l.app->camera_max_height = frmsize.stepwise.max_height;
+                app.camera_max_width = frmsize.stepwise.max_width;
+                app.camera_max_height = frmsize.stepwise.max_height;
             }
             // DEBUG("V4L2_FRMSIZE_TYPE_STEPWISE %dx%d",
             //     frmsize.stepwise.max_width, frmsize.stepwise.max_height);
@@ -198,15 +198,14 @@ static int v4l_init()
                     cleanup);
 
                 if (f->is_supported) {
-                    if (v4l.app->verbose)
-                        DEBUG("%s(%c%c%c%c) and resolution(%dx%d) have been found!",
-                            "encoder input pixel format",
-                            GET_B(fmt.pixelformat),
-                            GET_G(fmt.pixelformat),
-                            GET_R(fmt.pixelformat),
-                            GET_A(fmt.pixelformat),
-                            v4l.app->video_width,
-                            v4l.app->video_height);
+                    DEBUG("%s(%c%c%c%c) and resolution(%dx%d) have been found!",
+                        "encoder input pixel format",
+                        GET_B(fmt.pixelformat),
+                        GET_G(fmt.pixelformat),
+                        GET_R(fmt.pixelformat),
+                        GET_A(fmt.pixelformat),
+                        app.video_width,
+                        app.video_height);
                     is_found = 1;
                 }
                 break;
@@ -237,15 +236,14 @@ static int v4l_init()
                     cleanup);
 
                 if (f->is_supported) {
-                    if (v4l.app->verbose)
-                        DEBUG("%s(%c%c%c%c) and resolution(%dx%d) have been found!",
-                            "encoder output pixel format",
-                            GET_B(fmt.pixelformat),
-                            GET_G(fmt.pixelformat),
-                            GET_R(fmt.pixelformat),
-                            GET_A(fmt.pixelformat),
-                            v4l.app->video_width,
-                            v4l.app->video_height);
+                    DEBUG("%s(%c%c%c%c) and resolution(%dx%d) have been found!",
+                        "encoder output pixel format",
+                        GET_B(fmt.pixelformat),
+                        GET_G(fmt.pixelformat),
+                        GET_R(fmt.pixelformat),
+                        GET_A(fmt.pixelformat),
+                        app.video_width,
+                        app.video_height);
                     is_found = 1;
                 }
                 break;
@@ -301,8 +299,8 @@ static int v4l_start(int input_format, int output_format)
     struct v4l2_format fmt;
     memset(&fmt, 0, sizeof(fmt));
     fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
-    fmt.fmt.pix_mp.width = v4l.app->video_width;
-    fmt.fmt.pix_mp.height = v4l.app->video_height;
+    fmt.fmt.pix_mp.width = app.video_width;
+    fmt.fmt.pix_mp.height = app.video_height;
     fmt.fmt.pix_mp.pixelformat = v4l_output_format->internal_format;
     fmt.fmt.pix_mp.num_planes = 1;
     GEN_CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_S_FMT, &fmt), cleanup);
@@ -311,8 +309,8 @@ static int v4l_start(int input_format, int output_format)
 
     memset(&fmt, 0, sizeof(fmt));
     fmt.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
-    fmt.fmt.pix_mp.width = v4l.app->video_width;
-    fmt.fmt.pix_mp.height = v4l.app->video_height;
+    fmt.fmt.pix_mp.width = app.video_width;
+    fmt.fmt.pix_mp.height = app.video_height;
     fmt.fmt.pix_mp.pixelformat = v4l_input_format->internal_format;
     fmt.fmt.pix_mp.num_planes = 3;
     // DEBUG("fmt.type[%d]", fmt.type);
@@ -511,12 +509,12 @@ static int v4l_process_frame(uint8_t *buffer)
     else
         v4l.in_curr_buf++;
 
-    DEBUG("queue input frame, current buf %d", cb);
+    //DEBUG("queue input frame, current buf %d", cb);
     uint8_t *yi = v4l.in_bufs[cb][0].buf;
     uint8_t *ui = v4l.in_bufs[cb][1].buf;
     uint8_t *vi = v4l.in_bufs[cb][2].buf;
-    for (int i = 0, y = 0; y < v4l.app->video_height; y++) {
-        for (int x = 0; x < v4l.app->video_width; x += 2, i += 4) {
+    for (int i = 0, y = 0; y < app.video_height; y++) {
+        for (int x = 0; x < app.video_width; x += 2, i += 4) {
             uint8_t y0 = buffer[i];
             uint8_t u01 = buffer[i + 1];
             uint8_t y1 = buffer[i + 2];
@@ -534,9 +532,9 @@ static int v4l_process_frame(uint8_t *buffer)
     }
 
     in_buf.index = cb;
-    in_buf.m.planes[0].bytesused = v4l.in_strides[0] * v4l.app->video_height;
-    in_buf.m.planes[1].bytesused = v4l.in_strides[1] * v4l.app->video_height;
-    in_buf.m.planes[2].bytesused = v4l.in_strides[2] * v4l.app->video_height;
+    in_buf.m.planes[0].bytesused = v4l.in_strides[0] * app.video_height;
+    in_buf.m.planes[1].bytesused = v4l.in_strides[1] * app.video_height;
+    in_buf.m.planes[2].bytesused = v4l.in_strides[2] * app.video_height;
     for (int i = 0; i < 3; i++) {
         CALL(NvBufferMemSyncForDevice(v4l.in_bufs[cb][i].fd, i, (void **)&v4l.in_bufs[cb][i].buf),
             cleanup);
@@ -619,15 +617,13 @@ static int v4l_get_out_formats(const struct format_mapping_t *formats[])
     return ARRAY_SIZE(v4l_output_formats);
 }
 
-void v4l_encoder_construct(struct app_state_t *app)
+void v4l_encoder_construct()
 {
     int i = 0;
     while (i < MAX_FILTERS && filters[i].context != NULL)
         i++;
 
     if (i != MAX_FILTERS) {
-        v4l.app = app;
-
         filters[i].name = "v4l_encoder";
         filters[i].context = &v4l;
         filters[i].init = v4l_init;

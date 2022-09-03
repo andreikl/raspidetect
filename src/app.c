@@ -21,6 +21,7 @@
 #include "main.h"
 #include "utils.h"
 
+extern struct app_state_t app;
 extern struct input_t input;
 extern struct filter_t filters[MAX_FILTERS];
 extern struct output_t outputs[MAX_OUTPUTS];
@@ -109,70 +110,70 @@ error:
     return -1;
 }
 
-void app_set_default_state(struct app_state_t *app)
+void app_set_default_state()
 {
-    memset(app, 0, sizeof(struct app_state_t));
-    app->video_width = utils_read_int_value(VIDEO_WIDTH, VIDEO_WIDTH_DEF);
-    app->video_height = utils_read_int_value(VIDEO_HEIGHT, VIDEO_HEIGHT_DEF);
+    memset(&app, 0, sizeof(struct app_state_t));
+    app.video_width = utils_read_int_value(VIDEO_WIDTH, VIDEO_WIDTH_DEF);
+    app.video_height = utils_read_int_value(VIDEO_HEIGHT, VIDEO_HEIGHT_DEF);
     const char* format = utils_read_str_value(VIDEO_FORMAT, VIDEO_FORMAT_DEF);
-    app->video_format = app_get_video_format_int(format);
+    app.video_format = app_get_video_format_int(format);
     const char *output = utils_read_str_value(VIDEO_OUTPUT, VIDEO_OUTPUT_DEF);
-    app->video_output = app_get_video_output_int(output);
+    app.video_output = app_get_video_output_int(output);
 
-    app->port = utils_read_int_value(PORT, PORT_DEF);
-    app->worker_width = utils_read_int_value(WORKER_WIDTH, WORKER_WIDTH_DEF);
-    app->worker_height = utils_read_int_value(WORKER_HEIGHT, WORKER_HEIGHT_DEF);
-    app->worker_total_objects = 10;
-    app->worker_thread_res = -1;
-    app->verbose = utils_read_int_value(VERBOSE, VERBOSE_DEF);
-    app->output_path = utils_read_str_value(OUTPUT_PATH, OUTPUT_PATH_DEF);
+    app.port = utils_read_int_value(PORT, PORT_DEF);
+    app.worker_width = utils_read_int_value(WORKER_WIDTH, WORKER_WIDTH_DEF);
+    app.worker_height = utils_read_int_value(WORKER_HEIGHT, WORKER_HEIGHT_DEF);
+    app.worker_total_objects = 10;
+    app.worker_thread_res = -1;
+    app.verbose = utils_read_int_value(VERBOSE, VERBOSE_DEF);
+    app.output_path = utils_read_str_value(OUTPUT_PATH, OUTPUT_PATH_DEF);
 #ifdef TENSORFLOW
-    app->model_path = utils_read_str_value(TFL_MODEL_PATH, TFL_MODEL_PATH_DEF);
+    app.model_path = utils_read_str_value(TFL_MODEL_PATH, TFL_MODEL_PATH_DEF);
 #elif DARKNET
-    app->model_path = utils_read_str_value(DN_MODEL_PATH, DN_MODEL_PATH_DEF);
-    app->config_path = utils_read_str_value(DN_CONFIG_PATH, DN_CONFIG_PATH_DEF);
+    app.model_path = utils_read_str_value(DN_MODEL_PATH, DN_MODEL_PATH_DEF);
+    app.config_path = utils_read_str_value(DN_CONFIG_PATH, DN_CONFIG_PATH_DEF);
 #endif
 }
 
-void app_construct(struct app_state_t *app)
+void app_construct()
 {
 #ifdef V4L
-    v4l_construct(app);
+    v4l_construct();
 #endif //V4L
 
-    yuv_converter_construct(app);
+    yuv_converter_construct();
 
 #ifdef V4L_ENCODER
-    v4l_encoder_construct(app);
+    v4l_encoder_construct();
 #elif MMAL_ENCODER
-    mmal_encoder_construct(app);
+    mmal_encoder_construct();
 #endif
 
-    if ((app->video_output & VIDEO_OUTPUT_FILE) == VIDEO_OUTPUT_FILE)
-        file_construct(app);
+    if ((app.video_output & VIDEO_OUTPUT_FILE) == VIDEO_OUTPUT_FILE)
+        file_construct();
 
 #ifdef SDL
-    if ((app->video_output & VIDEO_OUTPUT_SDL) == VIDEO_OUTPUT_SDL)
-        sdl_construct(app);
+    if ((app.video_output & VIDEO_OUTPUT_SDL) == VIDEO_OUTPUT_SDL)
+        sdl_construct();
 #endif //SDL
 
 #ifdef RFB
-    if ((app->video_output & VIDEO_OUTPUT_RFB) == VIDEO_OUTPUT_RFB)
-        rfb_construct(&app);
+    if ((app.video_output & VIDEO_OUTPUT_RFB) == VIDEO_OUTPUT_RFB)
+        rfb_construct();
 #endif //RFB
 }
 
-void app_cleanup(struct app_state_t *app)
+void app_cleanup()
 {
     for (int i = 0; i < MAX_OUTPUTS && outputs[i].context != NULL; i++) {
-        outputs[i].cleanup(&app);
+        outputs[i].cleanup();
     }
     for (int i = 0; i < MAX_FILTERS && filters[i].context != NULL; i++) {
         if (filters[i].is_started) CALL(filters[i].stop())
-        filters[i].cleanup(&app);
+        filters[i].cleanup();
     }
     if (input.is_started) CALL(input.stop());
-    input.cleanup(&app);
+    input.cleanup();
 }
 
 #define BFS_NODE_FREE(x)
@@ -183,7 +184,6 @@ struct bfs_node_t {
 KLIST_INIT(bfs_qeue_t, struct bfs_node_t, BFS_NODE_FREE)
 
 static int find_path(
-    struct app_state_t *app,
     const struct format_mapping_t* in_f,
     const struct format_mapping_t* out_f,
     struct output_t* output)
@@ -270,7 +270,7 @@ static int find_path(
         }
     }
 
-    // if (app->verbose) {
+    // if (app.verbose) {
     //     char buffer[MAX_STRING], tmp[MAX_STRING];;
 
     //     DEBUG("adjacency matrix for input(%s) and output(%s)",
@@ -362,22 +362,24 @@ static int find_path(
     return distance;
 }
 
-int app_init(struct app_state_t *app)
+int app_init()
 {
+    DEBUG("input[%s].init...", input.name);
     CALL(input.init(), error);
+
     for (int i = 0; i < MAX_OUTPUTS && outputs[i].context != NULL; i++) {
+        DEBUG("output[%s].init...", outputs[i].name);
         CALL(outputs[i].init(), error);
     }
         
-
     for (int i = 0; i < MAX_FILTERS && filters[i].context != NULL; i++) {
-        DEBUG("filters[%s].init", filters[i].name);
-        CALL(filters[i].init(&app), error);
+        DEBUG("filters[%s].init...", filters[i].name);
+        CALL(filters[i].init(), error);
     }
 
     const struct format_mapping_t* in_fs = NULL;
     int in_fs_len = input.get_formats(&in_fs);
-    if (app->verbose) {
+    if (app.verbose) {
         char buffer1[MAX_STRING];
         char buffer2[MAX_STRING];
 
@@ -452,11 +454,11 @@ int app_init(struct app_state_t *app)
                 if (!out_f->is_supported)
                     continue;
 
-                find_path(app, in_f, out_f, outputs + i);
+                find_path(in_f, out_f, outputs + i);
             }
         }
     }
-    if (app->verbose) {
+    if (app.verbose) {
         char buffer[MAX_STRING];
         for (int i = 0; i < MAX_OUTPUTS && outputs[i].context != NULL; i++) {
             if (outputs[i].start_format != 0) {

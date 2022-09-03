@@ -49,6 +49,7 @@
 #define GPIO_PULLCLK0(gpio) *(gpio + 38) // Pull up/pull down cloc
 
 static int kb_left = 0, kb_up = 0, kb_right = 0, kb_down = 0;
+extern struct app_state_t app;
 
 // static void set_mode(int want_key)
 // {
@@ -110,7 +111,7 @@ static int utils_kbhit(int *x, int *y, int *z)
     return characters_buffered;
 }
 
-int control_init(struct app_state_t *app)
+int control_init()
 {
     //set_mode(1);
 
@@ -138,72 +139,72 @@ int control_init(struct app_state_t *app)
     }
 
     // Always use volatile pointer!
-    app->control.gpio = (volatile unsigned *)gpio_map;
+    app.control.gpio = (volatile unsigned *)gpio_map;
 
-    INP_GPIO(app->control.gpio, GPIO_A1); // must use INP_GPIO before we can use OUT_GPIO
-    OUT_GPIO(app->control.gpio, GPIO_A1);
+    INP_GPIO(app.control.gpio, GPIO_A1); // must use INP_GPIO before we can use OUT_GPIO
+    OUT_GPIO(app.control.gpio, GPIO_A1);
 
-    INP_GPIO(app->control.gpio, GPIO_A2);
-    OUT_GPIO(app->control.gpio, GPIO_A2);
+    INP_GPIO(app.control.gpio, GPIO_A2);
+    OUT_GPIO(app.control.gpio, GPIO_A2);
 
-    INP_GPIO(app->control.gpio, GPIO_B1);
-    OUT_GPIO(app->control.gpio, GPIO_B1);
+    INP_GPIO(app.control.gpio, GPIO_B1);
+    OUT_GPIO(app.control.gpio, GPIO_B1);
 
-    INP_GPIO(app->control.gpio, GPIO_B2);
-    OUT_GPIO(app->control.gpio, GPIO_B2);
+    INP_GPIO(app.control.gpio, GPIO_B2);
+    OUT_GPIO(app.control.gpio, GPIO_B2);
 
     return 0;
 }
 
-static void move_forward_start(struct app_state_t *app)
+static void move_forward_start()
 {
     DEBUG("move_forward_start");
-    GPIO_SET(app->control.gpio) = (1 << GPIO_A1) | (1 << GPIO_B1);
+    GPIO_SET(app.control.gpio) = (1 << GPIO_A1) | (1 << GPIO_B1);
 }
 
-static void move_forward_stop(struct app_state_t *app)
+static void move_forward_stop()
 {
     DEBUG("move_forward_stop");
-    GPIO_CLR(app->control.gpio) = (1 << GPIO_A1) | (1 << GPIO_B1);
+    GPIO_CLR(app.control.gpio) = (1 << GPIO_A1) | (1 << GPIO_B1);
 }
 
-static void move_backwards_start(struct app_state_t *app)
+static void move_backwards_start()
 {
     DEBUG("move_backwards_start");
-    GPIO_SET(app->control.gpio) = (1 << GPIO_A2) | (1 << GPIO_B2);
+    GPIO_SET(app.control.gpio) = (1 << GPIO_A2) | (1 << GPIO_B2);
 }
 
-static void move_backwards_stop(struct app_state_t *app)
+static void move_backwards_stop()
 {
     DEBUG("move_backwards_stop");
-    GPIO_CLR(app->control.gpio) = (1 << GPIO_A2) | (1 << GPIO_B2);
+    GPIO_CLR(app.control.gpio) = (1 << GPIO_A2) | (1 << GPIO_B2);
 }
 
-static void move_left_start(struct app_state_t *app)
+static void move_left_start()
 {
     DEBUG("move_left_start");
-    GPIO_SET(app->control.gpio) = (1 << GPIO_A2) | (1 << GPIO_B1);
+    GPIO_SET(app.control.gpio) = (1 << GPIO_A2) | (1 << GPIO_B1);
 }
 
-static void move_left_stop(struct app_state_t *app)
+static void move_left_stop()
 {
     DEBUG("move_left_stop");
-    GPIO_CLR(app->control.gpio) = (1 << GPIO_A2) | (1 << GPIO_B1);
+    GPIO_CLR(app.control.gpio) = (1 << GPIO_A2) | (1 << GPIO_B1);
 }
 
-static void move_right_start(struct app_state_t *app)
+static void move_right_start()
 {
     DEBUG("move_right_start");
-    GPIO_SET(app->control.gpio) = (1 << GPIO_A1) | (1 << GPIO_B2);
+    GPIO_SET(app.control.gpio) = (1 << GPIO_A1) | (1 << GPIO_B2);
 }
 
-static void move_right_stop(struct app_state_t *app)
+static void move_right_stop()
 {
     DEBUG("move_right_stop");
-    GPIO_CLR(app->control.gpio) = (1 << GPIO_A1) | (1 << GPIO_B2);
+    GPIO_CLR(app.control.gpio) = (1 << GPIO_A1) | (1 << GPIO_B2);
 }
 
-static int control_stop_all(struct app_state_t *app)
+static int control_stop_all()
 {
     if (kb_left) {
         kb_left = 0;
@@ -224,7 +225,7 @@ static int control_stop_all(struct app_state_t *app)
     return 0;
 }
 
-int control_ssh_key(struct app_state_t *app)
+int control_ssh_key()
 {
     int x;
     int y;
@@ -289,7 +290,7 @@ int control_ssh_key(struct app_state_t *app)
     return 0;
 }
 
-int control_vnc_key(struct app_state_t *app, int down, int key)
+int control_vnc_key(int down, int key)
 {
     int is_left = 0, is_up = 0, is_right = 0, is_down = 0;
     if (key == 65361) {
@@ -332,7 +333,7 @@ int control_vnc_key(struct app_state_t *app, int down, int key)
     return 0;
 }
 
-int control_destroy(struct app_state_t *app)
+int control_destroy()
 {
     int res = control_stop_all(app);
     return res;

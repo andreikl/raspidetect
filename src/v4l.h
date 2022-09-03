@@ -2,8 +2,6 @@
 #define v4l_h
 
 struct v4l_state_t {
-    struct app_state_t *app;
-
     char dev_name[20];
     int dev_id;
 
@@ -14,6 +12,6 @@ struct v4l_state_t {
     int buffer_len;
 };
 
-void v4l_construct(struct app_state_t *app);
+void v4l_construct();
 
 #endif //v4l_h

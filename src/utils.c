@@ -26,6 +26,8 @@
 #endif
 
 KHASH_MAP_INIT_STR(argvs_hash_t, char *);
+
+extern struct app_state_t app;
 extern KHASH_T(argvs_hash_t) *h;
 
 void utils_parse_args(int argc, char** argv)
@@ -437,58 +439,58 @@ static int resize_li_16(int *src, int src_width, int src_height, int *dst, int d
 #endif
 }
 
-int utils_get_worker_buffer(struct app_state_t *app)
+int utils_get_worker_buffer()
 {
 #ifdef OPENCV
-    CvMat *img1 = cvCreateMatHeader(app->width,
-                                    app->height,
+    CvMat *img1 = cvCreateMatHeader(app.width,
+                                    app.height,
                                     CV_8UC2);
-    cvSetData(img1, app->openvg.video_buffer, app->width << 1);
+    cvSetData(img1, app.openvg.video_buffer, app.width << 1);
 
-    CvMat *img2 = cvCreateMatHeader(app->worker_width,
-                                    app->worker_height,
+    CvMat *img2 = cvCreateMatHeader(app.worker_width,
+                                    app.worker_height,
                                     CV_8UC2);
-    cvSetData(img2, app->worker_buffer_565, app->worker_width << 1);
+    cvSetData(img2, app.worker_buffer_565, app.worker_width << 1);
 
     cvResize(img1, img2, CV_INTER_LINEAR);
 
     cvRelease(&img1);
     cvRelease(&img2);
 #elif OPENVG
-    int res = resize_li_16(app->openvg.video_buffer.i,
-                app->width,
-                app->height,
-                (int*)app->worker_buffer_565,
-                app->worker_width,
-                app->worker_height);
+    int res = resize_li_16(app.openvg.video_buffer.i,
+                app.width,
+                app.height,
+                (int*)app.worker_buffer_565,
+                app.worker_width,
+                app.worker_height);
     if (res != 0) {
         fprintf(stderr, "ERROR: Failed to resize image %d\n", res);
         return -1;
     }
 #endif
     // openvg implementation
-    // vgImageSubData(app->openvg.video_image,
-    //             app->openvg.video_buffer,
-    //             app->width << 1,
+    // vgImageSubData(app.openvg.video_image,
+    //             app.openvg.video_buffer,
+    //             app.width << 1,
     //             VG_sRGB_565,
     //             0, 0,
-    //             app->width, app->height);
+    //             app.width, app.height);
 
     // vgSeti(VG_MATRIX_MODE, VG_MATRIX_IMAGE_USER_TO_SURFACE);
     // vgLoadIdentity();
-    // vgScale(((float)app->worker_width) / app->width, ((float)app->worker_height) / app->height);
-    // vgDrawImage(app->openvg.video_image);
+    // vgScale(((float)app.worker_width) / app.width, ((float)app.worker_height) / app.height);
+    // vgDrawImage(app.openvg.video_image);
 
-    // vgReadPixels(   app->worker_buffer_565,
-    //                 app->width << 1,
+    // vgReadPixels(   app.worker_buffer_565,
+    //                 app.width << 1,
     //                 VG_sRGB_565,
     //                 0, 0,
-    //                 app->worker_width, app->worker_height);
+    //                 app.worker_width, app.worker_height);
 #if defined(ENV32BIT)
-    int32_t *buffer_565 = (int32_t *)app->worker_buffer_565;
-    int32_t *buffer_rgb = (int32_t *)app->worker_buffer_rgb;
+    int32_t *buffer_565 = (int32_t *)app.worker_buffer_565;
+    int32_t *buffer_rgb = (int32_t *)app.worker_buffer_rgb;
     int i = 0, j = 0;
-    int l = app->worker_width * app->worker_height >> 1;
+    int l = app.worker_width * app.worker_height >> 1;
     int32_t vs1, vs2, vd1, vd2, vd3;
     while(i < l) {
         vs1 = buffer_565[i++];
