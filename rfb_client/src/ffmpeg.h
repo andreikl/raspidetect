@@ -1,3 +1,3 @@
-void ffmpeg_destroy(struct app_state_t *app);
-int ffmpeg_init(struct app_state_t *app);
-int ffmpeg_read(struct app_state_t *app);
+void ffmpeg_destroy();
+int ffmpeg_init();
+int ffmpeg_decode(int start, int end);

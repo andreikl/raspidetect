@@ -67,6 +67,7 @@ ifeq ($(H264_ENCODER_JETSON_WRAP), 1)
 		TEST_LDFLAGS += -Wl,--wrap=v4l2_ioctl
 		TEST_LDFLAGS += -Wl,--wrap=mmap
 		TEST_LDFLAGS += -Wl,--wrap=munmap
+		TEST_LDFLAGS += -Wl,--wrap=NvBufferMemSyncForDevice
 	endif
 endif
 

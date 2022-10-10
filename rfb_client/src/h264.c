@@ -22,23 +22,25 @@
 
 #include "h264.h"
 
+extern struct app_state_t app;
+
 H264_INIT()
 
-void h264_destroy(struct app_state_t *app)
+void h264_destroy()
 {
 #ifdef ENABLE_DXVA
-    dxva_destroy(app);
+    dxva_destroy();
 #endif //ENABLE_DXVA
 
-    LINKED_HASH_DESTROY(app->h264.headers, header);
+    LINKED_HASH_DESTROY(app.h264.headers, header);
 }
 
-int h264_init(struct app_state_t *app)
+int h264_init()
 {
-    LINKED_HASH_INIT(app->h264.headers, MAX_SLICES);
+    LINKED_HASH_INIT(app.h264.headers, MAX_SLICES);
 
 #ifdef ENABLE_DXVA
-    GENERAL_CALL(dxva_init(app), error);
+    GENERAL_CALL(dxva_init(), error);
 #endif //ENABLE_DXVA
 
     return 0;
@@ -57,27 +59,27 @@ error:
 #endif // ENABLE_H264_SLICE
 
 //h264_slice.c:2090
-static int h264_slice_layer_without_partitioning_rbsp(struct app_state_t *app, int start, int end)
+static int h264_slice_layer_without_partitioning_rbsp(int start, int end)
 {
-    struct h264_slice_header_t* header = LINKED_HASH_GET_HEAD(app->h264.headers);
-    struct h264_rbsp_t* rbsp = &app->h264.rbsp;
-    uint8_t* buffer = app->enc_buf;
+    struct h264_slice_header_t* header = LINKED_HASH_GET_HEAD(app.h264.headers);
+    struct h264_rbsp_t* rbsp = &app.h264.rbsp;
+    uint8_t* buffer = app.enc_buf;
 
     RBSP_INIT(rbsp, &buffer[start], end - start);
 
 
-    GENERAL_CALL(h264_read_slice_header(app), error);
+    GENERAL_CALL(h264_read_slice_header(), error);
 
     //ffmpeg: ignores redundant_pic_count but has check
     UNCOVERED_CASE(header->redundant_pic_cnt, !=, 0);
 
     //ffmpeg: check if slice is first but setup isn't finished
-    if (header->first_mb_in_slice != 0 && app->h264.setup_finished == 0) {
+    if (header->first_mb_in_slice != 0 && app.h264.setup_finished == 0) {
         UNCOVERED_CASE(header->first_mb_in_slice, !=, 0);
-        UNCOVERED_CASE(app->h264.setup_finished, ==, 0);
+        UNCOVERED_CASE(app.h264.setup_finished, ==, 0);
     }
 
-    if (app->h264.setup_finished == 0) {
+    if (app.h264.setup_finished == 0) {
         //ffmpeg: ff_h264_execute_ref_pic_marking
         if (!header->adaptive_ref_pic_marking_mode_flag && !header->IdrPicFlag) {
             UNCOVERED_CASE(header->adaptive_ref_pic_marking_mode_flag, ==, 0);
@@ -88,7 +90,7 @@ static int h264_slice_layer_without_partitioning_rbsp(struct app_state_t *app, i
         //h264_field_start
         //h264_slice_init
 
-        app->h264.setup_finished = 1;
+        app.h264.setup_finished = 1;
     }
 
     for (int i = 0; i < header->mmco_size; i++) {
@@ -104,60 +106,68 @@ static int h264_slice_layer_without_partitioning_rbsp(struct app_state_t *app, i
     }
 
 #ifdef ENABLE_H264_SLICE 
-    GENERAL_CALL(h264_read_slice_data(app), error);
-    H264_RBSP_DEBUG(*app->h264.rbsp.p);
-    GENERAL_CALL(!h264_is_more_rbsp(&app->h264.rbsp), error);
+    GENERAL_CALL(h264_read_slice_data(), error);
+    H264_RBSP_DEBUG(*app.h264.rbsp.p);
+    GENERAL_CALL(!h264_is_more_rbsp(&app.h264.rbsp), error);
 #endif //ENABLE_H264_SLICE
-
-#ifdef ENABLE_DXVA
-    GENERAL_CALL(dxva_decode(app), error);
-#endif //ENABLE_DXVA
 
     return 0;
 error:
     return -1;
 }
 
-int h264_decode(struct app_state_t *app)
+int h264_decode()
 {
     //TODO: to delete
-    //fwrite(app->h264.buf, 1, app->h264.buf_length, stdout);
+    //fwrite(app.h264.buf, 1, app.h264.buf_length, stdout);
 
     int start = 0, end = 0;
-    while(!find_nal(app->enc_buf, app->enc_buf_length, &start, &end)) {
-        struct h264_nal_t* header = (struct h264_nal_t*)&app->enc_buf[start++];
+    while(!find_nal(app.enc_buf, app.enc_buf_length, &start, &end)) {
+        struct h264_nal_t* header = (struct h264_nal_t*)&app.enc_buf[start++];
 
-        app->h264.nal_unit_type = header->u.nal_unit_type;
-        app->h264.nal_ref_idc = header->u.nal_ref_idc;
+        app.h264.nal_unit_type = header->u.nal_unit_type;
+        app.h264.nal_ref_idc = header->u.nal_ref_idc;
 
-        UNCOVERED_CASE(app->h264.nal_unit_type, ==, 14);
-        UNCOVERED_CASE(app->h264.nal_unit_type, ==, 20);
-        UNCOVERED_CASE(app->h264.nal_unit_type, ==, 21);
+        UNCOVERED_CASE(app.h264.nal_unit_type, ==, 14);
+        UNCOVERED_CASE(app.h264.nal_unit_type, ==, 20);
+        UNCOVERED_CASE(app.h264.nal_unit_type, ==, 21);
 
-        fprintf(stderr, "INFO: nal_unit_type (%d, %s)\n", app->h264.nal_unit_type, h264_get_nal_unit_type(app->h264.nal_unit_type));
-        fprintf(stderr, "INFO: nal_ref_idc (%d, %s)\n", app->h264.nal_ref_idc, h264_get_nal_ref_idc(app->h264.nal_ref_idc));
+        DEBUG("INFO: nal_unit_type %d(%s), size %d\n",
+            app.h264.nal_unit_type,
+            h264_get_nal_unit_type(app.h264.nal_unit_type),
+            end - start);
+        DEBUG("INFO: nal_ref_idc (%d, %s)\n", app.h264.nal_ref_idc, h264_get_nal_ref_idc(app.h264.nal_ref_idc));
 
-        switch (app->h264.nal_unit_type) {
+        switch (app.h264.nal_unit_type) {
             case NAL_UNIT_TYPE_SPS:
-                h264_read_sps(app, start, end);
+                h264_read_sps(start, end);
                 break;
 
             case NAL_UNIT_TYPE_PPS:
-                h264_read_pps(app, start, end);
+                h264_read_pps(start, end);
                 break;
 
             case NAL_UNIT_TYPE_CODED_SLICE_IDR:
             case NAL_UNIT_TYPE_CODED_SLICE_NON_IDR:
-                h264_slice_layer_without_partitioning_rbsp(app, start, end);
+            {
+                h264_slice_layer_without_partitioning_rbsp(start, end);
+                #ifdef ENABLE_DXVA
+                    GENERAL_CALL(dxva_decode(), cleanup);
+                #endif //ENABLE_DXVA
                 break;
+            }
 
         }
 
-        //char* rbsp = &app->buffer[start + 1];
+        //char* rbsp = &app.buffer[start + 1];
         //int rbsp_size = end - start - 1;
 
-        //fprintf(stderr, "INFO: rbsp package start (%d) end (%d)\n", start, end);
+        //DEBUG("INFO: rbsp package start (%d) end (%d)\n", start, end);
     }
-
     return 0;
+
+cleanup:
+    if (errno == 0)
+        errno = EAGAIN;
+    return -1;
 }

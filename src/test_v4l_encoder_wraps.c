@@ -20,14 +20,16 @@
 static int encoder_width = 0;
 static int encoder_height = 0;
 static int encoder_buffer = -1;
-static void* buffers[V4L_MAX_IN_BUFS + V4L_MAX_OUT_BUFS] = {0};
-static int out_buffers[V4L_MAX_OUT_BUFS] = {0};
+static void* buffers[V4L_MAX_IN_BUFS + V4L_MAX_OUT_BUFS];
+static int out_buffers[V4L_MAX_OUT_BUFS];
 char buffer[MAX_STRING];
 
 
 int __wrap_v4l2_open(const char * file, int oflag, ...)
 {
     WRAP_DEBUG("v4l2_open, file: %s", file);
+    memset(buffers, 0, sizeof(buffers));
+    memset(out_buffers, 0, sizeof(out_buffers));
     return 1;
 }
 
@@ -224,4 +226,17 @@ void * __wrap_munmap(void *addr, size_t length)
     *buffer = NULL;
 
     return *buffer;
+}
+
+int __wrap_NvBufferMemSyncForDevice(int fd, unsigned int plane, void **addr)
+{
+    if (fd >= 10 && fd < 20) // ignores input buffers
+        return 0;
+
+    int index = (fd >= 20)? V4L_MAX_IN_BUFS + (fd - 20): (fd - 10);
+    WRAP_DEBUG("NvBufferMemSyncForDevice, index: %d", index);
+    assert_in_range(index, 0, V4L_MAX_IN_BUFS + V4L_MAX_OUT_BUFS);
+    assert_ptr_not_equal(buffers[index], NULL);
+    memcpy(*addr, buffers[index], encoder_width * encoder_height);
+    return 0;
 }

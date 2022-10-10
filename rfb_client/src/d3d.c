@@ -26,24 +26,24 @@ static void *d3d_function(void* data)
 {
     struct app_state_t * app = (struct app_state_t*) data;
     if (app->verbose) {
-        fprintf(stderr, "INFO: Direct3d thread has been started\n");
+        DEBUG("INFO: Direct3d thread has been started\n");
     }
 
     if (sem_wait(&app->d3d.semaphore)) {
-        fprintf(stderr, "ERROR: sem_wait failed with error: %s\n", strerror(errno));
+        DEBUG("ERROR: sem_wait failed with error: %s\n", strerror(errno));
         goto error;
     }
 
     while (!is_terminated) {
         if (usleep(40000)) {
-            fprintf(stderr, "ERROR: usleep failed with error: %s\n", strerror(errno));
+            DEBUG("ERROR: usleep failed with error: %s\n", strerror(errno));
             goto error;
         }
 
         d3d_render_frame(app);
     }
 
-    fprintf(stderr, "INFO: d3d_function is_terminated: %d\n", is_terminated);
+    DEBUG("INFO: d3d_function is_terminated: %d\n", is_terminated);
     return NULL;
 
 error:
@@ -54,7 +54,7 @@ error:
 void d3d_destroy(struct app_state_t *app)
 {
     if (sem_destroy(&app->d3d.semaphore)) {
-        fprintf(stderr, "ERROR: sem_destroy failed with code: %s\n", strerror(errno));
+        DEBUG("ERROR: sem_destroy failed with code: %s\n", strerror(errno));
     }
 
     if (app->d3d.is_thread) {
@@ -88,7 +88,7 @@ int d3d_init(struct app_state_t *app)
 
     app->d3d.d3d = Direct3DCreate9(D3D_SDK_VERSION);
     if (!app->d3d.d3d) {
-        fprintf(stderr, "ERROR: Can't create d3d interface\n");
+        DEBUG("ERROR: Can't create d3d interface\n");
         goto close;
     }
 
@@ -128,7 +128,7 @@ int d3d_init(struct app_state_t *app)
             NULL);
 
         if (FAILED(res)) {
-            fprintf(stderr, "ERROR: Can't create d3d surface\n");
+            DEBUG("ERROR: Can't create d3d surface\n");
             goto close;
         }
     }
@@ -194,13 +194,13 @@ int d3d_render_image(struct app_state_t *app) {
         IDirect3DSurface9_LockRect(app->d3d.surfaces[0], &d3d_rect, NULL, D3DLOCK_DONOTWAIT),
         exit);
     char* bytes = d3d_rect.pBits;
-    //fprintf(stderr, "INFO: memcpy: %p(%d)\n", app->dec_buf, app->dec_buf_length);
-    //fprintf(stderr, "INFO:%X%X%X%X\n", app->dec_buf[0], app->dec_buf[1], app->dec_buf[2], app->dec_buf[3]);
+    //DEBUG("INFO: memcpy: %p(%d)\n", app->dec_buf, app->dec_buf_length);
+    //DEBUG("INFO:%X%X%X%X\n", app->dec_buf[0], app->dec_buf[1], app->dec_buf[2], app->dec_buf[3]);
     int stride_d3d = d3d_rect.Pitch;
     int stride_buf = app->server_width;
     int chroma_buf_size = app->server_width * app->server_height;
     int index_d3d = 0, index_buf = 0;
-    // fprintf(stderr, "INFO: index_d3d: %d, index_buf: %d, stride_d3d: %d, stride_buf: %d, chroma_buf_size: %d\n",
+    // DEBUG("INFO: index_d3d: %d, index_buf: %d, stride_d3d: %d, stride_buf: %d, chroma_buf_size: %d\n",
     //     index_d3d, index_buf, stride_d3d, stride_buf, chroma_buf_size);
     for (
         ;
@@ -214,7 +214,7 @@ int d3d_render_image(struct app_state_t *app) {
     stride_d3d = stride_d3d;
     stride_buf = stride_buf;
     int luma_buf_end1 = chroma_buf_size + (chroma_buf_size / 2);
-    // fprintf(stderr, "INFO: index_d3d: %d, index_buf: %d, stride_d3d: %d, stride_buf: %d, chroma_buf_size: %d\n",
+    // DEBUG("INFO: index_d3d: %d, index_buf: %d, stride_d3d: %d, stride_buf: %d, chroma_buf_size: %d\n",
     //     index_d3d, index_buf, stride_d3d, stride_buf, luma_buf_end1);
     for (
         ;
@@ -226,7 +226,7 @@ int d3d_render_image(struct app_state_t *app) {
     index_buf = chroma_buf_size;
     index_d3d = stride_d3d * app->server_height + stride_d3d * (app->server_height / 4);
     int luma_buf_end2 = chroma_buf_size + (chroma_buf_size / 4);
-    // fprintf(stderr, "INFO: index_d3d: %d, index_buf: %d, stride_d3d: %d, stride_buf: %d, chroma_buf_size: %d\n",
+    // DEBUG("INFO: index_d3d: %d, index_buf: %d, stride_d3d: %d, stride_buf: %d, chroma_buf_size: %d\n",
     //     index_d3d, index_buf, stride_d3d, stride_buf, luma_buf_end1);
     for (
         ;

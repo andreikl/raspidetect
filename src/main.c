@@ -36,7 +36,7 @@
 KHASH_MAP_INIT_STR(argvs_hash_t, char*);
 KHASH_T(argvs_hash_t) *h;
 
-int is_abort = 0;
+int is_abort;
 static int exit_code = EX_SOFTWARE;
 
 struct app_state_t app;

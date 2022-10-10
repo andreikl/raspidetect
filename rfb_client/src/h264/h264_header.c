@@ -16,10 +16,10 @@
 // along with this program; if not, write to the Free Software Foundation,
 // Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
-static int h264_read_ref_pic_list_modification(struct app_state_t* app)
+static int h264_read_ref_pic_list_modification()
 {
-    struct h264_slice_header_t* header = LINKED_HASH_GET_HEAD(app->h264.headers);
-    struct h264_rbsp_t* rbsp = &app->h264.rbsp;
+    struct h264_slice_header_t* header = LINKED_HASH_GET_HEAD(app.h264.headers);
+    struct h264_rbsp_t* rbsp = &app.h264.rbsp;
 
     for (int list = 0; list < header->list_count; list++) {
         int ref_pic_list_reordering_flag = RBSP_READ_U1(rbsp);
@@ -37,12 +37,12 @@ static int h264_read_ref_pic_list_modification(struct app_state_t* app)
             }
 
             if (i >= header->ref_count[list]) {
-                fprintf(stderr, "ERROR: reference count overflow.\n");
+                DEBUG("ERROR: reference count overflow.\n");
                 return -1;
             }
 
             if (reordering_of_pic_nums_idc > 3) {
-                fprintf(stderr, "ERROR: invalid reordering_of_pic_nums_idc %d.\n",
+                DEBUG("ERROR: invalid reordering_of_pic_nums_idc %d.\n",
                     reordering_of_pic_nums_idc);
                 return -1;
             }
@@ -65,16 +65,16 @@ static int h264_read_ref_pic_list_modification(struct app_state_t* app)
     return 0;
 }
 
-static int h264_read_pred_weight_table(struct app_state_t* app)
+static int h264_read_pred_weight_table()
 {
-    struct h264_slice_header_t* header = LINKED_HASH_GET_HEAD(app->h264.headers);
-    struct h264_rbsp_t* rbsp = &app->h264.rbsp;
+    struct h264_slice_header_t* header = LINKED_HASH_GET_HEAD(app.h264.headers);
+    struct h264_rbsp_t* rbsp = &app.h264.rbsp;
 
     //ffmpeg: pwt->luma_log2_weight_denom 
     header->luma_log2_weight_denom = RBSP_READ_UE(rbsp);
     //H264_RBSP_DEBUG(header->luma_log2_weight_denom);
     if (header->luma_log2_weight_denom > 7) {
-        fprintf(stderr, "ERROR: luma_log2_weight_denom %d is out of range.\n",
+        DEBUG("ERROR: luma_log2_weight_denom %d is out of range.\n",
             header->luma_log2_weight_denom);
         return -1;
     }
@@ -82,12 +82,12 @@ static int h264_read_pred_weight_table(struct app_state_t* app)
 
     // ffmpeg: sps->chroma_format_idc
     int chroma_def = 0;
-    if (app->h264.sps.ChromaArrayType) {
+    if (app.h264.sps.ChromaArrayType) {
         //ffmpeg: pwt->chroma_log2_weight_denom
         header->chroma_log2_weight_denom = RBSP_READ_UE(rbsp);
         //H264_RBSP_DEBUG(header->chroma_log2_weight_denom);
         if (header->chroma_log2_weight_denom > 7) {
-            fprintf(stderr, "ERROR: chroma_log2_weight_denom %d is out of range\n",
+            DEBUG("ERROR: chroma_log2_weight_denom %d is out of range\n",
                 header->chroma_log2_weight_denom);
             return -1;
         }
@@ -133,10 +133,10 @@ static int h264_read_pred_weight_table(struct app_state_t* app)
     return 0;
 }
 
-static int h264_read_dec_ref_pic_marking(struct app_state_t* app)
+static int h264_read_dec_ref_pic_marking()
 {
-    struct h264_slice_header_t* header = LINKED_HASH_GET_HEAD(app->h264.headers);
-    struct h264_rbsp_t* rbsp = &app->h264.rbsp;
+    struct h264_slice_header_t* header = LINKED_HASH_GET_HEAD(app.h264.headers);
+    struct h264_rbsp_t* rbsp = &app.h264.rbsp;
 
     // 7.4.1 NAL unit semantic
     if (header->IdrPicFlag) {
@@ -216,10 +216,10 @@ static int h264_read_dec_ref_pic_marking(struct app_state_t* app)
 
 // Slice header 7.3.3
 //h264_slice.c:1725
-static int h264_read_slice_header(struct app_state_t *app)
+static int h264_read_slice_header()
 {
-    struct h264_slice_header_t* header = LINKED_HASH_GET_HEAD(app->h264.headers);
-    struct h264_rbsp_t* rbsp = &app->h264.rbsp;
+    struct h264_slice_header_t* header = LINKED_HASH_GET_HEAD(app.h264.headers);
+    struct h264_rbsp_t* rbsp = &app.h264.rbsp;
 
     //set default values
     for(int i = 0; i < 2; i++)
@@ -230,7 +230,7 @@ static int h264_read_slice_header(struct app_state_t *app)
         }
 
     // 7-1
-    header->IdrPicFlag = app->h264.nal_unit_type == NAL_UNIT_TYPE_CODED_SLICE_IDR? 1: 0;
+    header->IdrPicFlag = app.h264.nal_unit_type == NAL_UNIT_TYPE_CODED_SLICE_IDR? 1: 0;
     if (header->IdrPicFlag) {
         header->PrevRefFrameNum = 0;
     } else {
@@ -254,7 +254,7 @@ static int h264_read_slice_header(struct app_state_t *app)
 
     // ffmpeg: copy check
     if (header->IdrPicFlag && header->slice_type != SliceTypeI) {
-        fprintf(stderr, "ERROR: A non-intra slice in an IDR NAL unit.\n");
+        DEBUG("ERROR: A non-intra slice in an IDR NAL unit.\n");
         return -1;
     }
 
@@ -265,18 +265,18 @@ static int h264_read_slice_header(struct app_state_t *app)
     //H264_RBSP_DEBUG(header->pic_parameter_set_id);
 
     //TODO: check h264 block-scheme
-    UNCOVERED_CASE(app->h264.sps.separate_colour_plane_flag, !=, 0);
+    UNCOVERED_CASE(app.h264.sps.separate_colour_plane_flag, !=, 0);
 
     // ffmpeg: sl->frame_num
     // TODO: to find what is h->poc.frame_num
-    header->frame_num = RBSP_READ_UN(rbsp, app->h264.sps.log2_max_frame_num);
+    header->frame_num = RBSP_READ_UN(rbsp, app.h264.sps.log2_max_frame_num);
     H264_RBSP_DEBUG(header->frame_num);
 
     //7.4.3 Slice header semantics
     //ffmepg: picture_structure -> sl->picture_structure
     // sl->mb_field_decoding_flag, sl->curr_pic_num, sl->max_pic_num
     // ffmpeg: maxRefCount = picture_structure == PICT_FRAME ? 15 : 31;
-    if (app->h264.sps.frame_mbs_only_flag) {
+    if (app.h264.sps.frame_mbs_only_flag) {
         header->picture_structure = H264_PICT_FRAME;
     }
     else {
@@ -296,11 +296,11 @@ static int h264_read_slice_header(struct app_state_t *app)
     // ffmpeg
     if (header->picture_structure == H264_PICT_FRAME) {
         header->curr_pic_num = header->frame_num;
-        header->max_pic_num = 1 << app->h264.sps.log2_max_frame_num;
+        header->max_pic_num = 1 << app.h264.sps.log2_max_frame_num;
     }
     else {
         header->curr_pic_num = 2 * header->frame_num + 1;
-        header->max_pic_num  = 1 << (app->h264.sps.log2_max_frame_num + 1);
+        header->max_pic_num  = 1 << (app.h264.sps.log2_max_frame_num + 1);
     }
 
     // 7.4.1 NAL unit semantics
@@ -309,19 +309,19 @@ static int h264_read_slice_header(struct app_state_t *app)
         header->idr_pic_id = RBSP_READ_UE(rbsp);
         //H264_RBSP_DEBUG(header->idr_pic_id);
     }
-    //H264_RBSP_DEBUG(app->h264.sps.pic_order_cnt_type);
+    //H264_RBSP_DEBUG(app.h264.sps.pic_order_cnt_type);
     // ffmpeg: sps->poc_type
-    if (app->h264.sps.pic_order_cnt_type == 0) {
+    if (app.h264.sps.pic_order_cnt_type == 0) {
         //ffmpeg: sl->poc_lsb
         header->pic_order_cnt_lsb = RBSP_READ_UN(
             rbsp,
-            app->h264.sps.log2_max_pic_order_cnt_lsb_minus4 + 4
+            app.h264.sps.log2_max_pic_order_cnt_lsb_minus4 + 4
         );
         //H264_RBSP_DEBUG(header->pic_order_cnt_lsb);
 
         //ffmpeg: pps->pic_order_present == 1 && picture_structure == PICT_FRAME
         if (
-            app->h264.pps.bottom_field_pic_order_in_frame_present_flag &&
+            app.h264.pps.bottom_field_pic_order_in_frame_present_flag &&
             !header->field_pic_flag
         ) {
             //ffmpeg: sl->delta_poc_bottom
@@ -330,16 +330,16 @@ static int h264_read_slice_header(struct app_state_t *app)
         }
     }
     if (
-        app->h264.sps.pic_order_cnt_type == 1 &&
-        !app->h264.sps.delta_pic_order_always_zero_flag
+        app.h264.sps.pic_order_cnt_type == 1 &&
+        !app.h264.sps.delta_pic_order_always_zero_flag
     ) {
         //ffmpeg: sl->delta_poc[0], sl->delta_poc[1]
-        UNCOVERED_CASE(app->h264.sps.pic_order_cnt_type, ==, 1);
-        UNCOVERED_CASE(app->h264.sps.delta_pic_order_always_zero_flag, ==, 0);
+        UNCOVERED_CASE(app.h264.sps.pic_order_cnt_type, ==, 1);
+        UNCOVERED_CASE(app.h264.sps.delta_pic_order_always_zero_flag, ==, 0);
     }
 
     //ffmpeg: sl->redundant_pic_count
-    if (app->h264.pps.redundant_pic_cnt_present_flag) {
+    if (app.h264.pps.redundant_pic_cnt_present_flag) {
         header->redundant_pic_cnt = RBSP_READ_UE(rbsp);
         //H264_RBSP_DEBUG(header->redundant_pic_cnt);
     } else {
@@ -372,8 +372,8 @@ static int h264_read_slice_header(struct app_state_t *app)
                 header->ref_count[1]  = 1;
             }
         } else {
-            header->ref_count[0] = app->h264.pps.ref_count[0];
-            header->ref_count[1] = app->h264.pps.ref_count[1];
+            header->ref_count[0] = app.h264.pps.ref_count[0];
+            header->ref_count[1] = app.h264.pps.ref_count[1];
         }
 
         header->list_count = (header->slice_type == SliceTypeB)? 2: 1;
@@ -382,41 +382,41 @@ static int h264_read_slice_header(struct app_state_t *app)
     }
 
     //TODO: to implement ref_pic_list_mvc_modification()
-    UNCOVERED_CASE(app->h264.nal_unit_type, ==, 20);
-    UNCOVERED_CASE(app->h264.nal_unit_type, ==, 21);
+    UNCOVERED_CASE(app.h264.nal_unit_type, ==, 20);
+    UNCOVERED_CASE(app.h264.nal_unit_type, ==, 21);
 
     //TODO: set ref_count to 0 if error is happened
-    GENERAL_CALL(h264_read_ref_pic_list_modification(app), error);
+    GENERAL_CALL(h264_read_ref_pic_list_modification(), error);
 
     //ffmpeg: ignores SP and SI and fill 0
     // sl->pwt.luma_weight_flag and sl->pwt.chroma_weight_flag[i]
-    if ((app->h264.pps.weighted_pred_flag 
+    if ((app.h264.pps.weighted_pred_flag 
             && (
                 header->slice_type == SliceTypeP ||
                 header->slice_type == SliceTypeSP
             )
         )
-        || (app->h264.pps.weighted_bipred_idc == 1 && header->slice_type == SliceTypeB)
+        || (app.h264.pps.weighted_bipred_idc == 1 && header->slice_type == SliceTypeB)
     ) {
-        GENERAL_CALL(h264_read_pred_weight_table(app), error);
+        GENERAL_CALL(h264_read_pred_weight_table(), error);
     }
     // 8.2.5.1 Sequence of operations for decoded reference picture marking process
     //ffmpeg: ref_idc
-    if (app->h264.nal_ref_idc) {
-        GENERAL_CALL(h264_read_dec_ref_pic_marking(app), error);
+    if (app.h264.nal_ref_idc) {
+        GENERAL_CALL(h264_read_dec_ref_pic_marking(), error);
     }
 
     //ffmpeg: entropy_coding_mode_flag -> cabac
     //ffmpeg: header->slice_type -> slice_type_nos
     //ffmpeg: ignores SliceTypeSI
     if (
-        app->h264.pps.entropy_coding_mode_flag &&
+        app.h264.pps.entropy_coding_mode_flag &&
         header->slice_type != SliceTypeI &&
         header->slice_type != SliceTypeSI
     ) {
         header->cabac_init_idc = RBSP_READ_UE(rbsp);
         if (header->cabac_init_idc > 2) {
-            fprintf(stderr, "ERROR: cabac_init_idc (%d) overflow.\n",
+            DEBUG("ERROR: cabac_init_idc (%d) overflow.\n",
                 header->cabac_init_idc);
             return -1;
         }
@@ -441,7 +441,7 @@ static int h264_read_slice_header(struct app_state_t *app)
         header->slice_qs_delta = RBSP_READ_SE(rbsp);
     }
     //ffmpeg: deblocking_filter_control_present_flag -> deblocking_filter_parameters_present
-    if (app->h264.pps.deblocking_filter_control_present_flag) {
+    if (app.h264.pps.deblocking_filter_control_present_flag) {
         //ffmpeg: validate value disable_deblocking_filter_idc > 2 -> message
         //ffmpeg: disable_deblocking_filter_idc -> deblocking_filter
         header->disable_deblocking_filter_idc = RBSP_READ_UE(rbsp);
@@ -455,16 +455,16 @@ static int h264_read_slice_header(struct app_state_t *app)
             //H264_RBSP_DEBUG(header->slice_beta_offset_div2);
         }
     }
-    UNCOVERED_CASE(app->h264.pps.num_slice_groups_minus1, >, 0);
+    UNCOVERED_CASE(app.h264.pps.num_slice_groups_minus1, >, 0);
 
-    header->PicWidthInMbs = app->h264.sps.pic_width_in_mbs_minus1 + 1; //7-13
-    header->PicHeightInMapUnits = app->h264.sps.pic_height_in_map_units_minus1 + 1; //7-16
+    header->PicWidthInMbs = app.h264.sps.pic_width_in_mbs_minus1 + 1; //7-13
+    header->PicHeightInMapUnits = app.h264.sps.pic_height_in_map_units_minus1 + 1; //7-16
     header->PicSizeInMapUnits = header->PicWidthInMbs *
         header->PicHeightInMapUnits; //7-17
-    header->FrameHeightInMbs = (2 - app->h264.sps.frame_mbs_only_flag) *
+    header->FrameHeightInMbs = (2 - app.h264.sps.frame_mbs_only_flag) *
         header->PicHeightInMapUnits; //7-18
     header->MbaffFrameFlag = (
-        app->h264.sps.mb_adaptive_frame_field_flag &&
+        app.h264.sps.mb_adaptive_frame_field_flag &&
         !header->field_pic_flag
     ); //7-25
     header->PicHeightInMbs = header->FrameHeightInMbs /

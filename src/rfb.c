@@ -146,7 +146,7 @@ static void *rfb_function(void *data)
     int res;
     const int one = 1;
 
-    DEBUG("RFB thread has been started");
+    DEBUG("RFB thread has been started, waiting client connection!!!");
 
     while (!is_abort) {
         struct sockaddr_in client_addr;
@@ -168,9 +168,9 @@ static void *rfb_function(void *data)
             (char *)&one,
             sizeof(one)), rfb_error);
 
-        char* rfb_version = "RFB 003.008\n\0";
-        size_t rfb_version_length = strlen(rfb_version);
-        CALL(send(rfb.client_socket, rfb_version, rfb_version_length, 0), rfb_error);
+        char server_rfb_version[12];
+        strcpy(server_rfb_version, "RFB 003.008\0");
+        CALL(send(rfb.client_socket, server_rfb_version, sizeof(server_rfb_version), 0), rfb_error);
 
         char client_rfb_version[12];
         CALL(recv(rfb.client_socket, client_rfb_version, sizeof(client_rfb_version), 0),
@@ -240,6 +240,7 @@ static void *rfb_function(void *data)
             CALL(res = recv(rfb.client_socket, (char *)&type, sizeof(type), 0), rfb_error);
             if (res == 0) {
                 DEBUG("Client has closed the connection");
+                break;
             }
 
             if (type.message_type == RFBSetPixelFormat)  {
@@ -269,7 +270,10 @@ static void *rfb_function(void *data)
             } else if (type.message_type == RFBFramebufferUpdateRequest) {
                 CALL(recv(rfb.client_socket, (char *)&buffer_update, sizeof(buffer_update), 0),
                     rfb_error);
+
+                DEBUG("Server received message: RFBFramebufferUpdateRequest, waiting for frame");
                 CALL(sem_post(&rfb.client_semaphore), rfb_error);
+                DEBUG("frame received!!!");
 
                 //TODO: to delete
                 /*if (camera_encode_buffer(app, app.openvg.video_buffer.c, ((app.width * app.height) << 1))) {
@@ -343,13 +347,21 @@ static int rfb_init()
 
 static int rfb_start()
 {
+    DEBUG("Port to listen: %d", app.port);
+
     ASSERT_INT(rfb.client_socket, ==, -1, cleanup);
     ASSERT_INT(rfb.server_socket, ==, -1, cleanup);
 
     CALL(rfb.server_socket = socket(AF_INET, SOCK_STREAM, 0), cleanup);
 
     const int one = 1;
-    CALL(setsockopt(rfb.server_socket, SOL_SOCKET, SO_REUSEADDR, (char *)&one, sizeof(one)), cleanup);
+    CALL(setsockopt(
+        rfb.server_socket,
+        SOL_SOCKET,
+        SO_REUSEADDR,
+        (char *)&one,
+        sizeof(one)
+    ), cleanup);
 
     struct sockaddr_in serv_addr;
     memset(&serv_addr, 0, sizeof(serv_addr));
@@ -386,15 +398,16 @@ int rfb_process_frame()
 {
     int res = 0;
 
-    DEBUG("wait for client to request buffer...");
-    CALL(sem_wait(&rfb.client_semaphore), cleanup);
-
     struct output_t *output = rfb.output;
     if (!output->is_started()) CALL(output->start(), cleanup);
+
+    CALL(sem_wait(&rfb.client_semaphore), cleanup);
+
     int in_format = output->start_format;
     int out_format = output->start_format;
     if (!input.is_started()) CALL(input.start(in_format), cleanup);
     CALL(res = input.process_frame(), cleanup);
+    int length = 0;
     uint8_t *buffer = input.get_buffer(NULL, NULL);
     for (int k = 0; k < MAX_FILTERS && output->filters[k].out_format; k++) {
         struct filter_t *filter = filters + output->filters[k].index;
@@ -402,7 +415,7 @@ int rfb_process_frame()
         out_format = output->filters[k].out_format;
         if (!filter->is_started()) CALL(filter->start(in_format, out_format), cleanup);
         CALL(filter->process_frame(buffer), cleanup);
-        buffer = filter->get_buffer(NULL, NULL, NULL);
+        buffer = filter->get_buffer(NULL, NULL, &length);
     }
 
     // ----- fps
@@ -422,39 +435,23 @@ int rfb_process_frame()
     frame_count++;
     // -----
 
-    if (send(rfb.client_socket, (char *)&update_message, sizeof(update_message), 0) < 0) {
-        fprintf(stderr, "ERROR: Can't send frame message. res: %d\n", errno);
-        return -1;
-    }
+    DEBUG("Bytes to send: %d, %x %x %x %x ...",
+        length,
+        buffer[0],
+        buffer[1],
+        buffer[2],
+        buffer[3]);
+        
+    uint32_t length_send = htonl(length);
+    CALL(send(rfb.client_socket, (char *)&update_message, sizeof(update_message), 0), cleanup);
+    CALL(send(rfb.client_socket, (char *)&length_send, sizeof(length_send), 0), cleanup);
+    CALL(send(rfb.client_socket, (char *)&buffer, length, 0), cleanup);
 
-    //DEBUG("r: %d, x: %d, y: %d, w: %d, h: %d", ntohs(update_message.number_of_rectangles),
-    //  ntohs(update_message.x), ntohs(update_message.y), ntohs(update_message.width),
-    //  ntohs(update_message.height));
-    //DEBUG("t: %d, e: %d, size: %d, len: %d", update_message.message_type,
-    //  ntohl(update_message.encoding_type), sizeof(update_message), length);
-
-    /*res = pthread_mutex_lock(&app.mmal.h264_mutex);
-    if (res) {
-        fprintf(stderr, "ERROR: pthread_mutex_lock failed to lock h264 buffer with code %d\n", res);
-        return -1;
-    }*/
-
-    /*int32_t length = htonl(app.mmal.h264_buffer_length);
-    if (send(rfb.client_socket, (char *)&length, sizeof(length), 0) < 0) {
-        fprintf(stderr, "ERROR: send failed to send H264 header. res: %d\n", errno);
-        return -1;
-    }*/
-
-    /*if (send(rfb.client_socket, app.mmal.h264_buffer, app.mmal.h264_buffer_length, 0) < 0) {
-        fprintf(stderr, "ERROR: send failed to send frame. res: %d\n", errno);
-        return -1;
-    }*/
-
-    /*res = pthread_mutex_unlock(&app.mmal.h264_mutex);
-    if (res) {
-        fprintf(stderr, "ERROR: pthread_mutex_unlock failed to unlock h264 buffer with code %d\n", res);
-        return -1;
-    }*/
+    DEBUG("r: %d, x: %d, y: %d, w: %d, h: %d", ntohs(update_message.number_of_rectangles),
+        ntohs(update_message.x), ntohs(update_message.y), ntohs(update_message.width),
+        ntohs(update_message.height));
+    DEBUG("t: %d, e: %d, size: %ld, len: %d", update_message.message_type,
+        ntohl(update_message.encoding_type), sizeof(update_message), length);
     return 0;
 
 cleanup:

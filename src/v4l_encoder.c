@@ -6,15 +6,6 @@
 #include "linux/videodev2.h"
 #include "sys/mman.h"
 
-// wrapper to allow to run test on platform where h264 Jetson encoder isn't available
-#ifdef V4L_ENCODER_WRAP
-    int NvBufferMemSyncForDevice(int dmabuf_fd, unsigned int plane, void **pVirtAddr)
-    {
-        //DEBUG("wrap NvBufferMemSyncForDevice, fd: %d, plane: %d", dmabuf_fd, plane);
-        return 0;
-    }
-#endif
-
 static struct format_mapping_t v4l_input_formats[] = {
     {
         .format = VIDEO_FORMAT_YUV422,
@@ -47,6 +38,20 @@ static struct v4l_encoder_state_t v4l = {
 
 extern struct app_state_t app;
 extern struct filter_t filters[MAX_FILTERS];
+
+// wrapper to allow to run test on platform where h264 Jetson encoder isn't available
+#ifdef V4L_ENCODER_WRAP
+    int NvBufferMemSyncForDevice(int fd, unsigned int plane, void **addr)
+    {
+        // determines if wrapper is available
+        #ifdef CMOCKA
+            return __wrap_NvBufferMemSyncForDevice(fd, plane, addr);
+        #endif
+
+        DEBUG("wrap NvBufferMemSyncForDevice, fd: %d, plane: %d", fd, plane);
+        return 0;
+    }
+#endif
 
 static int ioctl_enum(int fd, int request, void *arg)
 {
@@ -456,6 +461,7 @@ static int v4l_start(int input_format, int output_format)
         out_buf.index = i;
         out_buf.length = 1;
         out_buf.m.planes = &out_plane;
+        DEBUG("q out buf: %d", out_buf.index);
         GEN_CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_QBUF, &out_buf), cleanup);
     }
 
@@ -558,12 +564,20 @@ static int v4l_process_frame(uint8_t *buffer)
         memcpy(v4l.out_buf, v4l.out_bufs[out_buf.index].buf, out_buf.m.planes[0].bytesused);
         v4l.out_buf_used += out_buf.m.planes[0].bytesused;
 
+        DEBUG("Encoder buffer received: %d, %x %x %x %x ...",
+            v4l.out_buf_used,
+            v4l.out_buf[0],
+            v4l.out_buf[1],
+            v4l.out_buf[2],
+            v4l.out_buf[3]);
+
         /*char buffer[MAX_STRING];
         static int index = 0;
         sprintf(buffer, "data%d", index++);
         utils_write_file(buffer, v4l.out_bufs[out_buf.index].buf, out_buf.m.planes[0].bytesused);*/
 
         out_buf.m.planes[0].bytesused = 0;
+        //DEBUG("q out buf: %d", out_buf.index);
         GEN_CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_QBUF, &out_buf), cleanup);
     }
     return 0;

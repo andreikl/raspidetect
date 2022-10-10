@@ -220,4 +220,3 @@ int __wrap_SDL_UpdateWindowSurface(SDL_Window * window)
     return 0;
 }
 #endif
-
