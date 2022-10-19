@@ -1,10 +1,37 @@
 #ifndef main_h
 #define main_h
 
-#define WIDTH "-w"
-#define WIDTH_DEF 640
-#define HEIGHT "-h"
-#define HEIGHT_DEF 480
+#define VIDEO_FORMAT_UNKNOWN_STR "Unknown"
+#define VIDEO_FORMAT_YUV422_STR  "YUV422"
+#define VIDEO_FORMAT_YUV444_STR  "YUV444"
+#define VIDEO_FORMAT_H264_STR    "H264"
+
+#define VIDEO_FORMAT_UNKNOWN 0
+#define VIDEO_FORMAT_YUV422  1
+#define VIDEO_FORMAT_YUV444  2 //three separate planes - Y, Cb, Cr
+#define VIDEO_FORMAT_H264    3
+
+#define VIDEO_OUTPUT_NULL_STR   "null"
+#define VIDEO_OUTPUT_FILE_STR   "file"
+#define VIDEO_OUTPUT_SDL_STR    "sdl"
+#define VIDEO_OUTPUT_RFB_STR    "rfb"
+
+#define MAX_OUTPUTS   3
+#define MAX_FILTERS   4
+#define VIDEO_OUTPUT_NULL   0
+#define VIDEO_OUTPUT_FILE   1
+#define VIDEO_OUTPUT_SDL    2
+#define VIDEO_OUTPUT_RFB    4
+
+#define VIDEO_WIDTH "-w"
+#define VIDEO_WIDTH_DEF 640
+#define VIDEO_HEIGHT "-h"
+#define VIDEO_HEIGHT_DEF 480
+#define VIDEO_FORMAT "-f"
+#define VIDEO_FORMAT_DEF VIDEO_FORMAT_YUV422_STR
+#define VIDEO_OUTPUT "-o"
+#define VIDEO_OUTPUT_DEF VIDEO_OUTPUT_FILE_STR","VIDEO_OUTPUT_SDL_STR","VIDEO_OUTPUT_RFB_STR
+
 #define PORT "-p"
 #define PORT_DEF 5900
 #define HELP "--help"
@@ -15,26 +42,22 @@
 #define WORKER_HEIGHT_DEF 300
 
 #define APP_NAME "raspidetect\0"
-#define INPUT "-i"
-#define INPUT_DEF "camera"
-#define OUTPUT "-o"
-#define OUTPUT_DEF "none"
 #define VERBOSE "-d"
-#define VERBOSE_DEF 1
+#define VERBOSE_DEF 0
+#define OUTPUT_PATH "-f"
+#define OUTPUT_PATH_DEF "null"
 #define TFL_MODEL_PATH "-m"
 #define TFL_MODEL_PATH_DEF "./tflite_models/detect.tflite"
 #define DN_MODEL_PATH "-m"
 #define DN_MODEL_PATH_DEF "./dn_models/yolov3-tiny.weights"
 #define DN_CONFIG_PATH "-c"
 #define DN_CONFIG_PATH_DEF "./dn_models/yolov3-tiny.cfg"
-#define ARG_STREAM "-"
-#define ARG_RFB "rfb"
-#define ARG_NONE "none"
 
 #define THRESHOLD 0.5
-#define TEXT_SIZE 256
-#define BUFFER_SIZE 1024
+#define MAX_STRING 256
+#define MAX_DATA 1024
 #define TICK_TIME 500000 //500 miliseconds
+#define COMMA ", "
 
 #define FONT_DIR "."
 #define FONT_NAME "Vera.ttf"
@@ -58,13 +81,146 @@
     #endif
 #endif
 
-#include "semaphore.h" 
+#define ARRAY_SIZE(a) (sizeof(a) / sizeof(a[0]))
 
-typedef struct {
+#define GET_3RD_ARG(arg1, arg2, arg3, ...) arg3
+
+#define ASSERT_INT(value, condition, expectation, error) \
+{ \
+    if (!(value condition expectation)) { \
+        fprintf(stderr, "ERROR: assert "#value"(%d) "#condition" "#expectation"(%d)\n%s:%d - %s\n", \
+            value, expectation, __FILE__, __LINE__, __FUNCTION__); \
+        goto error; \
+    } \
+}
+
+#define ASSERT_LNG(value, condition, expectation, error) \
+{ \
+    if (!(value condition expectation)) { \
+        fprintf(stderr, "ERROR: assert "#value"(%ld) "#condition" "#expectation"(%ld)\n%s:%d - %s\n", \
+            value, (long int)expectation, __FILE__, __LINE__, __FUNCTION__); \
+        goto error; \
+    } \
+}
+
+#define ASSERT_PTR(value, condition, expectation, error) \
+{ \
+    if (!(value condition expectation)) { \
+        fprintf(stderr, "ERROR: assert "#value"(%p) "#condition" "#expectation"(%p)\n%s:%d - %s\n", \
+            value, expectation, __FILE__, __LINE__, __FUNCTION__); \
+        goto error; \
+    } \
+}
+
+#define DEBUG(format, ...) \
+{ \
+    if (app.verbose) \
+        fprintf(stderr, "\033[0;32m%s:%d - %s, "#format"\033[0m\n", \
+            __FILE__, __LINE__, __FUNCTION__, ##__VA_ARGS__); \
+}
+
+#define ERROR(format, ...) \
+{ \
+    fprintf(stderr, "\033[1;31m%s:%d - %s, "#format"\033[0m\n", \
+        __FILE__, __LINE__, __FUNCTION__, ##__VA_ARGS__); \
+}
+
+#define CALL_MESSAGE(call) \
+{ \
+    fprintf(stderr, "ERROR: "#call" returned error: %s (%d)\n%s:%d - %s\n", \
+        strerror(errno), errno, __FILE__, __LINE__, __FUNCTION__); \
+}
+
+#define CALL_CUSTOM_MESSAGE(call, res) \
+{ \
+    fprintf(stderr, "ERROR: "#call" returned error: %s (%d)\n%s:%d - %s\n", \
+        strerror(res), res, __FILE__, __LINE__, __FUNCTION__); \
+}
+
+#define CALL_2(call, error) \
+{ \
+    int __res = call; \
+    if (__res == -1) { \
+        CALL_MESSAGE(call); \
+        goto error; \
+    } \
+}
+
+#define CALL_1(call) \
+{ \
+    int __res = call; \
+    if (__res == -1) { \
+        CALL_MESSAGE(call); \
+    } \
+}
+
+#define CALL_X(...) GET_3RD_ARG(__VA_ARGS__, CALL_2, CALL_1, )
+
+#define CALL(...) CALL_X(__VA_ARGS__)(__VA_ARGS__)
+
+#define GEN_CALL_2(call, error) \
+{ \
+    int __res = call; \
+    if (__res != 0) { \
+        CALL_MESSAGE(call); \
+        goto error; \
+    } \
+}
+
+#define GEN_CALL_1(call) \
+{ \
+    int __res = call; \
+    if (__res != 0) { \
+        CALL_MESSAGE(call); \
+    } \
+}
+
+#define GEN_CALL_X(...) GET_3RD_ARG(__VA_ARGS__, GEN_CALL_2, GEN_CALL_1, )
+
+#define GEN_CALL(...) GEN_CALL_X(__VA_ARGS__)(__VA_ARGS__)
+
+#define LAMBDA(LAMBDA$_ret, LAMBDA$_args, LAMBDA$_body) \
+({ \
+    LAMBDA$_ret LAMBDA$__anon$ LAMBDA$_args \
+    LAMBDA$_body \
+    LAMBDA$__anon$; \
+})
+
+#define REP0(...)
+#define REP1(...) __VA_ARGS__
+#define REP2(...) REP1(__VA_ARGS__), __VA_ARGS__
+#define REP3(...) REP2(__VA_ARGS__), __VA_ARGS__
+#define REP4(...) REP3(__VA_ARGS__), __VA_ARGS__
+#define REP5(...) REP4(__VA_ARGS__), __VA_ARGS__
+#define REP6(...) REP5(__VA_ARGS__), __VA_ARGS__
+#define REP7(...) REP6(__VA_ARGS__), __VA_ARGS__
+#define REP8(...) REP7(__VA_ARGS__), __VA_ARGS__
+#define REP9(...) REP8(__VA_ARGS__), __VA_ARGS__
+#define REP10(...) REP9(__VA_ARGS__), __VA_ARGS__
+
+#define REP(HUNDREDS, TENS, ONES, ...) \
+    REP##ONES(__VA_ARGS__) \
+    REP##HUNDREDS(REP10(REP10(__VA_ARGS__))) \
+    REP##TENS(REP10(__VA_ARGS__))
+
+#include <stdint.h>    //uint32_t
+#include <stdio.h>     // fprintf
+#include <stdlib.h>    // malloc, free
+//#include <unistd.h>    // STDIN_FILENO, usleep
+#include <time.h>      // time_t
+#include <semaphore.h>
+#include <errno.h>     // error codes
+#include <signal.h>    // SIGUSR1
+#include <string.h>    // memcpy
+#include <sys/stat.h>  // stat
+#include <sys/select.h> //select
+#include <fcntl.h>     // O_RDWR | O_NONBLOCK
+
+struct cpu_state_t {
     float cpu;
-} cpu_state_t;
+};
 
-typedef struct {
+struct memory_state_t {
     // memory status
     int total_size;
     int swap_size; 
@@ -73,53 +229,16 @@ typedef struct {
     int exe_size;
     int stk_size;
     int data_size;
-} memory_state_t;
+};
 
-typedef struct {
+struct temperature_state_t {
     float temp;
-} temperature_state_t;
-
-#ifdef MMAL
-#include "interface/mmal/mmal.h"
-#include "interface/mmal/mmal_logging.h"
-#include "interface/mmal/mmal_buffer.h"
-#include "interface/mmal/util/mmal_util.h"
-#include "interface/mmal/util/mmal_util_params.h"
-#include "interface/mmal/util/mmal_default_components.h"
-#include "interface/mmal/util/mmal_connection.h"
-#include "interface/mmal/mmal_parameters_camera.h"
-
-typedef struct {
-    // camera properties
-    char camera_name[TEXT_SIZE]; // Name of the camera sensor
-    int max_width; // camera max width
-    int max_height; // camera max height
-    int camera_num; // Camera number
-    MMAL_COMPONENT_T *camera;
-    MMAL_COMPONENT_T *encoder_h264;
-
-    MMAL_PORT_T *video_port;
-    MMAL_POOL_T *video_port_pool;
-    MMAL_PORT_T *h264_input_port;
-    MMAL_POOL_T *h264_input_pool;
-    MMAL_PORT_T *h264_output_port;
-    MMAL_POOL_T *h264_output_pool;
-
-    char *h264_buffer;
-    int32_t h264_buffer_length;
-    pthread_mutex_t h264_mutex;
-    int is_h264_mutex;
-
-    sem_t h264_semaphore;
-    int is_h264_semaphore;
-
-} mmal_state_t;
-#endif //MMAL
+};
 
 #ifdef TENSORFLOW
 #include "tensorflow/lite/experimental/c/c_api.h"
 
-typedef struct {
+struct tensorflow_state_t {
     TfLiteModel *tf_model;
     TfLiteInterpreterOptions *tf_options;
     TfLiteInterpreter *tf_interpreter;
@@ -130,13 +249,13 @@ typedef struct {
     const TfLiteTensor *tf_tensor_scores;
     const TfLiteTensor *tf_tensor_num_detections;
 
-} tensorflow_state_t;
+};
 #elif DARKNET
 #include "include/darknet.h"
 
-typedef struct {
+struct darknet_state_t {
     network *dn_net;
-} darknet_state_t;
+};
 #endif
 
 #ifdef OPENVG
@@ -147,7 +266,7 @@ typedef struct {
 /**
  * Structure used to store an EGL client state. 
  ***********************************************************/
-typedef struct {
+struct openvg_state_t {
     EGLDisplay display;
     EGLContext context;
     EGLSurface surface;
@@ -163,50 +282,103 @@ typedef struct {
     int egl_maj;
     int egl_min;
 
-    unsigned int display_width;
-    unsigned int display_height;
-
     FT_Library font_lib;
     void* font_data;
     size_t font_len;
-} openvg_state_t;
+};
 #endif //OPENVG
 
 #ifdef CONTROL
-typedef struct {
+struct control_state_t {
     volatile unsigned *gpio;
-} control_state_t;
+};
 #endif //CONTROL
 
-#ifdef RFB
-typedef struct {
-    pthread_t thread;
-    int thread_res;
-    int serv_socket;
-    int client_socket;
-} rfb_state_t;
-#endif //RFB
+struct format_mapping_t {
+    int format;
+    int internal_format;
+    int is_supported;
+};
 
-typedef enum {
-    OUTPUT_NONE,
-    OUTPUT_STREAM,
-    OUTPUT_RFB
-} output_enum_t;
+struct filter_reference_t {
+    int out_format;
+    int index;
+};
 
-typedef struct {
+struct input_t {
+    char* name;
+    void *context;
+
+    int (*init)();
+    void (*cleanup)();
+    int (*start)(int format);
+    int (*is_started)();
+    int (*stop)();
+    int (*process_frame)();
+
+    uint8_t* (*get_buffer)(int *format, int* length);
+    int (*get_formats)(const struct format_mapping_t *formats[]);
+};
+
+struct filter_t {
+    char* name;
+    void *context;
+    int (*init)();
+    void (*cleanup)();
+
+    int (*start)(int input_format, int output_format);
+    int (*is_started)();
+    int (*stop)();
+    int (*process_frame)(uint8_t *buffer);
+
+
+    uint8_t *(*get_buffer)(int *in_format, int *out_format, int *length);
+    int (*get_in_formats)(const struct format_mapping_t *formats[]);
+    int (*get_out_formats)(const struct format_mapping_t *formats[]);
+};
+
+struct output_t {
+    char* name;
+    void *context;
+
+    int start_format;
+    struct filter_reference_t filters[MAX_FILTERS];
+
+    int (*init)();
+    int (*start)();
+    int (*is_started)();
+    int (*process_frame)();
+    int (*stop)();
+    int (*get_formats)(const struct format_mapping_t *formats[]);
+    void (*cleanup)();
+};
+
+struct app_state_t {
+    // camera properties
+    int camera_num;               // Camera number
+    char camera_name[MAX_STRING]; // Name of the camera sensor
+    int camera_max_width;         // camera max width
+    int camera_max_height;        // camera max height
+
     // common properties
-    int width;
-    int height;
-    int bits_per_pixel;
+    int video_width;
+    int video_height;
+    int video_format;
+    int video_output;
+
     int port;
     char *filename;                     // name of output file
     float fps;
     int verbose;                        // debug
-    output_enum_t output_type;
-    char* model_path;
-    char* config_path;
+    const char* output_path;
+    const char* model_path;
+    const char* config_path;
     volatile unsigned *gpio;
     float rfb_fps;
+
+    // window properties
+    unsigned window_width;
+    unsigned window_height;
 
     pthread_mutex_t buffer_mutex;
     sem_t buffer_semaphore;
@@ -216,7 +388,6 @@ typedef struct {
     int worker_thread_res;
     int worker_width;
     int worker_height;
-    int worker_bits_per_pixel;
     char *worker_buffer_565;
     char *worker_buffer_rgb;
     int worker_objects;
@@ -226,31 +397,25 @@ typedef struct {
     float *worker_classes;
     float *worker_scores;
 
-#ifdef CONTROL
-    control_state_t control;
-#endif
+    struct input_t input;
 
-#ifdef MMAL
-    mmal_state_t mmal;
+#ifdef CONTROL
+    struct control_state_t control;
 #endif
 
 #ifdef TENSORFLOW
-    tensorflow_state_t tf;
+    struct tensorflow_state_t tf;
 #elif DARKNET
-    darknet_state_t dn;
+    struct darknet_state_t dn;
 #endif
 
 #ifdef OPENVG
-    openvg_state_t openvg;
+    struct openvg_state_t openvg;
 #endif
 
-#ifdef RFB
-	rfb_state_t rfb;
-#endif
-
-    temperature_state_t temperature;
-    memory_state_t memory;
-    cpu_state_t cpu;
-} app_state_t;
+    struct temperature_state_t temperature;
+    struct memory_state_t memory;
+    struct cpu_state_t cpu;
+};
 
 #endif // main_h

@@ -1,11 +1,30 @@
+// Raspidetect
+
+// Copyright (C) 2021 Andrei Klimchuk <andrew.klimchuk@gmail.com>
+
+// This program is free software; you can redistribute it and/or
+// modify it under the terms of the GNU Lesser General Public
+// License as published by the Free Software Foundation; either
+// version 3 of the License, or (at your option) any later version.
+
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+// Lesser General Public License for more details.
+
+// You should have received a copy of the GNU Lesser General Public License
+// along with this program; if not, write to the Free Software Foundation,
+// Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+
 #include <khash.h>
 
 #include "main.h"
 #include "utils.h"
 
 #include "dxva.h"
+#include "h264.h"
 
-#include "dxva_helpers.c"
+extern struct app_state_t app;
 
 static const uint8_t default_scaling4[2][16] = {
     {  6, 13, 20, 28, 13, 20, 28, 32,
@@ -33,34 +52,38 @@ static const uint8_t default_scaling8[2][64] = {
       24, 25, 27, 28, 30, 32, 33, 35 }
 };
 
-void dxva_destroy(struct app_state_t *app)
+static const uint8_t start_code[] = { 0, 0, 1 };
+
+#include "dxva_helpers.c"
+
+void dxva_destroy()
 {
     HRESULT res;
 
-    if (app->dxva.device != NULL) {
-        CoTaskMemFree(app->dxva.cfg_list);
-        app->dxva.cfg_count = 0;
-        app->dxva.cfg_list = NULL;
+    if (app.dxva.device != NULL) {
+        CoTaskMemFree(app.dxva.cfg_list);
+        app.dxva.cfg_count = 0;
+        app.dxva.cfg_list = NULL;
     }
 
-    if (app->dxva.decoder != NULL) {
-        IDirectXVideoDecoderService_Release(app->dxva.decoder);
+    if (app.dxva.decoder != NULL) {
+        IDirectXVideoDecoderService_Release(app.dxva.decoder);
     }
-    if (app->dxva.service != NULL) {
-        IDirectXVideoDecoderService_Release(app->dxva.service);
+    if (app.dxva.service != NULL) {
+        IDirectXVideoDecoderService_Release(app.dxva.service);
     }
-    if (app->dxva.device != NULL) {
-        res = IDirect3DDeviceManager9_CloseDeviceHandle(app->dxva.device_manager, app->dxva.device);
+    if (app.dxva.device != NULL) {
+        res = IDirect3DDeviceManager9_CloseDeviceHandle(app.dxva.device_manager, app.dxva.device);
         if (FAILED(res)) {
-            fprintf(stderr, "ERROR: Can't close Direct3DDevice device\n");
+            DEBUG("ERROR: Can't close Direct3DDevice device");
         }
     }
-    if (app->dxva.device_manager != NULL) {
-        IDirect3DDeviceManager9_Release(app->dxva.device_manager);
+    if (app.dxva.device_manager != NULL) {
+        IDirect3DDeviceManager9_Release(app.dxva.device_manager);
     }
 }
 
-int dxva_init(struct app_state_t *app)
+int dxva_init()
 {
     HRESULT h_res;
     int res;
@@ -68,52 +91,52 @@ int dxva_init(struct app_state_t *app)
     unsigned reset_token;
     h_res = DXVA2CreateDirect3DDeviceManager9(
         &reset_token,
-        &app->dxva.device_manager
+        &app.dxva.device_manager
     );
     if (FAILED(h_res)) {
-        fprintf(stderr, "ERROR: Can't create device manager\n");
+        DEBUG("ERROR: Can't create device manager");
         goto close;
     }
 
-    h_res = IDirect3DDeviceManager9_ResetDevice(app->dxva.device_manager, app->d3d.dev, reset_token);
+    h_res = IDirect3DDeviceManager9_ResetDevice(app.dxva.device_manager, app.d3d.dev, reset_token);
     if (FAILED(h_res)) {
         if (h_res == E_INVALIDARG) {
-            fprintf(stderr, "ERROR: Can't reset Direct3D device, res: E_INVALIDARG\n");
+            DEBUG("ERROR: Can't reset Direct3D device, res: E_INVALIDARG");
         } else if (h_res == D3DERR_INVALIDCALL) {
-            fprintf(stderr, "ERROR: Can't reset Direct3D device, res: D3DERR_INVALIDCALL\n");
+            DEBUG("ERROR: Can't reset Direct3D device, res: D3DERR_INVALIDCALL");
         }
     }
 
-    h_res = IDirect3DDeviceManager9_OpenDeviceHandle(app->dxva.device_manager, &app->dxva.device);
+    h_res = IDirect3DDeviceManager9_OpenDeviceHandle(app.dxva.device_manager, &app.dxva.device);
     if (FAILED(h_res)) {
         if (h_res == DXVA2_E_NOT_INITIALIZED) {
-            fprintf(stderr, "ERROR: Can't open Direct3D device, res: DXVA2_E_NOT_INITIALIZED\n");
+            DEBUG("ERROR: Can't open Direct3D device, res: DXVA2_E_NOT_INITIALIZED");
         } else {
-            fprintf(stderr, "ERROR: Can't open Direct3D device, res: %ld\n", h_res);
+            DEBUG("ERROR: Can't open Direct3D device, res: %ld", h_res);
         }
         goto close;
     }
 
     h_res = IDirect3DDeviceManager9_GetVideoService(
-        app->dxva.device_manager,
-        app->dxva.device,
+        app.dxva.device_manager,
+        app.dxva.device,
         &IID_IDirectXVideoDecoderService,
-        (void **)&app->dxva.service);
+        (void **)&app.dxva.service);
     if (FAILED(h_res)) {
-        fprintf(stderr, "ERROR: Can't get Direct3D decoder service\n");
+        DEBUG("ERROR: Can't get Direct3D decoder service");
         goto close;
     }
 
-    res = dxva_find_decoder(app);
+    res = dxva_find_decoder();
     if (res) {
-        fprintf(stderr, "ERROR: Can't find NV12 decoder");
+        DEBUG("ERROR: Can't find NV12 decoder");
         dxva_print_guid(H264CODEC);
         goto close;
     }
 
     DXVA2_VideoDesc desc;
-    desc.SampleWidth = app->server_width;
-    desc.SampleHeight = app->server_height;
+    desc.SampleWidth = app.server_width;
+    desc.SampleHeight = app.server_height;
     desc.SampleFormat.SampleFormat = DXVA2_SampleUnknown;
     desc.SampleFormat.VideoChromaSubsampling = DXVA2_VideoChromaSubsampling_Unknown;
     desc.SampleFormat.NominalRange = DXVA2_NominalRange_Unknown;
@@ -129,53 +152,53 @@ int dxva_init(struct app_state_t *app)
     desc.UABProtectionLevel = FALSE;
 
     h_res = IDirectXVideoDecoderService_GetDecoderConfigurations(
-        app->dxva.service,
+        app.dxva.service,
         &H264CODEC,
         &desc,
         NULL,
-        &app->dxva.cfg_count,
-        &app->dxva.cfg_list
+        &app.dxva.cfg_count,
+        &app.dxva.cfg_list
     );
     if (FAILED(h_res)) {
-        fprintf(stderr, "ERROR: Can't get video configuration\n");
+        DEBUG("ERROR: Can't get video configuration");
         goto close;
     }
 
-    res = dxva_find_config(app);
+    res = dxva_find_config();
     if (res) {
-        fprintf(stderr, "ERROR: Can't find config which support DXVA_Slice_H264_Long format");
-        dxva_print_config(app);
+        DEBUG("ERROR: Can't find config which support DXVA_Slice_H264_Long format");
+        dxva_print_config();
         goto close;
     }
 
     h_res = IDirectXVideoDecoderService_CreateSurface(
-        app->dxva.service,
-        app->server_width,
-        app->server_height, 
+        app.dxva.service,
+        app.server_width,
+        app.server_height, 
         SCREEN_BUFFERS - 1, 
         H264CODEC_FORMAT, 
         D3DPOOL_DEFAULT, 
         0,
         DXVA2_VideoDecoderRenderTarget,
-        app->d3d.surfaces,
+        app.d3d.surfaces,
         NULL);
 
     if (FAILED(h_res)) {
-        fprintf(stderr, "ERROR: Can't create video render target\n");
+        DEBUG("ERROR: Can't create video render target");
         goto close;
     }
 
     h_res = IDirectXVideoDecoderService_CreateVideoDecoder(
-        app->dxva.service,
+        app.dxva.service,
         &H264CODEC,
         &desc,
-        app->dxva.cfg,
-        app->d3d.surfaces,
+        app.dxva.cfg,
+        app.d3d.surfaces,
         SCREEN_BUFFERS,
-        &app->dxva.decoder);
+        &app.dxva.decoder);
 
     if (FAILED(h_res)) {
-        fprintf(stderr, "ERROR: Can't get Direct3D decoder service\n");
+        DEBUG("ERROR: Can't get Direct3D decoder service");
         goto close;
     }
 
@@ -190,125 +213,249 @@ static void dxva_fill_picture_entry(DXVA_PicEntry_H264 *pic, unsigned index, uns
     pic->bPicEntry = index | (flag << 7);
 }
 
-static int dxva_fill_picture_parameters(struct app_state_t *app)
+static int dxva_fill_picture_parameters()
 {
-    struct h264_slice_header_t* header = LINKED_HASH_GET_HEAD(app->h264.headers);
+    struct h264_slice_header_t* header = LINKED_HASH_GET_HEAD(app.h264.headers);
 
-    app->dxva.pic_params.wFrameWidthInMbsMinus1 = app->h264.sps.pic_width_in_mbs_minus1;
-    app->dxva.pic_params.wFrameHeightInMbsMinus1 = app->h264.sps.pic_height_in_map_units_minus1;
-    //TODO: to check, we are using one surface so index is 0
-    dxva_fill_picture_entry(
-        &app->dxva.pic_params.CurrPic,
-        0,
-        header->field_pic_flag && header->bottom_field_flag
-    );
+    app.dxva.pic_params.wFrameWidthInMbsMinus1 = app.h264.sps.pic_width_in_mbs_minus1;
+    app.dxva.pic_params.wFrameHeightInMbsMinus1 = app.h264.sps.pic_height_in_map_units_minus1;
+    //TODO: if should have index of picture_parameters
+    app.dxva.pic_params.CurrPic.Index7Bits = 0;
+    app.dxva.pic_params.CurrPic.AssociatedFlag
+        = app.h264.pps.bottom_field_pic_order_in_frame_present_flag;
+        //= header->field_pic_flag && header->bottom_field_flag;
+    DEBUG("bottom_field_flag: %d", app.h264.pps.bottom_field_pic_order_in_frame_present_flag);
 
-    app->dxva.pic_params.num_ref_frames = app->h264.sps.num_ref_frames;
-    app->dxva.pic_params.field_pic_flag = header->field_pic_flag;
-    app->dxva.pic_params.MbaffFrameFlag = header->MbaffFrameFlag;
-    app->dxva.pic_params.residual_colour_transform_flag = 0;
-    app->dxva.pic_params.sp_for_switch_flag = header->sp_for_switch_flag;
-    app->dxva.pic_params.chroma_format_idc = app->h264.sps.chroma_format_idc;
-    app->dxva.pic_params.RefPicFlag = app->h264.nal_ref_idc > 0? 1: 0;
-    app->dxva.pic_params.constrained_intra_pred_flag = app->h264.pps.constrained_intra_pred_flag;
-    app->dxva.pic_params.weighted_pred_flag = app->h264.pps.weighted_pred_flag;
-    app->dxva.pic_params.weighted_bipred_idc = app->h264.pps.weighted_bipred_idc;
-    app->dxva.pic_params.MbsConsecutiveFlag = 1;
-    app->dxva.pic_params.frame_mbs_only_flag = app->h264.sps.frame_mbs_only_flag;
-    app->dxva.pic_params.transform_8x8_mode_flag = app->h264.pps.transform_8x8_mode_flag;
-    app->dxva.pic_params.MinLumaBipredSize8x8Flag = 0;
+    app.dxva.pic_params.num_ref_frames = app.h264.sps.num_ref_frames;
+    DEBUG("num_ref_frames: %d", app.h264.sps.num_ref_frames);
+
+    app.dxva.pic_params.field_pic_flag = header->field_pic_flag;
+    DEBUG("field_pic_flag: %d", header->field_pic_flag);
+    
+    app.dxva.pic_params.MbaffFrameFlag = header->MbaffFrameFlag;
+    DEBUG("MbaffFrameFlag: %d", header->MbaffFrameFlag);
+
+    app.dxva.pic_params.residual_colour_transform_flag = app.h264.sps.separate_colour_plane_flag;
+    DEBUG("residual_colour_transform_flag: %d", app.h264.sps.separate_colour_plane_flag);
+
+    app.dxva.pic_params.sp_for_switch_flag = header->sp_for_switch_flag;
+    DEBUG("sp_for_switch_flag: %d", header->sp_for_switch_flag);
+
+    app.dxva.pic_params.chroma_format_idc = app.h264.sps.chroma_format_idc;
+    DEBUG("chroma_format_idc: %d", app.h264.sps.chroma_format_idc);
+
+    app.dxva.pic_params.RefPicFlag = app.h264.nal_ref_idc > 0? 1: 0;
+    DEBUG("RefPicFlag: %d", app.h264.nal_ref_idc > 0? 1: 0);
+
+    app.dxva.pic_params.constrained_intra_pred_flag = app.h264.pps.constrained_intra_pred_flag;
+    DEBUG("constrained_intra_pred_flag: %d", app.h264.pps.constrained_intra_pred_flag);
+
+    app.dxva.pic_params.weighted_pred_flag = app.h264.pps.weighted_pred_flag;
+    DEBUG("weighted_pred_flag: %d", app.h264.pps.weighted_pred_flag);
+
+    app.dxva.pic_params.weighted_bipred_idc = app.h264.pps.weighted_bipred_idc;
+    DEBUG("weighted_bipred_idc: %d", app.h264.pps.weighted_bipred_idc);
+
+    app.dxva.pic_params.MbsConsecutiveFlag = 1;
+    app.dxva.pic_params.frame_mbs_only_flag = app.h264.sps.frame_mbs_only_flag;
+    DEBUG("frame_mbs_only_flag: %d", app.h264.sps.frame_mbs_only_flag);
+
+    app.dxva.pic_params.transform_8x8_mode_flag = app.h264.pps.transform_8x8_mode_flag;
+    DEBUG("transform_8x8_mode_flag: %d", app.h264.pps.transform_8x8_mode_flag);
+
+    app.dxva.pic_params.MinLumaBipredSize8x8Flag = app.h264.sps.level_idc >= 31;
+    DEBUG("MinLumaBipredSize8x8Flag: %d", app.h264.sps.level_idc >= 31);
+
     // Specifies whether all macroblocks in the current picture have intra prediction modes. 
-    app->dxva.pic_params.IntraPicFlag = 0;
-    app->dxva.pic_params.bit_depth_luma_minus8 = app->h264.sps.bit_depth_luma_minus8;
-    app->dxva.pic_params.bit_depth_chroma_minus8 = app->h264.sps.bit_depth_chroma_minus8;
-    app->dxva.pic_params.StatusReportFeedbackNumber = ++app->dxva.status_report;
-    // TODO: to check
-    dxva_fill_picture_entry(&app->dxva.pic_params.RefFrameList[0], 0, 1);
-    // TODO: to find
-    //app->dxva.pic_params.CurrFieldOrderCnt[0] = 0;
-    //app->dxva.pic_params.CurrFieldOrderCnt[1] = 0;
-    // TODO: to find
-    //app->dxva.pic_params.FieldOrderCntList = 0;
-    app->dxva.pic_params.pic_init_qp_minus26 = app->h264.pps.pic_init_qp_minus26;
-    app->dxva.pic_params.chroma_qp_index_offset = app->h264.pps.chroma_qp_index_offset;
-    app->dxva.pic_params.second_chroma_qp_index_offset = app->h264.pps.second_chroma_qp_index_offset;
-    app->dxva.pic_params.ContinuationFlag = 0; // truncate for now
-    app->dxva.pic_params.pic_init_qs_minus26 = app->h264.pps.pic_init_qs_minus26;
-    app->dxva.pic_params.num_ref_idx_l0_active_minus1 = app->h264.pps.ref_count[0] - 1;
-    app->dxva.pic_params.num_ref_idx_l1_active_minus1 = app->h264.pps.ref_count[1] - 1;
-    // TODO: to find
-    //app->dxva.pic_params.Reserved8BitsA 
-    // TODO: to find
-    //app->dxva.pic_params.FrameNumList
-    // TODO: to find
+    app.dxva.pic_params.IntraPicFlag = header->slice_type == SliceTypeI;
+    DEBUG("IntraPicFlag: %d", header->slice_type == SliceTypeI);
+
+    app.dxva.pic_params.bit_depth_luma_minus8 = app.h264.sps.bit_depth_luma_minus8;
+    DEBUG("bit_depth_luma_minus8: %d", app.h264.sps.bit_depth_luma_minus8);
+
+    app.dxva.pic_params.bit_depth_chroma_minus8 = app.h264.sps.bit_depth_chroma_minus8;
+    DEBUG("bit_depth_chroma_minus8: %d", app.h264.sps.bit_depth_chroma_minus8);
+
+    app.dxva.pic_params.StatusReportFeedbackNumber = app.dxva.status_report++;
+    DEBUG("StatusReportFeedbackNumber: %d", app.dxva.status_report - 1);
+
+    for(int i = 0; i < 16; i++) {
+        app.dxva.pic_params.RefFrameList[i].bPicEntry = 0xff;
+        app.dxva.pic_params.FieldOrderCntList[i][0]
+            = app.dxva.pic_params.FieldOrderCntList[i][1] = 0;
+        app.dxva.pic_params.FrameNumList[i] = 0;
+    }
+
+    //TODO: fill all references
+    int index = 0;
+    if (header->long_term_reference_flag) {
+        app.dxva.pic_params.FrameNumList[index] = header->LongTermFrameIdx;
+    }
+    else {
+        app.dxva.pic_params.FrameNumList[index] = header->frame_num;
+    }
+    DEBUG("long_term_reference_flag: %d", header->long_term_reference_flag);
+    DEBUG("LongTermFrameIdx: %d", header->LongTermFrameIdx);
+    DEBUG("frame_num: %d", header->frame_num);
     // Contains two 1-bit flags for each entry in RefFrameList. For the ith entry in RefFrameList,
     // the two flags are accessed as follows:
-    //app->dxva.pic_params.UsedForReferenceFlags
+    app.dxva.pic_params.UsedForReferenceFlags |= 1 << (2 * index);
+    app.dxva.pic_params.UsedForReferenceFlags |= 1 << (2 * index + 1);
+    app.dxva.pic_params.FieldOrderCntList[index][0]
+        = app.dxva.pic_params.FieldOrderCntList[index][1]
+        = !header->bottom_field_flag;
+    app.dxva.pic_params.RefFrameList[index].Index7Bits = 1;
+    app.dxva.pic_params.RefFrameList[index].AssociatedFlag = 0;
+
+    DEBUG("header->bottom_field_flag: %d", header->bottom_field_flag);
+
+    
+    
+    /*for(auto it = m_dqPoc.begin(); it != m_dqPoc.end() && iIndex < 16; iIndex++, ++it){
+        m_H264PictureParams.FrameNumList[iIndex] = it->usFrameList; //done
+
+        m_H264PictureParams.RefFrameList[iIndex].Index7Bits = it->bRefFrameList;
+        m_H264PictureParams.RefFrameList[iIndex].AssociatedFlag = 0;
+        m_H264PictureParams.FieldOrderCntList[iIndex][0]
+            = m_H264PictureParams.FieldOrderCntList[iIndex][1]
+            = it->TopFieldOrderCnt;
+
+        // Contains two 1-bit flags for each entry in RefFrameList. For the ith entry in RefFrameList,
+        // the two flags are accessed as follows:
+        m_H264PictureParams.UsedForReferenceFlags |= 1 << (2 * iIndex);
+        m_H264PictureParams.UsedForReferenceFlags |= 1 << (2 * iIndex + 1);
+    }*/
+
+    app.dxva.pic_params.pic_init_qp_minus26 = app.h264.pps.pic_init_qp_minus26;
+    DEBUG("pic_init_qp_minus26: %d", app.h264.pps.pic_init_qp_minus26);
+    app.dxva.pic_params.chroma_qp_index_offset = app.h264.pps.chroma_qp_index_offset;
+    DEBUG("chroma_qp_index_offset: %d", app.h264.pps.chroma_qp_index_offset);
+    app.dxva.pic_params.second_chroma_qp_index_offset = app.h264.pps.second_chroma_qp_index_offset;
+    DEBUG("second_chroma_qp_index_offset: %d", app.h264.pps.second_chroma_qp_index_offset);
+    app.dxva.pic_params.ContinuationFlag = 1; // copied
+    app.dxva.pic_params.pic_init_qs_minus26 = app.h264.pps.pic_init_qs_minus26;
+    DEBUG("pic_init_qs_minus26: %d", app.h264.pps.pic_init_qs_minus26);
+    app.dxva.pic_params.num_ref_idx_l0_active_minus1 = app.h264.pps.ref_count[0] - 1;
+    app.dxva.pic_params.num_ref_idx_l1_active_minus1 = app.h264.pps.ref_count[1] - 1;
+    DEBUG("num_ref_idx_l0_active_minus1 and num_ref_idx_l1_active_minus1: %d %d",
+        app.h264.pps.ref_count[0] - 1, app.h264.pps.ref_count[1] - 1);
+
     // If Flagi is 1, frame number i is marked as "non-existing," as defined by the  H.264/AVC
     // specification. (Otherwise, if the flag is 0, the frame is not marked as "non-existing.") 
-    app->dxva.pic_params.NonExistingFrameFlags = 0;
-    app->dxva.pic_params.frame_num = header->frame_num;
+    app.dxva.pic_params.NonExistingFrameFlags = 0;
+
+    app.dxva.pic_params.frame_num = header->frame_num;
+    DEBUG("frame_num: %d", header->frame_num);
+
+    app.dxva.pic_params.log2_max_frame_num_minus4 = app.h264.sps.log2_max_frame_num - 4;
+    DEBUG("log2_max_frame_num_minus4: %d", app.h264.sps.log2_max_frame_num - 4);
+
+    app.dxva.pic_params.pic_order_cnt_type = app.h264.sps.pic_order_cnt_type;
+    DEBUG("pic_order_cnt_type: %d", app.h264.sps.pic_order_cnt_type);
+
+    app.dxva.pic_params.log2_max_pic_order_cnt_lsb_minus4
+        = app.h264.sps.log2_max_pic_order_cnt_lsb_minus4;
+    DEBUG("log2_max_pic_order_cnt_lsb_minus4: %d", app.h264.sps.log2_max_pic_order_cnt_lsb_minus4);
+
+    //app.dxva.pic_params.delta_pic_order_always_zero_flag = 0;
+
+    app.dxva.pic_params.direct_8x8_inference_flag = app.h264.sps.direct_8x8_inference_flag;
+    DEBUG("direct_8x8_inference_flag: %d", app.h264.sps.direct_8x8_inference_flag);
+
+    app.dxva.pic_params.entropy_coding_mode_flag = app.h264.pps.entropy_coding_mode_flag;
+    DEBUG("entropy_coding_mode_flag: %d", app.h264.pps.entropy_coding_mode_flag);
+
+    app.dxva.pic_params.pic_order_present_flag
+        = app.h264.pps.bottom_field_pic_order_in_frame_present_flag;
+    DEBUG("pic_order_present_flag: %d",
+        app.h264.pps.bottom_field_pic_order_in_frame_present_flag);
+
+    app.dxva.pic_params.num_slice_groups_minus1 = app.h264.pps.num_slice_groups_minus1;
+    DEBUG("num_slice_groups_minus1: %d", app.h264.pps.num_slice_groups_minus1);
+    //app.dxva.pic_params.slice_group_map_type = 0;
+
+    app.dxva.pic_params.deblocking_filter_control_present_flag
+        = app.h264.pps.deblocking_filter_control_present_flag;
+    DEBUG("deblocking_filter_control_present_flag: %d",
+        app.h264.pps.deblocking_filter_control_present_flag);
+
+    app.dxva.pic_params.redundant_pic_cnt_present_flag
+        = app.h264.pps.redundant_pic_cnt_present_flag;
+    DEBUG("redundant_pic_cnt_present_flag: %d", app.h264.pps.redundant_pic_cnt_present_flag);
+
+    //app.dxva.pic_params.Reserved8BitsA = 0;
+    //m_H264PictureParams.Reserved8BitsB = 0;
+
+    app.dxva.pic_params.slice_group_change_rate_minus1 = app.h264.pps.num_slice_groups_minus1;
+    DEBUG("slice_group_change_rate_minus1: %d", app.h264.pps.num_slice_groups_minus1);
+
+    // TODO: to find
+    //app.dxva.pic_params.CurrFieldOrderCnt[0] = 0;
+    //app.dxva.pic_params.CurrFieldOrderCnt[1] = 0;
+
     return 0;
 }
 
-static int dxva_fill_matrices(struct app_state_t *app)
+static int dxva_fill_matrices()
 {
-    int i = 0;
-    do {
-        memcpy(&app->dxva.matrices.bScalingLists4x4[i++], default_scaling4[0], sizeof(*default_scaling4[0]));
-        memcpy(&app->dxva.matrices.bScalingLists4x4[i++], default_scaling4[1], sizeof(*default_scaling4[0]));
-    } while (i < 6);
+    memset(&app.dxva.matrices, 16, sizeof(DXVA_Qmatrix_H264));
 
-    memcpy(&app->dxva.matrices.bScalingLists8x8[0], default_scaling8[0], sizeof(*default_scaling8[0]));
-    memcpy(&app->dxva.matrices.bScalingLists8x8[1], default_scaling8[1], sizeof(*default_scaling8[0]));
+    // int i = 0;
+    // do {
+    //     memcpy(&app.dxva.matrices.bScalingLists4x4[i++], default_scaling4[0], sizeof(*default_scaling4[0]));
+    //     memcpy(&app.dxva.matrices.bScalingLists4x4[i++], default_scaling4[1], sizeof(*default_scaling4[0]));
+    // } while (i < 6);
+
+    // memcpy(&app.dxva.matrices.bScalingLists8x8[0], default_scaling8[0], sizeof(*default_scaling8[0]));
+    // memcpy(&app.dxva.matrices.bScalingLists8x8[1], default_scaling8[1], sizeof(*default_scaling8[0]));
 
     // check size
-    // fprintf(stderr, "dxva_fill_matrices: 4: first: %d, last: %d, size %lld\n",
-    //     app->dxva.matrices.bScalingLists4x4[0][0],
-    //     app->dxva.matrices.bScalingLists4x4[0][15],
+    // DEBUG("dxva_fill_matrices: 4: first: %d, last: %d, size %lld",
+    //     app.dxva.matrices.bScalingLists4x4[0][0],
+    //     app.dxva.matrices.bScalingLists4x4[0][15],
     //     sizeof(*default_scaling4[0]));
-    // fprintf(stderr, "dxva_fill_matrices: 4: first: %d, last: %d, size %lld\n",
-    //     app->dxva.matrices.bScalingLists4x4[1][0],
-    //     app->dxva.matrices.bScalingLists4x4[1][15],
+    // DEBUG("dxva_fill_matrices: 4: first: %d, last: %d, size %lld",
+    //     app.dxva.matrices.bScalingLists4x4[1][0],
+    //     app.dxva.matrices.bScalingLists4x4[1][15],
     //     sizeof(*default_scaling4[0]));
-    // fprintf(stderr, "dxva_fill_matrices: 8: first: %d, last: %d, size %lld\n",
-    //     app->dxva.matrices.bScalingLists8x8[0][0],
-    //     app->dxva.matrices.bScalingLists8x8[1][0],
+    // DEBUG("dxva_fill_matrices: 8: first: %d, last: %d, size %lld",
+    //     app.dxva.matrices.bScalingLists8x8[0][0],
+    //     app.dxva.matrices.bScalingLists8x8[1][0],
     //     sizeof(*default_scaling8[0]));
-    // fprintf(stderr, "dxva_fill_matrices: 8: first: %d, last: %d, size %lld\n",
-    //     app->dxva.matrices.bScalingLists8x8[1][0],
-    //     app->dxva.matrices.bScalingLists8x8[1][0],
+    // DEBUG("dxva_fill_matrices: 8: first: %d, last: %d, size %lld",
+    //     app.dxva.matrices.bScalingLists8x8[1][0],
+    //     app.dxva.matrices.bScalingLists8x8[1][0],
     //     sizeof(*default_scaling8[0]));
 
     return 0;
 }
 
-static int dxva_fill_slice(struct app_state_t *app, uint8_t *buffer)
+static int dxva_fill_slice_long(int start, int end)
 {
-    struct h264_slice_header_t* header = LINKED_HASH_GET_HEAD(app->h264.headers);
+    struct h264_slice_header_t* header = LINKED_HASH_GET_HEAD(app.h264.headers);
 
-    app->dxva.slice.slice_type = header->slice_type_origin;
-    app->dxva.slice.num_ref_idx_l0_active_minus1 = header->ref_count[0] - 1;
-    app->dxva.slice.num_ref_idx_l1_active_minus1 = header->ref_count[1] - 1;
-    app->dxva.slice.slice_alpha_c0_offset_div2 = header->slice_alpha_c0_offset_div2;
-    app->dxva.slice.slice_beta_offset_div2 = header->slice_beta_offset_div2;
-    app->dxva.slice.luma_log2_weight_denom = header->luma_log2_weight_denom;
-    app->dxva.slice.chroma_log2_weight_denom = header->chroma_log2_weight_denom;
-    app->dxva.slice.first_mb_in_slice = header->first_mb_in_slice;
-    app->dxva.slice.slice_qs_delta = header->slice_qs_delta;
-    app->dxva.slice.slice_qp_delta = header->slice_qp_delta;
-    app->dxva.slice.redundant_pic_cnt = header->redundant_pic_cnt;
-    app->dxva.slice.direct_spatial_mv_pred_flag = header->direct_spatial_mv_pred_flag;
-    app->dxva.slice.cabac_init_idc = header->cabac_init_idc;
-    app->dxva.slice.disable_deblocking_filter_idc = header->disable_deblocking_filter_idc;
+    app.dxva.slice_long.slice_type = header->slice_type_origin;
+    app.dxva.slice_long.num_ref_idx_l0_active_minus1 = header->ref_count[0] - 1;
+    app.dxva.slice_long.num_ref_idx_l1_active_minus1 = header->ref_count[1] - 1;
+    app.dxva.slice_long.slice_alpha_c0_offset_div2 = header->slice_alpha_c0_offset_div2;
+    app.dxva.slice_long.slice_beta_offset_div2 = header->slice_beta_offset_div2;
+    app.dxva.slice_long.luma_log2_weight_denom = header->luma_log2_weight_denom;
+    app.dxva.slice_long.chroma_log2_weight_denom = header->chroma_log2_weight_denom;
+    app.dxva.slice_long.first_mb_in_slice = header->first_mb_in_slice;
+    app.dxva.slice_long.slice_qs_delta = header->slice_qs_delta;
+    app.dxva.slice_long.slice_qp_delta = header->slice_qp_delta;
+    app.dxva.slice_long.redundant_pic_cnt = header->redundant_pic_cnt;
+    app.dxva.slice_long.direct_spatial_mv_pred_flag = header->direct_spatial_mv_pred_flag;
+    app.dxva.slice_long.cabac_init_idc = header->cabac_init_idc;
+    app.dxva.slice_long.disable_deblocking_filter_idc = header->disable_deblocking_filter_idc;
 
-    app->dxva.slice.NumMbsForSlice = header->PicSizeInMbs - header->first_mb_in_slice;
+    app.dxva.slice_long.NumMbsForSlice = header->PicSizeInMbs - header->first_mb_in_slice;
     //TODO: RefPicList, DXVA_PicEntry_H264 RefPicList[2][32]; - DXVA_PicEntry_H264 - char
     for (int list = 0; list < 2; list++) {
-        for (int ref = 0; ref < ARRAY_SIZE(app->dxva.slice.RefPicList[0]); ref++) {
+        for (int ref = 0; ref < ARRAY_SIZE(app.dxva.slice_long.RefPicList[0]); ref++) {
             if (list < header->list_count && ref < header->ref_count[list]) {
-                fprintf(stderr, "ERROR: TO IMPLEMENT header->list_count %d, "
-                    "%s:%d - %s\n",
+                DEBUG("ERROR: TO IMPLEMENT header->list_count %d, "
+                    "%s:%d - %s",
                     header->list_count, __FILE__, __LINE__, __FUNCTION__);
 
                 // const H264Picture *r = sl->ref_list[list][i].parent;
@@ -321,7 +468,7 @@ static int dxva_fill_slice(struct app_state_t *app, uint8_t *buffer)
                 // fill_picture_entry(&slice->RefPicList[list][i], index,
                 //                    sl->ref_list[list][i].reference == PICT_BOTTOM_FIELD);
 
-                //app->dxva.slice.RefPicList[list][ref].bPicEntry = index | (flag << 7);
+                //app.dxva.slice_long.RefPicList[list][ref].bPicEntry = index | (flag << 7);
 
                 struct h264_weight_t* weight = header->weights[list] + ref;
                 for (unsigned plane = 0; plane < 3; plane++) {
@@ -340,30 +487,37 @@ static int dxva_fill_slice(struct app_state_t *app, uint8_t *buffer)
                         );
                         o = 0;
                     }
-                    app->dxva.slice.Weights[list][ref][plane][0] = w;
-                    app->dxva.slice.Weights[list][ref][plane][1] = o;
+                    app.dxva.slice_long.Weights[list][ref][plane][0] = w;
+                    app.dxva.slice_long.Weights[list][ref][plane][1] = o;
                 }
             } else {
-                app->dxva.slice.RefPicList[list][ref].bPicEntry = 0xff;
+                app.dxva.slice_long.RefPicList[list][ref].bPicEntry = 0xff;
                 for (unsigned plane = 0; plane < 3; plane++) {
-                    app->dxva.slice.Weights[list][ref][plane][0] = 0;
-                    app->dxva.slice.Weights[list][ref][plane][1] = 0;
+                    app.dxva.slice_long.Weights[list][ref][plane][0] = 0;
+                    app.dxva.slice_long.Weights[list][ref][plane][1] = 0;
                 }
             }
         }
     }
 
-    app->dxva.slice.BSNALunitDataLocation = buffer - app->enc_buf;
-    app->dxva.slice.SliceBytesInBuffer = app->enc_buf_length;
-    app->dxva.slice.wBadSliceChopping = 0;
-    app->dxva.slice.BitOffsetToSliceData = 0;
-    app->dxva.slice.slice_id = app->dxva.slice_id++;
+    app.dxva.slice_long.BSNALunitDataLocation = start;
+    app.dxva.slice_long.SliceBytesInBuffer = end - start;
+    app.dxva.slice_long.wBadSliceChopping = 0;
+    app.dxva.slice_long.BitOffsetToSliceData = 0;
+    app.dxva.slice_long.slice_id = app.dxva.slice_id++;
 
     return 0;
 }
 
-static int dxva_commit_buffer(struct app_state_t *app,
-    unsigned type,
+static int dxva_fill_slice_short(int start, int end)
+{
+    app.dxva.slice_short.BSNALunitDataLocation = 0;
+    app.dxva.slice_short.SliceBytesInBuffer = end - start - 1;
+    app.dxva.slice_short.wBadSliceChopping = 0;
+    return 0;
+}
+
+static int dxva_commit_buffer(unsigned type,
     DXVA2_DecodeBufferDesc* buffer,
     const void *data,
     unsigned size)
@@ -373,11 +527,11 @@ static int dxva_commit_buffer(struct app_state_t *app,
 
     void* dxva_data;
     unsigned dxva_size;
-    hr = IDirectXVideoDecoder_GetBuffer(app->dxva.decoder, type, &dxva_data, &dxva_size);
+    hr = IDirectXVideoDecoder_GetBuffer(app.dxva.decoder, type, &dxva_data, &dxva_size);
     if (FAILED(hr)) {
-        fprintf(stderr, "ERROR: dxva_commit_buffer(type: %d) failed to get dxva buffer, error %s(%lx)\n",
+        DEBUG("ERROR: dxva_commit_buffer(type: %d) failed to get dxva buffer, error %s(%lx)",
             type,
-            get_hresult_message(hr),
+            convert_hresult_error(hr),
             hr);
         
         goto close;
@@ -387,16 +541,16 @@ static int dxva_commit_buffer(struct app_state_t *app,
         memcpy(dxva_data, data, size);
         ret = 0;
     } else {
-        fprintf(stderr, "ERROR: dxva_commit_buffer(type: %d) failed, buffer to commit is too big\n", type);
+        DEBUG("ERROR: dxva_commit_buffer(type: %d) failed, buffer to commit is too big", type);
         goto release;
     }
 
 release:
-    hr = IDirectXVideoDecoder_ReleaseBuffer(app->dxva.decoder, type);
+    hr = IDirectXVideoDecoder_ReleaseBuffer(app.dxva.decoder, type);
     if (FAILED(hr)) {
-        fprintf(stderr, "ERROR: dxva_commit_buffer(type: %d) failed to release dxva buffer, error %s(%lx)\n",
+        DEBUG("ERROR: dxva_commit_buffer(type: %d) failed to release dxva buffer, error %s(%lx)",
             type,
-            get_hresult_message(hr),
+            convert_hresult_error(hr),
             hr);
     }
 
@@ -408,52 +562,51 @@ close:
     return ret;
 }
 
-static int dxva_commit_slice(
-    struct app_state_t *app,
-    DXVA2_DecodeBufferDesc* buffer
-) {
-    static const uint8_t start_code[] = { 0, 0, 1 };
+static int dxva_commit_slice(DXVA2_DecodeBufferDesc* buffer, int start, int end) {
+    struct h264_slice_header_t* header = LINKED_HASH_GET_HEAD(app.h264.headers);
 
     int ret = 1;
     HRESULT hr;
 
     void* dxva_data;
     unsigned dxva_size;
-    hr = IDirectXVideoDecoder_GetBuffer(app->dxva.decoder, DXVA2_BitStreamDateBufferType, &dxva_data, &dxva_size);
+    hr = IDirectXVideoDecoder_GetBuffer(app.dxva.decoder, DXVA2_BitStreamDateBufferType, &dxva_data, &dxva_size);
     if (FAILED(hr)) {
-        fprintf(stderr, "ERROR: dxva_commit_slice failed to get dxva buffer(type: %d), error %s(%lx)\n",
+        DEBUG("ERROR: dxva_commit_slice failed to get dxva buffer(type: %d), error %s(%lx)",
             DXVA2_BitStreamDateBufferType,
-            get_hresult_message(hr),
+            convert_hresult_error(hr),
             hr);
         
         goto close;
     }
 
-    if (sizeof(start_code) + app->enc_buf_length - 4 <= dxva_size) {
+    int size = end - start + sizeof(start_code) - 4;
+    if (size <= dxva_size) {
         uint8_t* position = dxva_data;
         memcpy(position, start_code, sizeof(start_code));
         position += sizeof(start_code);
-        memcpy(position, app->enc_buf + 4, app->enc_buf_length - 4);
-        position += app->enc_buf_length - 4;
+        memcpy(position, app.enc_buf + start + 4, size - sizeof(start_code));
 
-        app->dxva.slice.SliceBytesInBuffer = sizeof(start_code) + app->enc_buf_length - 4;
+        buffer->DataSize = size;
         ret = 0;
+
+        DEBUG("Slice has been copied to dxva, size: %d", buffer->DataSize);
     } else {
-        fprintf(stderr, "ERROR: dxva_commit_slice(type: %d) failed, buffer to commit is too big\n",
+        DEBUG("ERROR: dxva_commit_slice(type: %d) failed, buffer to commit is too big",
             DXVA2_BitStreamDateBufferType);
         goto release_stream;
     }
 
     buffer->CompressedBufferType = DXVA2_BitStreamDateBufferType;
-    buffer->DataSize = app->dxva.slice.SliceBytesInBuffer;
-    buffer->NumMBsInBuffer = app->dxva.slice.NumMbsForSlice;
+    buffer->NumMBsInBuffer = header->PicSizeInMbs - header->first_mb_in_slice;
+    DEBUG("dxva, NumMBsInBuffer: %d", buffer->NumMBsInBuffer);
 
 release_stream:
-    hr = IDirectXVideoDecoder_ReleaseBuffer(app->dxva.decoder, DXVA2_BitStreamDateBufferType);
+    hr = IDirectXVideoDecoder_ReleaseBuffer(app.dxva.decoder, DXVA2_BitStreamDateBufferType);
     if (FAILED(hr)) {
-        fprintf(stderr, "ERROR: dxva_commit_slice(type: %d) failed to release dxva buffer, error %s(%lx)\n",
+        DEBUG("ERROR: dxva_commit_slice(type: %d) failed to release dxva buffer, error %s(%lx)",
             DXVA2_BitStreamDateBufferType,
-            get_hresult_message(hr),
+            convert_hresult_error(hr),
             hr);
     }
 
@@ -461,7 +614,7 @@ close:
     return ret;
 }
 
-int dxva_decode(struct app_state_t *app) {
+int dxva_decode(int start, int end) {
     HRESULT hr;
     int ret = 1;
 
@@ -482,40 +635,45 @@ int dxva_decode(struct app_state_t *app) {
     int buffers_size = 0;
 
     // 1. IDirectXVideoDecoder_BeginFrame
-    hr = IDirectXVideoDecoder_BeginFrame(app->dxva.decoder, app->d3d.surfaces[0], NULL);
+    hr = IDirectXVideoDecoder_BeginFrame(app.dxva.decoder, app.d3d.surfaces[0], NULL);
     if (FAILED(hr)) {
-        fprintf(stderr, "ERROR: IDirectXVideoDecoder_BeginFrame failed with error code %lx\n", hr);
+        DEBUG("ERROR: IDirectXVideoDecoder_BeginFrame failed with error code %lx", hr);
         goto close;
     }
 
-    GENERAL_CALL(dxva_fill_picture_parameters(app), end_frame);
-    GENERAL_CALL(dxva_commit_buffer(
-        app,
-        DXVA2_PictureParametersBufferType,
+    STANDARD_CALL(dxva_fill_picture_parameters(), end_frame);
+    STANDARD_CALL(dxva_commit_buffer(DXVA2_PictureParametersBufferType,
         buffers + buffers_size,
-        &app->dxva.pic_params, sizeof(app->dxva.pic_params)
+        &app.dxva.pic_params, sizeof(app.dxva.pic_params)
     ), end_frame);
     buffers_size++;
 
-    GENERAL_CALL(dxva_fill_matrices(app), end_frame);
-    GENERAL_CALL(dxva_commit_buffer(
-        app,
-        DXVA2_InverseQuantizationMatrixBufferType,
+    STANDARD_CALL(dxva_fill_matrices(), end_frame);
+    STANDARD_CALL(dxva_commit_buffer(DXVA2_InverseQuantizationMatrixBufferType,
         buffers + buffers_size,
-        &app->dxva.matrices, sizeof(app->dxva.matrices)
+        &app.dxva.matrices, sizeof(app.dxva.matrices)
     ), end_frame);
     buffers_size++;
 
-    GENERAL_CALL(dxva_commit_slice(app, buffers + buffers_size), end_frame);
+    STANDARD_CALL(dxva_commit_slice(buffers + buffers_size, start, end), end_frame);
     buffers_size++;
 
-    GENERAL_CALL(dxva_fill_slice(app, app->enc_buf), end_frame);
-    GENERAL_CALL(dxva_commit_buffer(
-        app,
-        DXVA2_SliceControlBufferType,
-        buffers + buffers_size,
-        &app->dxva.slice, sizeof(app->dxva.slice)
-    ), end_frame);
+    if (app.dxva.cfg->ConfigBitstreamRaw != 2) {
+        DEBUG("fill long slice");
+        STANDARD_CALL(dxva_fill_slice_long(start, end), end_frame);
+        STANDARD_CALL(dxva_commit_buffer(DXVA2_SliceControlBufferType,
+            buffers + buffers_size,
+            &app.dxva.slice_long, sizeof(app.dxva.slice_long)
+        ), end_frame);
+    }
+    else {
+        DEBUG("fill short slice");
+        STANDARD_CALL(dxva_fill_slice_short(start, end), end_frame);
+        STANDARD_CALL(dxva_commit_buffer(DXVA2_SliceControlBufferType,
+            buffers + buffers_size,
+            &app.dxva.slice_short, sizeof(app.dxva.slice_short)
+        ), end_frame);
+    }
     buffers_size++;
 
     DXVA2_DecodeExecuteParams params = {
@@ -524,30 +682,29 @@ int dxva_decode(struct app_state_t *app) {
         .pExtensionData = NULL
     };
 
-    hr = IDirectXVideoDecoder_Execute(app->dxva.decoder, &params);
+    hr = IDirectXVideoDecoder_Execute(app.dxva.decoder, &params);
     if (FAILED(hr)) {
-        fprintf(stderr, "ERROR: dxva_decode failed to execute DXVA2, error %s(%lx)\n",
-            get_hresult_message(hr),
+        DEBUG("ERROR: dxva_decode failed to execute DXVA2, error %s(%lx)",
+            convert_hresult_error(hr),
             hr);
 
         goto end_frame;
     }
 
-    d3d_render_frame(app);
-
-    if (app->verbose) {
-        fprintf(stderr, "decoding operation has completed\n");
-    }
-
+    d3d_render_frame();
     ret = 0;
 
+    DEBUG("IDirectXVideoDecoder_Execute success");
+
 end_frame:
-    hr = IDirectXVideoDecoder_EndFrame(app->dxva.decoder, NULL);
+    DEBUG("IDirectXVideoDecoder_EndFrame crashed");
+    hr = IDirectXVideoDecoder_EndFrame(app.dxva.decoder, NULL);
     if (FAILED(hr)) {
-        fprintf(stderr, "ERROR: dxva_decode failed to end DXVA2 frame, error %s(%lx)\n",
-            get_hresult_message(hr),
+        DEBUG("ERROR: dxva_decode failed to end DXVA2 frame, error %s(%lx)",
+            convert_hresult_error(hr),
             hr);
     }
+    DEBUG("dxva_decode success: %d", ret);
 
 close:
     return ret;

@@ -1,8 +1,28 @@
+// Raspidetect
+
+// Copyright (C) 2021 Andrei Klimchuk <andrew.klimchuk@gmail.com>
+
+// This program is free software; you can redistribute it and/or
+// modify it under the terms of the GNU Lesser General Public
+// License as published by the Free Software Foundation; either
+// version 3 of the License, or (at your option) any later version.
+
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+// Lesser General Public License for more details.
+
+// You should have received a copy of the GNU Lesser General Public License
+// along with this program; if not, write to the Free Software Foundation,
+// Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+
 #include "main.h"
 
-int darknet_process(app_state_t *state)
+extern struct app_state_t app;
+
+int darknet_process()
 {
-    fprintf(stderr, "DEBUG: darknet start\n");
+    DEBUG("darknet start");
 
     image im = make_image(state->worker_width, state->worker_height, 3);
 
@@ -23,20 +43,20 @@ int darknet_process(app_state_t *state)
     fprintf(stderr, "ERROR: 64bit darknet conversion isn't implemented\n");
  #endif
 
-    fprintf(stderr, "DEBUG: darknet about to detect\n");
+    DEBUG("darknet about to detect");
 
     network_predict(state->dn.dn_net, im.data);
-    fprintf(stderr, "DEBUG: darknet detected\n");
+    DEBUG("darknet detected");
 
     detection *dets = get_network_boxes(state->dn.dn_net, 1, 1, THRESHOLD, 0, 0, 0, &state->worker_objects);
-    fprintf(stderr, "DEBUG: darknet about to freed\n");
+    DEBUG("darknet about to freed");
 
     free_detections(dets, state->worker_objects);
     free_image(im);
     return 0;
 }
 
-int darknet_create(app_state_t *state)
+int darknet_create()
 {
     state->dn.dn_net = load_network(state->config_path, state->model_path, 0);
     if (!state->dn.dn_net) {
@@ -44,16 +64,14 @@ int darknet_create(app_state_t *state)
         return -1;
     }
     if (state->verbose) {
-        fprintf(stderr, "INFO: net width: %d, height: %d\n",
-        state->dn.dn_net->w,
-        state->dn.dn_net->h);
+        DEBUG("net width: %d, height: %d", state->dn.dn_net->w, state->dn.dn_net->h);
     }
     set_batch_network(state->dn.dn_net, 1);
 
     return 0;
 }
 
-void darknet_destroy(app_state_t *state)
+void darknet_destroy()
 {
     if (state->dn.dn_net) {
         free_network(state->dn.dn_net);

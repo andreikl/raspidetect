@@ -1,75 +1,91 @@
+// Raspidetect
+
+// Copyright (C) 2021 Andrei Klimchuk <andrew.klimchuk@gmail.com>
+
+// This program is free software; you can redistribute it and/or
+// modify it under the terms of the GNU Lesser General Public
+// License as published by the Free Software Foundation; either
+// version 3 of the License, or (at your option) any later version.
+
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+// Lesser General Public License for more details.
+
+// You should have received a copy of the GNU Lesser General Public License
+// along with this program; if not, write to the Free Software Foundation,
+// Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+
 #include "main.h"
 
-int overlay_create(app_state_t *state)
+int overlay_create()
 {
-    state->overlay_stride = cairo_format_stride_for_width(CAIRO_FORMAT_ARGB32, state->overlay_width);
-    state->overlay_buffer = malloc(state->overlay_stride * state->overlay_height);
-    state->cairo_surface = cairo_image_surface_create_for_data(state->overlay_buffer,
+    app.overlay_stride = cairo_format_stride_for_width(CAIRO_FORMAT_ARGB32, app.overlay_width);
+    app.overlay_buffer = malloc(app.overlay_stride * app.overlay_height);
+    app.cairo_surface = cairo_image_surface_create_for_data(app.overlay_buffer,
         CAIRO_FORMAT_ARGB32,
-        state->overlay_width,
-        state->overlay_height,
-        state->overlay_stride);
-    if (!state->cairo_surface) {
+        app.overlay_width,
+        app.overlay_height,
+        app.overlay_stride);
+    if (!app.cairo_surface) {
         fprintf(stderr, "ERROR: Failed to create cairo surface");
         return -1;
     }
-    state->cairo_context = cairo_create(state->cairo_surface);
-    if (!state->cairo_context) {
+    app.cairo_context = cairo_create(app.cairo_surface);
+    if (!app.cairo_context) {
         fprintf(stderr, "ERROR: Failed to create cairo context");
         return -1;
     }
-    if (state->verbose) {
-        fprintf(stderr, "INFO: overlay_stride %d\n", state->overlay_stride);
-    }
+    DEBUG("overlay_stride %d", app.overlay_stride);
 
     return 0;
 }
 
-void overlay_print(app_state_t *state, const char *text)
+void overlay_print(const char *text)
 {
-    pthread_mutex_lock(&state->buffer_mutex);
-    cairo_rectangle(state->cairo_context, 0.0, 0.0, state->overlay_width, state->overlay_height);
-    cairo_set_source_rgba(state->cairo_context, 0.0, 0.0, 0.0, 1.0);
-    cairo_fill(state->cairo_context);
+    pthread_mutex_lock(&app.buffer_mutex);
+    cairo_rectangle(app.cairo_context, 0.0, 0.0, app.overlay_width, app.overlay_height);
+    cairo_set_source_rgba(app.cairo_context, 0.0, 0.0, 0.0, 1.0);
+    cairo_fill(app.cairo_context);
 
-    cairo_set_source_rgba(state->cairo_context, 1.0, 1.0, 1.0, 1.0);
-    cairo_set_line_width(state->cairo_context, 1);
-    cairo_move_to(state->cairo_context, 0.0, 10.0);
-    cairo_set_font_size(state->cairo_context, 10.0);
-    cairo_show_text(state->cairo_context, text);
+    cairo_set_source_rgba(app.cairo_context, 1.0, 1.0, 1.0, 1.0);
+    cairo_set_line_width(app.cairo_context, 1);
+    cairo_move_to(app.cairo_context, 0.0, 10.0);
+    cairo_set_font_size(app.cairo_context, 10.0);
+    cairo_show_text(app.cairo_context, text);
 
     int n = 0;
-    for (int i = 0; i < state->worker_total_objects; i++) {
-        if(state->worker_scores[i] > THRESHOLD) {
+    for (int i = 0; i < app.worker_total_objects; i++) {
+        if(app.worker_scores[i] > THRESHOLD) {
             n++;
-            float *box = &state->worker_boxes[i * 4];
-            int x1 = (int)(box[0] * state->width);
-            int y1 = (int)(box[0] * state->height);
-            int x2 = (int)(box[2] * state->width);
-            int y2 = (int)(box[3] * state->height);
-            cairo_move_to(state->cairo_context, x1, y1);
-            cairo_line_to(state->cairo_context, x2, y1);
-            cairo_line_to(state->cairo_context, x2, y2);
-            cairo_line_to(state->cairo_context, x1, y2);
-            cairo_line_to(state->cairo_context, x1, y1);
-            cairo_stroke(state->cairo_context);
+            float *box = &app.worker_boxes[i * 4];
+            int x1 = (int)(box[0] * app.width);
+            int y1 = (int)(box[0] * app.height);
+            int x2 = (int)(box[2] * app.width);
+            int y2 = (int)(box[3] * app.height);
+            cairo_move_to(app.cairo_context, x1, y1);
+            cairo_line_to(app.cairo_context, x2, y1);
+            cairo_line_to(app.cairo_context, x2, y2);
+            cairo_line_to(app.cairo_context, x1, y2);
+            cairo_line_to(app.cairo_context, x1, y1);
+            cairo_stroke(app.cairo_context);
         }
     }
-    state->worker_objects = n;
+    app.worker_objects = n;
 
-    pthread_mutex_unlock(&state->buffer_mutex);
+    pthread_mutex_unlock(&app.buffer_mutex);
 }
 
-void overlay_destroy(app_state_t *state)
+void overlay_destroy()
 {
-    if (state->cairo_context != NULL) {
-        cairo_destroy(state->cairo_context);
+    if (app.cairo_context != NULL) {
+        cairo_destroy(app.cairo_context);
     }
-    if (state->cairo_surface != NULL) {
-        cairo_surface_destroy(state->cairo_surface);
+    if (app.cairo_surface != NULL) {
+        cairo_surface_destroy(app.cairo_surface);
     }
-    if (state->cairo_surface != NULL) {
-        free(state->overlay_buffer);
+    if (app.cairo_surface != NULL) {
+        free(app.overlay_buffer);
     }
 }
 
@@ -77,8 +93,8 @@ void overlay_destroy(app_state_t *state)
 // {
 //     int32_t* source_data = (int32_t*)buffer->data;
 //     int32_t* dest_data = (int32_t*)output_buffer->data;
-//     int32_t* overlay_data = (int32_t*)state->overlay_buffer;
-//     int size = state->width * state->height;
+//     int32_t* overlay_data = (int32_t*)app.overlay_buffer;
+//     int size = app.width * app.height;
 //     uint32_t data_old, data_new, data_overlay, result = 0;
 //     data_old = data_new = source_data[0];
 //     for (int i = 0, xy_index = 0, res_index = 0, bits = 0; i < size; i++, bits += 24) {

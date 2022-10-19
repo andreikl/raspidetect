@@ -10,3 +10,4 @@ int utils_fill_buffer(const char *path, char *buffer, int buffer_size, size_t *r
 int find_nal(uint8_t *buf, int buf_size, int *nal_start, int *nal_end);
 
 char* convert_general_error(int error);
+char* convert_hresult_error(HRESULT err);

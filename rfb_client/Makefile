@@ -64,8 +64,9 @@ ifeq ($(ENABLE_CUDA), 1)
 endif
 
 ifeq ($(ENABLE_FFMPEG), 1)
-	COMMON += -IC:\msys64\usr\local\include -DENABLE_FFMPEG
-	LDFLAGS += -LC:\msys64\usr\local\lib -lavcodec -lavutil -lbcrypt -liconv
+	COMMON += -IC:\cygwin\usr\local\include -DENABLE_FFMPEG
+	LDFLAGS += -LC:\cygwin\usr\local\lib -lavcodec -lavutil -lbcrypt
+#	 -liconv
 	OBJ += ffmpeg.o
 endif
 
@@ -84,5 +85,8 @@ obj:
 
 .PHONY: clean
 
+#clean:
+#	powershell if (Test-Path -Path ./obj) { rm -Recurse ./obj }
+
 clean:
-	powershell if (Test-Path -Path ./obj) { rm -Recurse ./obj }
+	rm -rf $(OBJDIR)

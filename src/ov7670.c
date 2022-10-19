@@ -1,3 +1,21 @@
+// Raspidetect
+
+// Copyright (C) 2021 Andrei Klimchuk <andrew.klimchuk@gmail.com>
+
+// This program is free software; you can redistribute it and/or
+// modify it under the terms of the GNU Lesser General Public
+// License as published by the Free Software Foundation; either
+// version 3 of the License, or (at your option) any later version.
+
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+// Lesser General Public License for more details.
+
+// You should have received a copy of the GNU Lesser General Public License
+// along with this program; if not, write to the Free Software Foundation,
+// Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+
 // i2c driver node: /dev/i2c-1
 const char *node = "/dev/i2c-1";
 // OV7670 I2C Address
@@ -54,7 +72,7 @@ const char* debug_file;
 
 //i2c_open(node);
 //ret = i2c_read16(OV7670_ADDRESS, OV7670_PID);
-//printf("Version: %d", ret);
+//DEBUG("Version: %d", ret);
 //i2c_close();
 //const char* input_file = read_str_value(INPUT, INPUT_DEF);
 //const char* output_file = read_str_value(OUTPUT, OUTPUT_DEF);

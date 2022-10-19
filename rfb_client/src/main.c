@@ -1,9 +1,28 @@
+// Raspidetect
+
+// Copyright (C) 2021 Andrei Klimchuk <andrew.klimchuk@gmail.com>
+
+// This program is free software; you can redistribute it and/or
+// modify it under the terms of the GNU Lesser General Public
+// License as published by the Free Software Foundation; either
+// version 3 of the License, or (at your option) any later version.
+
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+// Lesser General Public License for more details.
+
+// You should have received a copy of the GNU Lesser General Public License
+// along with this program; if not, write to the Free Software Foundation,
+// Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+
 // standard libraries
 #include <signal.h>
 // windows
 #include <windowsx.h>
+
 // 3rd party libraries
-#include <khash.h>
+#include "khash.h"
 
 #include "main.h"
 #include "utils.h"
@@ -13,8 +32,9 @@
 #include "cuda.h"
 
 KHASH_MAP_INIT_STR(map_str, char*)
-khash_t(map_str) *h;
+KHASH_T(map_str) *h;
 
+struct app_state_t app;
 int is_terminated = 0;
 
 static LRESULT CALLBACK window_proc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam)
@@ -27,7 +47,7 @@ static LRESULT CALLBACK window_proc(HWND hwnd, UINT message, WPARAM wparam, LPAR
 
         case WM_CREATE:
             /*app = (struct app_state_t*)lparam;
-            fprintf(stderr, "INFO: window(%d:%d) has been created!\n",
+            DEBUG("INFO: window(%d:%d) has been created!\n",
                 app->server_width, app->server_height);*/
             return 0;
     }
@@ -51,7 +71,7 @@ static void print_help(void)
 
 static void signal_handler(int signal_number)
 {
-    fprintf(stderr, "INFO: Other signal %d\n", signal_number);
+    DEBUG("INFO: Other signal %d\n", signal_number);
     is_terminated = 1;
 }
 
@@ -59,10 +79,9 @@ static void main_function()
 {
     setmode(fileno(stdout), O_BINARY);
 
-    struct app_state_t app;
     memset(&app, 0, sizeof(struct app_state_t));
     char* input_type = utils_read_str_value(INPUT_TYPE, INPUT_TYPE_DEF);
-    fprintf(stderr, "INFO: input_type %s\n", input_type);
+    DEBUG("INFO: input_type %s\n", input_type);
     if (!strcmp(input_type, INPUT_TYPE_FILE_STR)) {
         app.input_type = INPUT_TYPE_FILE;
     }
@@ -97,22 +116,22 @@ static void main_function()
         goto exit;
     }
 
-    GENERAL_CALL(pthread_mutex_init(&app.dec_mutex, NULL), exit);
+    STANDARD_CALL(pthread_mutex_init(&app.dec_mutex, NULL), exit);
     app.is_dec_mutex = 1;
 
 #ifdef ENABLE_CUDA
-    GENERAL_CALL(cuda_init(&app), exit);
+    STANDARD_CALL(cuda_init(&app), exit);
 #endif //ENABLE_CUDA
 
     if (app.input_type == INPUT_TYPE_RFB) {
 #ifdef ENABLE_RFB
-        GENERAL_CALL(rfb_init(&app), exit);
-        GENERAL_CALL(rfb_connect(&app), exit);
-        GENERAL_CALL(rfb_handshake(&app), exit);
+        STANDARD_CALL(rfb_init(), exit);
+        STANDARD_CALL(rfb_connect(), exit);
+        STANDARD_CALL(rfb_handshake(), exit);
 #endif //ENABLE_RFB
     }
     else {
-        GENERAL_CALL(file_init(&app), exit);
+        STANDARD_CALL(file_init(), exit);
     }
 
     app.instance = GetModuleHandle(NULL);
@@ -141,29 +160,30 @@ static void main_function()
         &app);
 
 #ifdef ENABLE_D3D
-    GENERAL_CALL(d3d_init(&app), exit);
+    STANDARD_CALL(d3d_init(), exit);
 #endif //ENABLE_D3Ds
 
 #ifdef ENABLE_H264
-    GENERAL_CALL(h264_init(&app), exit);
+    STANDARD_CALL(h264_init(), exit);
 #endif //ENABLE_H264
 
 #ifdef ENABLE_FFMPEG
-    GENERAL_CALL(ffmpeg_init(&app), exit);
+    STANDARD_CALL(ffmpeg_init(), exit);
 #endif //ENABLE_FFMPEG
 
     if (app.input_type == INPUT_TYPE_RFB) {
 #ifdef ENABLE_RFB
-        GENERAL_CALL(rfb_start(&app), exit);
+        DEBUG("RFB init");
+        STANDARD_CALL(rfb_start(), exit);
 #endif //ENABLE_RFB
     }
     else {
-        GENERAL_CALL(file_start(&app), exit);
+        STANDARD_CALL(file_start(), exit);
     }
 
     ShowWindow(app.wnd, SW_SHOW);
     UpdateWindow(app.wnd);
-    GENERAL_CALL(d3d_start(&app), exit);
+    STANDARD_CALL(d3d_start(), exit);
 
     MSG msg;
     while (GetMessage(&msg, NULL, 0, 0)) {
@@ -172,7 +192,7 @@ static void main_function()
 
         if (is_terminated && app.wnd) {
             //TODO: remove direct3d first
-            fprintf(stderr, "INFO: about to destroy window\n");
+            DEBUG("INFO: about to destroy window\n");
             if (!DestroyWindow(app.wnd)) {
                 fprintf(stderr,
                     "ERROR: DestroyWindow failed with code. res: %ld\n",
@@ -186,14 +206,14 @@ static void main_function()
     }
 
 exit:
-    fprintf(stderr, "INFO: exit\n");
+    DEBUG("INFO: exit\n");
 
 #ifdef ENABLE_FFMPEG
-    ffmpeg_destroy(&app);
+    ffmpeg_destroy();
 #endif //ENABLE_FFMPEG
 
 #ifdef ENABLE_H264
-    h264_destroy(&app);
+    h264_destroy();
 #endif //ENABLE_H264
 
 #ifdef ENABLE_CUVID
@@ -201,16 +221,16 @@ exit:
 #endif //ENABLE_CUVID
 
 #ifdef ENABLE_D3D
-    d3d_destroy(&app);
+    d3d_destroy();
 #endif // ENABLE_D3D
 
     if (app.input_type == INPUT_TYPE_RFB) {
 #ifdef ENABLE_RFB
-        rfb_destroy(&app);
+        rfb_destroy();
 #endif //ENABLE_RFB
     }
     else {
-        file_destroy(&app);
+        file_destroy();
     }
 
     if (app.is_dec_mutex) {
@@ -234,7 +254,7 @@ exit:
         app.enc_buf = NULL;
     }
 
-    fprintf(stderr, "INFO: main_exit, is_terminated: %d\n", is_terminated);
+    DEBUG("INFO: main_exit, is_terminated: %d\n", is_terminated);
 
     return;
 }
@@ -243,17 +263,17 @@ int main(int argc, char** argv)
 {
     signal(SIGINT, signal_handler);
 
-    h = kh_init(map_str);
+    h = KH_INIT(map_str);
     utils_parse_args(argc, argv);
 
-    unsigned k = kh_get(map_str, h, HELP);
-    if (k != kh_end(h)) {
+    unsigned k = KH_GET(map_str, h, HELP);
+    if (k != KH_END(h)) {
         print_help();
     }
     else {
         main_function();
     }
 
-    kh_destroy(map_str, h);
+    KH_DESTROY(map_str, h);
     return 0;
 }

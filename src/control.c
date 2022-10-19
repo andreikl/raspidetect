@@ -1,3 +1,21 @@
+// Raspidetect
+
+// Copyright (C) 2021 Andrei Klimchuk <andrew.klimchuk@gmail.com>
+
+// This program is free software; you can redistribute it and/or
+// modify it under the terms of the GNU Lesser General Public
+// License as published by the Free Software Foundation; either
+// version 3 of the License, or (at your option) any later version.
+
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+// Lesser General Public License for more details.
+
+// You should have received a copy of the GNU Lesser General Public License
+// along with this program; if not, write to the Free Software Foundation,
+// Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+
 #include <termio.h> //constants: ICANON, TCSANOW, FIONREAD
 #include <fcntl.h> // constants: O_RDWR | O_SYNC
 #include <sys/mman.h> //memory mapping
@@ -31,10 +49,11 @@
 #define GPIO_PULLCLK0(gpio) *(gpio + 38) // Pull up/pull down cloc
 
 static int kb_left = 0, kb_up = 0, kb_right = 0, kb_down = 0;
+extern struct app_state_t app;
 
 // static void set_mode(int want_key)
 // {
-//     fprintf(stderr, "INFO: set mode: %d\n", want_key);
+//     DEBUG("set mode: %d", want_key);
 // 	static struct termios old, new;
 // 	if (!want_key) {
 // 		tcsetattr(STDIN_FILENO, TCSANOW, &old);
@@ -92,7 +111,7 @@ static int utils_kbhit(int *x, int *y, int *z)
     return characters_buffered;
 }
 
-int control_init(app_state_t *state)
+int control_init()
 {
     //set_mode(1);
 
@@ -120,93 +139,93 @@ int control_init(app_state_t *state)
     }
 
     // Always use volatile pointer!
-    state->control.gpio = (volatile unsigned *)gpio_map;
+    app.control.gpio = (volatile unsigned *)gpio_map;
 
-    INP_GPIO(state->control.gpio, GPIO_A1); // must use INP_GPIO before we can use OUT_GPIO
-    OUT_GPIO(state->control.gpio, GPIO_A1);
+    INP_GPIO(app.control.gpio, GPIO_A1); // must use INP_GPIO before we can use OUT_GPIO
+    OUT_GPIO(app.control.gpio, GPIO_A1);
 
-    INP_GPIO(state->control.gpio, GPIO_A2);
-    OUT_GPIO(state->control.gpio, GPIO_A2);
+    INP_GPIO(app.control.gpio, GPIO_A2);
+    OUT_GPIO(app.control.gpio, GPIO_A2);
 
-    INP_GPIO(state->control.gpio, GPIO_B1);
-    OUT_GPIO(state->control.gpio, GPIO_B1);
+    INP_GPIO(app.control.gpio, GPIO_B1);
+    OUT_GPIO(app.control.gpio, GPIO_B1);
 
-    INP_GPIO(state->control.gpio, GPIO_B2);
-    OUT_GPIO(state->control.gpio, GPIO_B2);
+    INP_GPIO(app.control.gpio, GPIO_B2);
+    OUT_GPIO(app.control.gpio, GPIO_B2);
 
     return 0;
 }
 
-static void move_forward_start(app_state_t *state)
+static void move_forward_start()
 {
-    fprintf(stderr, "INFO: move_forward_start\n");
-    GPIO_SET(state->control.gpio) = (1 << GPIO_A1) | (1 << GPIO_B1);
+    DEBUG("move_forward_start");
+    GPIO_SET(app.control.gpio) = (1 << GPIO_A1) | (1 << GPIO_B1);
 }
 
-static void move_forward_stop(app_state_t *state)
+static void move_forward_stop()
 {
-    fprintf(stderr, "INFO: move_forward_stop\n");
-    GPIO_CLR(state->control.gpio) = (1 << GPIO_A1) | (1 << GPIO_B1);
+    DEBUG("move_forward_stop");
+    GPIO_CLR(app.control.gpio) = (1 << GPIO_A1) | (1 << GPIO_B1);
 }
 
-static void move_backwards_start(app_state_t *state)
+static void move_backwards_start()
 {
-    fprintf(stderr, "INFO: move_backwards_start\n");
-    GPIO_SET(state->control.gpio) = (1 << GPIO_A2) | (1 << GPIO_B2);
+    DEBUG("move_backwards_start");
+    GPIO_SET(app.control.gpio) = (1 << GPIO_A2) | (1 << GPIO_B2);
 }
 
-static void move_backwards_stop(app_state_t *state)
+static void move_backwards_stop()
 {
-    fprintf(stderr, "INFO: move_backwards_stop\n");
-    GPIO_CLR(state->control.gpio) = (1 << GPIO_A2) | (1 << GPIO_B2);
+    DEBUG("move_backwards_stop");
+    GPIO_CLR(app.control.gpio) = (1 << GPIO_A2) | (1 << GPIO_B2);
 }
 
-static void move_left_start(app_state_t *state)
+static void move_left_start()
 {
-    fprintf(stderr, "INFO: move_left_start\n");
-    GPIO_SET(state->control.gpio) = (1 << GPIO_A2) | (1 << GPIO_B1);
+    DEBUG("move_left_start");
+    GPIO_SET(app.control.gpio) = (1 << GPIO_A2) | (1 << GPIO_B1);
 }
 
-static void move_left_stop(app_state_t *state)
+static void move_left_stop()
 {
-    fprintf(stderr, "INFO: move_left_stop\n");
-    GPIO_CLR(state->control.gpio) = (1 << GPIO_A2) | (1 << GPIO_B1);
+    DEBUG("move_left_stop");
+    GPIO_CLR(app.control.gpio) = (1 << GPIO_A2) | (1 << GPIO_B1);
 }
 
-static void move_right_start(app_state_t *state)
+static void move_right_start()
 {
-    fprintf(stderr, "INFO: move_right_start\n");
-    GPIO_SET(state->control.gpio) = (1 << GPIO_A1) | (1 << GPIO_B2);
+    DEBUG("move_right_start");
+    GPIO_SET(app.control.gpio) = (1 << GPIO_A1) | (1 << GPIO_B2);
 }
 
-static void move_right_stop(app_state_t *state)
+static void move_right_stop()
 {
-    fprintf(stderr, "INFO: move_right_stop\n");
-    GPIO_CLR(state->control.gpio) = (1 << GPIO_A1) | (1 << GPIO_B2);
+    DEBUG("move_right_stop");
+    GPIO_CLR(app.control.gpio) = (1 << GPIO_A1) | (1 << GPIO_B2);
 }
 
-static int control_stop_all(app_state_t *state)
+static int control_stop_all()
 {
     if (kb_left) {
         kb_left = 0;
-        move_left_stop(state);
+        move_left_stop(app);
     }
     if (kb_up) {
         kb_up = 0;
-        move_forward_stop(state);
+        move_forward_stop(app);
     }
     if (kb_right) {
         kb_right = 0;
-        move_right_stop(state);
+        move_right_stop(app);
     }
     if (kb_down) {
         kb_down = 0;
-        move_backwards_stop(state);
+        move_backwards_stop(app);
     }
     return 0;
 }
 
-int control_ssh_key(app_state_t *state)
+int control_ssh_key()
 {
     int x;
     int y;
@@ -214,7 +233,7 @@ int control_ssh_key(app_state_t *state)
     int size = utils_kbhit(&x, &y, &z);
     int is_left = 0, is_up = 0, is_right = 0, is_down = 0;    
     if (size > 0) {
-        fprintf(stderr, "INFO: Key %d, %d, %d, %d\n", x, y, z, size);
+        DEBUG("Key %d, %d, %d, %d", x, y, z, size);
 
         if (x == 97) {
             is_left = 1;
@@ -231,47 +250,47 @@ int control_ssh_key(app_state_t *state)
         }
 
         if (!kb_left && is_left) {
-            control_stop_all(state);
+            control_stop_all(app);
             kb_left = is_left;
-            move_left_start(state);
+            move_left_start(app);
         }
         else if (!kb_up && is_up) {
-            control_stop_all(state);
+            control_stop_all(app);
             kb_up = is_up;
-            move_forward_start(state);
+            move_forward_start(app);
         }
         else if (!kb_right && is_right) {
-            control_stop_all(state);
+            control_stop_all(app);
             kb_right = is_right;
-            move_right_start(state);
+            move_right_start(app);
         }
         else if (!kb_down && is_down) {
-            control_stop_all(state);
+            control_stop_all(app);
             kb_down = is_down;
-            move_backwards_start(state);
+            move_backwards_start(app);
         }
     } else {
         if (kb_left) {
             kb_left = 0;
-            move_left_stop(state);
+            move_left_stop(app);
         }
         if (kb_up) {
             kb_up = 0;
-            move_forward_stop(state);
+            move_forward_stop(app);
         }
         if (kb_right) {
             kb_right = 0;
-            move_right_stop(state);
+            move_right_stop(app);
         }
         if (kb_down) {
             kb_down = 0;
-            move_backwards_stop(state);
+            move_backwards_stop(app);
         }
     }
     return 0;
 }
 
-int control_vnc_key(app_state_t *state, int down, int key)
+int control_vnc_key(int down, int key)
 {
     int is_left = 0, is_up = 0, is_right = 0, is_down = 0;
     if (key == 65361) {
@@ -285,37 +304,37 @@ int control_vnc_key(app_state_t *state, int down, int key)
     }
     if (!kb_left && is_left) {
         kb_left = is_left;
-        move_left_start(state);
+        move_left_start(app);
     } else if (kb_left && !is_left) {
         kb_left = is_left;
-        move_left_stop(state);
+        move_left_stop(app);
     }
     if (!kb_up && is_up) {
         kb_up = is_up;
-        move_forward_start(state);
+        move_forward_start(app);
     } else if (kb_up && !is_up) {
         kb_up = is_up;
-        move_forward_stop(state);
+        move_forward_stop(app);
     }
     if (!kb_right && is_right) {
         kb_right = is_right;
-        move_right_start(state);
+        move_right_start(app);
     } else if (kb_right && !is_right) {
         kb_right = is_right;
-        move_right_stop(state);
+        move_right_stop(app);
     }
     if (!kb_down && is_down) {
         kb_down = is_down;
-        move_backwards_start(state);
+        move_backwards_start(app);
     } else if (kb_down && !is_down) {
         kb_down = is_down;
-        move_backwards_stop(state);
+        move_backwards_stop(app);
     }
     return 0;
 }
 
-int control_destroy(app_state_t *state)
+int control_destroy()
 {
-    int res = control_stop_all(state);
+    int res = control_stop_all(app);
     return res;
 }

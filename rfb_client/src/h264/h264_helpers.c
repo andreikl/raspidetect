@@ -1,3 +1,21 @@
+// Raspidetect
+
+// Copyright (C) 2021 Andrei Klimchuk <andrew.klimchuk@gmail.com>
+
+// This program is free software; you can redistribute it and/or
+// modify it under the terms of the GNU Lesser General Public
+// License as published by the Free Software Foundation; either
+// version 3 of the License, or (at your option) any later version.
+
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+// Lesser General Public License for more details.
+
+// You should have received a copy of the GNU Lesser General Public License
+// along with this program; if not, write to the Free Software Foundation,
+// Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+
 static char* h264_get_nal_unit_type(int nal_unit_type)
 {
     switch (nal_unit_type) {
@@ -116,13 +134,13 @@ static int h264_MbPartPredMode(struct h264_macroblock_t *mb)
         mb->MbPartPredMode = H264_Intra_16x16;
         return 0;
     }
-    fprintf(stderr, "ERROR: TO IMPLEMENT h264_MbPartPredMode for other slices %d, %s - %s:%d\n",
+    DEBUG("ERROR: TO IMPLEMENT h264_MbPartPredMode for other slices %d, %s - %s:%d\n",
         mb->mb_type, __FILE__, __FUNCTION__, __LINE__);
     return -1;
 }
 
 int h264_NumMbPart(int mb_type) {
-    fprintf(stderr, "ERROR: TO IMPLEMENT h264_MbPartPredMode for other slices %d, %s - %s:%d\n",
+    DEBUG("ERROR: TO IMPLEMENT h264_MbPartPredMode for other slices %d, %s - %s:%d\n",
         mb_type, __FILE__, __FUNCTION__, __LINE__);
     return -1;
 }
@@ -146,28 +164,25 @@ static int h264_is_intra_pred_mode(struct h264_macroblock_t *mb)
 }
 
 // Table 6-1 – SubWidthC, and SubHeightC values derived from chroma_format_idc
-static int h264_get_chroma_variables(
-    struct app_state_t *app,
-    int* SubWidthC,
-    int* SubHeightC)
+static int h264_get_chroma_variables(int* SubWidthC, int* SubHeightC)
 {
-    if (app->h264.sps.chroma_format_idc == CHROMA_FORMAT_YUV400) {
+    if (app.h264.sps.chroma_format_idc == CHROMA_FORMAT_YUV400) {
         *SubWidthC = -1;
         *SubHeightC = -1;
         return 0;
     }
-    else if (app->h264.sps.chroma_format_idc == CHROMA_FORMAT_YUV420) {
+    else if (app.h264.sps.chroma_format_idc == CHROMA_FORMAT_YUV420) {
         *SubWidthC = 2;
         *SubHeightC = 2;
         return 0;
     }
-    else if (app->h264.sps.chroma_format_idc == CHROMA_FORMAT_YUV422) {
+    else if (app.h264.sps.chroma_format_idc == CHROMA_FORMAT_YUV422) {
         *SubWidthC = 2;
         *SubHeightC = 1;
         return 0;
     }
-    else if (app->h264.sps.chroma_format_idc == CHROMA_FORMAT_YUV444) {
-        if (!app->h264.sps.separate_colour_plane_flag) {
+    else if (app.h264.sps.chroma_format_idc == CHROMA_FORMAT_YUV444) {
+        if (!app.h264.sps.separate_colour_plane_flag) {
             *SubWidthC = 1;
             *SubHeightC = 1;
             return 0;
@@ -177,33 +192,33 @@ static int h264_get_chroma_variables(
             return 0;
         }
     }
-    UNCOVERED_CASE(app->h264.sps.chroma_format_idc, !=, CHROMA_FORMAT_YUV400);
-    UNCOVERED_CASE(app->h264.sps.chroma_format_idc, !=, CHROMA_FORMAT_YUV420);
-    UNCOVERED_CASE(app->h264.sps.chroma_format_idc, !=, CHROMA_FORMAT_YUV422);
-    UNCOVERED_CASE(app->h264.sps.chroma_format_idc, !=, CHROMA_FORMAT_YUV444);
+    UNCOVERED_CASE(app.h264.sps.chroma_format_idc, !=, CHROMA_FORMAT_YUV400);
+    UNCOVERED_CASE(app.h264.sps.chroma_format_idc, !=, CHROMA_FORMAT_YUV420);
+    UNCOVERED_CASE(app.h264.sps.chroma_format_idc, !=, CHROMA_FORMAT_YUV422);
+    UNCOVERED_CASE(app.h264.sps.chroma_format_idc, !=, CHROMA_FORMAT_YUV444);
     return -1;
 }
 
 // 6.4.8 Derivation process of the availability for macroblock addresses
-unsigned h264_is_MbAddr_available(struct app_state_t* app, int mbAddr)
+unsigned h264_is_MbAddr_available(int mbAddr)
 {
     if (mbAddr < 0) {
         return 0;
     }
-    if (mbAddr > app->h264.data.CurrMbAddr) {
+    if (mbAddr > app.h264.data.CurrMbAddr) {
         return 0;
     }
     return 1;
 }
 
 // 6.4.9 Derivation process for neighbouring macroblock addresses and their availability
-int h264_MbAddrA(struct app_state_t* app)
+int h264_MbAddrA()
 {
-    UNCOVERED_CASE(app->h264.header.MbaffFrameFlag, !=, 0);
+    UNCOVERED_CASE(app.h264.header.MbaffFrameFlag, !=, 0);
 
-    int mbAddrA = app->h264.data.CurrMbAddr - 1;
-    if (h264_is_MbAddr_available(app, mbAddrA)) {
-        return (app->h264.data.CurrMbAddr % app->h264.header.PicWidthInMbs != 0)? mbAddrA: -1;
+    int mbAddrA = app.h264.data.CurrMbAddr - 1;
+    if (h264_is_MbAddr_available(mbAddrA)) {
+        return (app.h264.data.CurrMbAddr % app.h264.header.PicWidthInMbs != 0)? mbAddrA: -1;
     }
     else {
         return -1;
@@ -211,12 +226,12 @@ int h264_MbAddrA(struct app_state_t* app)
 }
 
 // 6.4.9 Derivation process for neighbouring macroblock addresses and their availability
-int h264_MbAddrB(struct app_state_t* app)
+int h264_MbAddrB()
 {
-    UNCOVERED_CASE(app->h264.header.MbaffFrameFlag, !=, 0);
+    UNCOVERED_CASE(app.h264.header.MbaffFrameFlag, !=, 0);
 
-    int mbAddrB = app->h264.data.CurrMbAddr - app->h264.header.PicWidthInMbs;
-    if (h264_is_MbAddr_available(app, mbAddrB)) {
+    int mbAddrB = app.h264.data.CurrMbAddr - app.h264.header.PicWidthInMbs;
+    if (h264_is_MbAddr_available(mbAddrB)) {
         return mbAddrB;
     }
     else {
@@ -225,13 +240,13 @@ int h264_MbAddrB(struct app_state_t* app)
 }
 
 // 6.4.9 Derivation process for neighbouring macroblock addresses and their availability
-int h264_MbAddrC(struct app_state_t* app)
+int h264_MbAddrC()
 {
-    UNCOVERED_CASE(app->h264.header.MbaffFrameFlag, !=, 0);
+    UNCOVERED_CASE(app.h264.header.MbaffFrameFlag, !=, 0);
 
-    int mbAddrC = app->h264.data.CurrMbAddr - app->h264.header.PicWidthInMbs + 1;
-    if (h264_is_MbAddr_available(app, mbAddrC)) {
-        return ((app->h264.data.CurrMbAddr + 1) % app->h264.header.PicWidthInMbs != 0)?
+    int mbAddrC = app.h264.data.CurrMbAddr - app.h264.header.PicWidthInMbs + 1;
+    if (h264_is_MbAddr_available(mbAddrC)) {
+        return ((app.h264.data.CurrMbAddr + 1) % app.h264.header.PicWidthInMbs != 0)?
             mbAddrC: -1;;
     }
     else {
@@ -240,13 +255,13 @@ int h264_MbAddrC(struct app_state_t* app)
 }
 
 // 6.4.9 Derivation process for neighbouring macroblock addresses and their availability
-int h264_MbAddrD(struct app_state_t* app)
+int h264_MbAddrD()
 {
-    UNCOVERED_CASE(app->h264.header.MbaffFrameFlag, !=, 0);
+    UNCOVERED_CASE(app.h264.header.MbaffFrameFlag, !=, 0);
 
-    int mbAddrD = app->h264.data.CurrMbAddr - app->h264.header.PicWidthInMbs - 1;
-    if (h264_is_MbAddr_available(app, mbAddrD)) {
-        return (app->h264.data.CurrMbAddr % app->h264.header.PicWidthInMbs != 0)? mbAddrD: -1;
+    int mbAddrD = app.h264.data.CurrMbAddr - app.h264.header.PicWidthInMbs - 1;
+    if (h264_is_MbAddr_available(mbAddrD)) {
+        return (app.h264.data.CurrMbAddr % app.h264.header.PicWidthInMbs != 0)? mbAddrD: -1;
     }
     else {
         return -1;

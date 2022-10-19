@@ -1,3 +1,21 @@
+// Raspidetect
+
+// Copyright (C) 2021 Andrei Klimchuk <andrew.klimchuk@gmail.com>
+
+// This program is free software; you can redistribute it and/or
+// modify it under the terms of the GNU Lesser General Public
+// License as published by the Free Software Foundation; either
+// version 3 of the License, or (at your option) any later version.
+
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+// Lesser General Public License for more details.
+
+// You should have received a copy of the GNU Lesser General Public License
+// along with this program; if not, write to the Free Software Foundation,
+// Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+
 #include "khash.h"
 
 #include "main.h"
@@ -7,8 +25,10 @@
 #include "opencv2/imgproc/imgproc_c.h"
 #endif
 
-KHASH_MAP_INIT_STR(map_str, char *)
-extern khash_t(map_str) *h;
+KHASH_MAP_INIT_STR(argvs_hash_t, char *);
+
+extern struct app_state_t app;
+extern KHASH_T(argvs_hash_t) *h;
 
 void utils_parse_args(int argc, char** argv)
 {
@@ -17,80 +37,26 @@ void utils_parse_args(int argc, char** argv)
 
     for (int i = 0; i < argc; i++) {
         if (argv[i][0] == '-') {
-            k = kh_put(map_str, h, argv[i], &ret);
-            kh_val(h, k) = (i + 1 < argc) ? argv[i + 1] : NULL;
+            k = KH_PUT(argvs_hash_t, h, argv[i], &ret);
+            KH_VAL(h, k) = (i + 1 < argc) ? argv[i + 1] : NULL;
         }
     }
 }
 
-void utils_print_help(void)
+const char *utils_read_str_value(const char *name, char *def_value)
 {
-    printf("ov5647 [options]\n");
-    printf("options:\n");
-    printf("\n");
-    printf("%s: help\n", HELP);
-    printf("%s: width, default: %d\n", WIDTH, WIDTH_DEF);
-    printf("%s: height, default: %d\n", HEIGHT, HEIGHT_DEF);
-    printf("%s: port, default: %d\n", PORT, PORT_DEF);
-    printf("%s: worke_width, default: %d\n", WORKER_WIDTH, WORKER_WIDTH_DEF);
-    printf("%s: worker_height, default: %d\n", WORKER_HEIGHT, WORKER_HEIGHT_DEF);
-    printf("%s: TFL model path, default: %s\n", TFL_MODEL_PATH, TFL_MODEL_PATH_DEF);    
-    printf("%s: DN model path, default: %s\n", DN_MODEL_PATH, DN_MODEL_PATH_DEF);    
-    printf("%s: DN config path, default: %s\n", DN_CONFIG_PATH, DN_CONFIG_PATH_DEF);    
-    printf("%s: input, default: %s\n", INPUT, INPUT_DEF);
-    printf("%s: output, default: %s\n", OUTPUT, OUTPUT_DEF);
-    printf("\toptions: "ARG_STREAM" - output stream, "ARG_RFB" - output rfb, "ARG_NONE"\n");
-    printf("%s: verbose, verbose: %d\n", VERBOSE, VERBOSE_DEF);
-    exit(0);
-}
-
-void utils_default_status(app_state_t *state)
-{
-    memset(state, 0, sizeof(app_state_t));
-
-    int width = utils_read_int_value(WIDTH, WIDTH_DEF);
-    int height = utils_read_int_value(HEIGHT, HEIGHT_DEF);
-    state->width = (width / 32 * 32) + (width % 32? 32: 0);
-    state->height = (height / 16 * 16) + (height % 16? 16: 0);
-    state->bits_per_pixel = 16;
-    state->port = utils_read_int_value(PORT, PORT_DEF);
-    state->worker_width = utils_read_int_value(WORKER_WIDTH, WORKER_WIDTH_DEF);
-    state->worker_height = utils_read_int_value(WORKER_HEIGHT, WORKER_HEIGHT_DEF);
-    state->worker_bits_per_pixel = 24;
-    state->worker_total_objects = 10;
-    state->worker_thread_res = -1;
-    state->verbose = utils_read_int_value(VERBOSE, VERBOSE_DEF);
-#ifdef RFB
-    state->rfb.thread_res = -1;
-#endif
-#ifdef TENSORFLOW
-    state->model_path = utils_read_str_value(TFL_MODEL_PATH, TFL_MODEL_PATH_DEF);
-#elif DARKNET
-    state->model_path = utils_read_str_value(DN_MODEL_PATH, DN_MODEL_PATH_DEF);
-    state->config_path = utils_read_str_value(DN_CONFIG_PATH, DN_CONFIG_PATH_DEF);
-#endif
-    char *output = utils_read_str_value(OUTPUT, OUTPUT_DEF);
-    if (strcmp(output, ARG_STREAM) == 0) {
-        state->output_type = OUTPUT_STREAM;
-    } else if (strcmp(output, ARG_RFB) == 0) {
-        state->output_type = OUTPUT_RFB;
-    }
-}
-
-char *utils_read_str_value(const char *name, char *def_value)
-{
-    unsigned k = kh_get(map_str, h, name);
-    if (k != kh_end(h)) {
-        return kh_val(h, k);
+    unsigned k = KH_GET(argvs_hash_t, h, name);
+    if (k != KH_END(h)) {
+        return KH_VAL(h, k);
     }
     return def_value;
 }
 
 int utils_read_int_value(const char name[], int def_value)
 {
-    unsigned k = kh_get(map_str, h, name);
-    if (k != kh_end(h)) {
-        const char* value = kh_val(h, k);
+    unsigned k = KH_GET(argvs_hash_t, h, name);
+    if (k != KH_END(h)) {
+        const char* value = KH_VAL(h, k);
         return atoi(value);
     }
     return def_value;
@@ -99,9 +65,8 @@ int utils_read_int_value(const char name[], int def_value)
 int utils_fill_buffer(const char *path, char *buffer, int buffer_size, size_t *read)
 {
     FILE *fstream = fopen(path, "r");
-
     if (fstream == NULL) {
-        fprintf(stderr, "ERROR: opening the file. (filename: %s)\n", path);
+        CALL_MESSAGE(fopen(path, "r"));
         return EXIT_FAILURE;
     }
 
@@ -167,7 +132,7 @@ void *utils_read_file(const char *path, size_t *len)
         fstream = fopen(path, "r");
     }
     if (fstream == NULL) {
-        fprintf(stderr, "ERROR: Failed to open file. path: %s", path);
+        CALL_MESSAGE(fopen(path, "r"));
         goto fail_open;
     }
 
@@ -202,85 +167,51 @@ fail_open:
     return NULL;
 }
 
-void utils_write_file(const char *path, unsigned char *data, int width, int height)
+int utils_write_file(const char *path, const uint8_t *data, int len)
 {
-    FILE* fstream;
-    size_t written;
-    unsigned char buffer[BUFFER_SIZE];
-    int i = 0, j = 0, size = width * height;
-    unsigned char b;
-
-#ifdef DEBUG
-    clock_t start_time = clock();
-#endif
-
-    if (path[0] == '-') {
+    FILE* fstream = NULL;
+    if (strcmp(path, "stdout") == 0) {
         fstream = stdout;
     }
     else {
-        fstream = fopen(path, "w");
+        fstream = fopen(path, "a");
+        if (fstream == NULL)
+            CALL_MESSAGE(fopen(path, "a"));
     }
-
-
-    fprintf(fstream, "P6\n%d %d\n255\n", width, height);
-    while (j < size) {
-        if (i + 3 >= BUFFER_SIZE) {
-            written += fwrite(buffer, 1, i, fstream);
-            i = 0;
-        }
-
-        b = data[j];
-#ifdef DEBUG
-        if (b == 255) {
-            buffer[i] = b;
-            buffer[i + 1] = (unsigned char)0;
-            buffer[i + 2] = (unsigned char)0;
-        }
-        else {
-            buffer[i] = b;
-            buffer[i + 1] = b;
-            buffer[i + 2] = b;
-        }
-#else
-        buffer[i] = b;
-        buffer[i + 1] = b;
-        buffer[i + 2] = b;
-#endif
-        i += 3; j++;
-    }
-    if (i > 0) {
-        written += fwrite(buffer, 1, i, fstream);
-    }
-
-    if (path[0] != '-') {
+    int written = fwrite(data, len, 1, fstream) * len;
+    if (fstream && strcmp(path, "stdout") != 0) {
         fclose(fstream);
     }
+    if (len <= 0 || written != len) {
+        CALL_CUSTOM_MESSAGE("The file wasn't written, length: ", len);
+        goto cleanup;
+    }
+    return 0;
 
-#ifdef DEBUG
-    double diff = (double)(clock() - start_time) / CLOCKS_PER_SEC;
-    fprintf(stderr, "INFO: elapsed %f ms\n", diff);
-#endif
+cleanup:
+    if (!errno) errno = EAGAIN;
+    return -1;
 }
 
-void utils_get_cpu_load(char * buffer, cpu_state_t *state)
+void utils_get_cpu_load(char * buffer, struct cpu_state_t *cpu)
 {
-    utils_fill_buffer("/proc/stat", buffer, BUFFER_SIZE, NULL);
+    utils_fill_buffer("/proc/stat", buffer, MAX_DATA, NULL);
 
     int user, nice, system, idle;
     sscanf(&buffer[4], "%d %d %d %d", &user, &nice, &system, &idle);
 
     int load = user + nice + system, all = load + idle;
     static int last_load = 0, last_all = 0;
-    float cpu = (load - last_load) / (float)(all - last_all) * 100;
+    float fcpu = (load - last_load) / (float)(all - last_all) * 100;
 
     last_load = user + nice + system;
     last_all = load + idle;
 
-    state->cpu = cpu;
+    cpu->cpu = fcpu;
 }
 
 
-void utils_get_memory_load(char * buffer, memory_state_t *state)
+void utils_get_memory_load(char * buffer, struct memory_state_t *memory)
 {
 //  VmPeak                      peak virtual memory size
 //  VmSize                      total program size
@@ -293,7 +224,7 @@ void utils_get_memory_load(char * buffer, memory_state_t *state)
 //  VmLib                       size of shared library code
 //  VmPTE                       size of page table entries
 //  VmSwap                      size of swap usage (the number of referred swapents)    
-    utils_fill_buffer("/proc/self/status", buffer, BUFFER_SIZE, NULL);
+    utils_fill_buffer("/proc/self/status", buffer, MAX_DATA, NULL);
     char * line = buffer;
     while (line) {
         char * next_line = strchr(line, '\n');
@@ -305,30 +236,30 @@ void utils_get_memory_load(char * buffer, memory_state_t *state)
             value_line++;
 
             if (line[2] == 'S' && line[3] == 'i') {
-                state->total_size = atoi(value_line);
+                memory->total_size = atoi(value_line);
             } else if (line[2] == 'S' && line[3] == 'w') {
-                state->swap_size = atoi(value_line);
+                memory->swap_size = atoi(value_line);
             } else if (line[2] == 'P' && line[3] == 'T') {
-                state->pte_size = atoi(value_line);
+                memory->pte_size = atoi(value_line);
             } else if (line[2] == 'L' && line[3] == 'i') {
-                state->lib_size = atoi(value_line);
+                memory->lib_size = atoi(value_line);
             } else if (line[2] == 'E' && line[3] == 'x') {
-                state->exe_size = atoi(value_line);
+                memory->exe_size = atoi(value_line);
             } else if (line[2] == 'S' && line[3] == 't') {
-                state->stk_size = atoi(value_line);
+                memory->stk_size = atoi(value_line);
             } else if (line[2] == 'D' && line[3] == 'a') {
-                state->data_size = atoi(value_line);
+                memory->data_size = atoi(value_line);
             }
         }
         line = next_line ? next_line + 1: NULL;
     }
 }
 
-void utils_get_temperature(char * buffer, temperature_state_t *state)
+void utils_get_temperature(char * buffer, struct temperature_state_t *temperature)
 {
-    utils_fill_buffer("/sys/class/thermal/thermal_zone0/temp", buffer, BUFFER_SIZE, NULL);
+    utils_fill_buffer("/sys/class/thermal/thermal_zone0/temp", buffer, MAX_DATA, NULL);
 
-    state->temp = (float)(atoi(buffer)) / 1000;
+    temperature->temp = (float)(atoi(buffer)) / 1000;
 }
 
 static float lerpf(float s, float e, float t)
@@ -455,27 +386,30 @@ static int resize_li_16(int *src, int src_width, int src_height, int *dst, int d
         dst[di] = res;
 
         /*if (di == 75) {
-            fprintf(stderr, "INFO: dx: %d, sx1: %d, sj1: %d, gfx: %2.2f, fx: %2.2f\n", dx, sx1, sj1, gfx, fx);
-            fprintf(stderr, "INFO: p00: %d, p01: %d, p10: %d, p11: %d\n", p000, p001, p010, p011);
-            fprintf(stderr, "INFO: b00: %d, b01: %d, b10: %d, b11: %d, blerp: %d\n", GET_B565(p000), GET_B565(p001), GET_B565(p010), GET_B565(p011), (int)blerp(GET_B565(p000), 
-                    GET_B565(p001), 
-                    GET_B565(p010),
-                    GET_B565(p011),
-                    dfx1, 
-                    dfy));
-            fprintf(stderr, "INFO: g00: %d, g01: %d, g10: %d, g11: %d, blerp: %d\n", GET_G565(p000), GET_G565(p001), GET_G565(p010), GET_G565(p011), (int)blerp(GET_G565(p000), 
-                    GET_G565(p001), 
-                    GET_G565(p010),
-                    GET_G565(p011),
-                    dfx1, 
-                    dfy));
-            fprintf(stderr, "INFO: r00: %d, r01: %d, r10: %d, r11: %d, blerp: %d\n", GET_R565(p000), GET_R565(p001), GET_R565(p010), GET_R565(p011), (int)blerp(GET_R565(p000), 
-                    GET_R565(p001),
-                    GET_R565(p010),
-                    GET_R565(p011),
-                    dfx1, 
-                    dfy));
-            fprintf(stderr, "INFO: res: %d\n", res);
+            DEBUG("dx: %d, sx1: %d, sj1: %d, gfx: %2.2f, fx: %2.2f", dx, sx1, sj1, gfx, fx);
+            DEBUG("p00: %d, p01: %d, p10: %d, p11: %d", p000, p001, p010, p011);
+            DEBUG("b00: %d, b01: %d, b10: %d, b11: %d, blerp: %d", GET_B565(p000), GET_B565(p001),
+                GET_B565(p010), GET_B565(p011), (int)blerp(GET_B565(p000), 
+                GET_B565(p001), 
+                GET_B565(p010),
+                GET_B565(p011),
+                dfx1, 
+                dfy));
+            DEBUG("g00: %d, g01: %d, g10: %d, g11: %d, blerp: %d", GET_G565(p000), GET_G565(p001),
+                GET_G565(p010), GET_G565(p011), (int)blerp(GET_G565(p000), 
+                GET_G565(p001), 
+                GET_G565(p010),
+                GET_G565(p011),
+                dfx1, 
+                dfy));
+            DEBUG("r00: %d, r01: %d, r10: %d, r11: %d, blerp: %d", GET_R565(p000), GET_R565(p001),
+                GET_R565(p010), GET_R565(p011), (int)blerp(GET_R565(p000), 
+                GET_R565(p001),
+                GET_R565(p010),
+                GET_R565(p011),
+                dfx1, 
+                dfy));
+            DEBUG("res: %d", res);
         }*/
 
         gfx += fx;
@@ -505,58 +439,58 @@ static int resize_li_16(int *src, int src_width, int src_height, int *dst, int d
 #endif
 }
 
-int utils_get_worker_buffer(app_state_t *state)
+int utils_get_worker_buffer()
 {
 #ifdef OPENCV
-    CvMat *img1 = cvCreateMatHeader(state->width,
-                                    state->height,
+    CvMat *img1 = cvCreateMatHeader(app.width,
+                                    app.height,
                                     CV_8UC2);
-    cvSetData(img1, state->openvg.video_buffer, state->width << 1);
+    cvSetData(img1, app.openvg.video_buffer, app.width << 1);
 
-    CvMat *img2 = cvCreateMatHeader(state->worker_width,
-                                    state->worker_height,
+    CvMat *img2 = cvCreateMatHeader(app.worker_width,
+                                    app.worker_height,
                                     CV_8UC2);
-    cvSetData(img2, state->worker_buffer_565, state->worker_width << 1);
+    cvSetData(img2, app.worker_buffer_565, app.worker_width << 1);
 
     cvResize(img1, img2, CV_INTER_LINEAR);
 
     cvRelease(&img1);
     cvRelease(&img2);
-#else
-    int res = resize_li_16(state->openvg.video_buffer.i,
-                state->width,
-                state->height,
-                (int*)state->worker_buffer_565,
-                state->worker_width,
-                state->worker_height);
+#elif OPENVG
+    int res = resize_li_16(app.openvg.video_buffer.i,
+                app.width,
+                app.height,
+                (int*)app.worker_buffer_565,
+                app.worker_width,
+                app.worker_height);
     if (res != 0) {
         fprintf(stderr, "ERROR: Failed to resize image %d\n", res);
         return -1;
     }
 #endif
     // openvg implementation
-    // vgImageSubData(state->openvg.video_image,
-    //             state->openvg.video_buffer,
-    //             state->width << 1,
+    // vgImageSubData(app.openvg.video_image,
+    //             app.openvg.video_buffer,
+    //             app.width << 1,
     //             VG_sRGB_565,
     //             0, 0,
-    //             state->width, state->height);
+    //             app.width, app.height);
 
     // vgSeti(VG_MATRIX_MODE, VG_MATRIX_IMAGE_USER_TO_SURFACE);
     // vgLoadIdentity();
-    // vgScale(((float)state->worker_width) / state->width, ((float)state->worker_height) / state->height);
-    // vgDrawImage(state->openvg.video_image);
+    // vgScale(((float)app.worker_width) / app.width, ((float)app.worker_height) / app.height);
+    // vgDrawImage(app.openvg.video_image);
 
-    // vgReadPixels(   state->worker_buffer_565,
-    //                 state->width << 1,
+    // vgReadPixels(   app.worker_buffer_565,
+    //                 app.width << 1,
     //                 VG_sRGB_565,
     //                 0, 0,
-    //                 state->worker_width, state->worker_height);
+    //                 app.worker_width, app.worker_height);
 #if defined(ENV32BIT)
-    int32_t *buffer_565 = (int32_t *)state->worker_buffer_565;
-    int32_t *buffer_rgb = (int32_t *)state->worker_buffer_rgb;
+    int32_t *buffer_565 = (int32_t *)app.worker_buffer_565;
+    int32_t *buffer_rgb = (int32_t *)app.worker_buffer_rgb;
     int i = 0, j = 0;
-    int l = state->worker_width * state->worker_height >> 1;
+    int l = app.worker_width * app.worker_height >> 1;
     int32_t vs1, vs2, vd1, vd2, vd3;
     while(i < l) {
         vs1 = buffer_565[i++];
@@ -585,59 +519,4 @@ int utils_get_worker_buffer(app_state_t *state)
     return -1;
 #endif
     return 0;
-}
-
-char* get_mmal_message(int result)
-{
-    if (result == MMAL_SUCCESS) {
-        return "MMAL_SUCCESS";
-    }
-    else if (result == MMAL_ENOMEM) {
-        return "MMAL_ENOMEM: Out of memory";
-    }
-    else if (result == MMAL_ENOSPC) {
-        return "MMAL_ENOSPC: Out of resources (other than memory)";
-    }
-    else if (result == MMAL_EINVAL) {
-        return "MMAL_EINVAL: Argument is invalid";
-    }
-    else if (result == MMAL_ENOSYS) {
-        return "MMAL_ENOSYS: Function not implemented";
-    }
-    else if (result == MMAL_ENOENT) {
-        return "MMAL_ENOENT: No such file or directory";
-    }
-    else if (result == MMAL_ENXIO) {
-        return "MMAL_ENXIO: No such device or address";
-    }
-    else if (result == MMAL_EIO) {
-        return "MMAL_EIO: I/O error";
-    }
-    else if (result == MMAL_ESPIPE) {
-        return "MMAL_ESPIPE: Illegal seek";
-    }
-    else if (result == MMAL_ECORRUPT) {
-        return "MMAL_ECORRUPT: Data is corrupt";
-    }
-    else if (result == MMAL_ENOTREADY) {
-        return "MMAL_ENOTREADY: Component is not ready";
-    }
-    else if (result == MMAL_ECONFIG) {
-        return "MMAL_ECONFIG: Component is not configured";
-    }
-    else if (result == MMAL_EISCONN) {
-        return "MMAL_EISCONN: Port is already connected";
-    }
-    else if (result == MMAL_ENOTCONN) {
-        return "MMAL_ENOTCONN: Port is disconnected";
-    }
-    else if (result == MMAL_EAGAIN) {
-        return "MMAL_EAGAIN: Resource temporarily unavailable. Try again later";
-    }
-    else if (result == MMAL_EFAULT) {
-        return "MMAL_EFAULT: Bad address";
-    }
-    else {
-        return "UNKNOWN";
-    }
 }

@@ -429,28 +429,28 @@ static kh_inline khint_t __ac_Wang_hash(khint_t key)
   @abstract Type of the hash table.
   @param  name  Name of the hash table [symbol]
  */
-#define khash_t(name) kh_##name##_t
+#define KHASH_T(name) kh_##name##_t
 
 /*! @function
   @abstract     Initiate a hash table.
   @param  name  Name of the hash table [symbol]
   @return       Pointer to the hash table [khash_t(name)*]
  */
-#define kh_init(name) kh_init_##name()
+#define KH_INIT(name) kh_init_##name()
 
 /*! @function
   @abstract     Destroy a hash table.
   @param  name  Name of the hash table [symbol]
   @param  h     Pointer to the hash table [khash_t(name)*]
  */
-#define kh_destroy(name, h) kh_destroy_##name(h)
+#define KH_DESTROY(name, h) kh_destroy_##name(h)
 
 /*! @function
   @abstract     Reset a hash table without deallocating memory.
   @param  name  Name of the hash table [symbol]
   @param  h     Pointer to the hash table [khash_t(name)*]
  */
-#define kh_clear(name, h) kh_clear_##name(h)
+#define KH_CLEAR(name, h) kh_clear_##name(h)
 
 /*! @function
   @abstract     Resize a hash table.
@@ -458,7 +458,7 @@ static kh_inline khint_t __ac_Wang_hash(khint_t key)
   @param  h     Pointer to the hash table [khash_t(name)*]
   @param  s     New size [khint_t]
  */
-#define kh_resize(name, h, s) kh_resize_##name(h, s)
+#define KH_RESIZE(name, h, s) kh_resize_##name(h, s)
 
 /*! @function
   @abstract     Insert a key to the hash table.
@@ -471,7 +471,7 @@ static kh_inline khint_t __ac_Wang_hash(khint_t key)
 				the bucket has been deleted [int*]
   @return       Iterator to the inserted element [khint_t]
  */
-#define kh_put(name, h, k, r) kh_put_##name(h, k, r)
+#define KH_PUT(name, h, k, r) kh_put_##name(h, k, r)
 
 /*! @function
   @abstract     Retrieve a key from the hash table.
@@ -480,7 +480,7 @@ static kh_inline khint_t __ac_Wang_hash(khint_t key)
   @param  k     Key [type of keys]
   @return       Iterator to the found element, or kh_end(h) if the element is absent [khint_t]
  */
-#define kh_get(name, h, k) kh_get_##name(h, k)
+#define KH_GET(name, h, k) kh_get_##name(h, k)
 
 /*! @function
   @abstract     Remove a key from the hash table.
@@ -488,7 +488,7 @@ static kh_inline khint_t __ac_Wang_hash(khint_t key)
   @param  h     Pointer to the hash table [khash_t(name)*]
   @param  k     Iterator to the element to be deleted [khint_t]
  */
-#define kh_del(name, h, k) kh_del_##name(h, k)
+#define KH_DEL(name, h, k) kh_del_##name(h, k)
 
 /*! @function
   @abstract     Test whether a bucket contains data.
@@ -496,7 +496,7 @@ static kh_inline khint_t __ac_Wang_hash(khint_t key)
   @param  x     Iterator to the bucket [khint_t]
   @return       1 if containing data; 0 otherwise [int]
  */
-#define kh_exist(h, x) (!__ac_iseither((h)->flags, (x)))
+#define KH_EXIST(h, x) (!__ac_iseither((h)->flags, (x)))
 
 /*! @function
   @abstract     Get key given an iterator
@@ -504,7 +504,7 @@ static kh_inline khint_t __ac_Wang_hash(khint_t key)
   @param  x     Iterator to the bucket [khint_t]
   @return       Key [type of keys]
  */
-#define kh_key(h, x) ((h)->keys[x])
+#define KH_KEY(h, x) ((h)->keys[x])
 
 /*! @function
   @abstract     Get value given an iterator
@@ -513,40 +513,35 @@ static kh_inline khint_t __ac_Wang_hash(khint_t key)
   @return       Value [type of values]
   @discussion   For hash sets, calling this results in segfault.
  */
-#define kh_val(h, x) ((h)->vals[x])
-
-/*! @function
-  @abstract     Alias of kh_val()
- */
-#define kh_value(h, x) ((h)->vals[x])
+#define KH_VAL(h, x) ((h)->vals[x])
 
 /*! @function
   @abstract     Get the start iterator
   @param  h     Pointer to the hash table [khash_t(name)*]
   @return       The start iterator [khint_t]
  */
-#define kh_begin(h) (khint_t)(0)
+#define KH_BEGIN(h) (khint_t)(0)
 
 /*! @function
   @abstract     Get the end iterator
   @param  h     Pointer to the hash table [khash_t(name)*]
   @return       The end iterator [khint_t]
  */
-#define kh_end(h) ((h)->n_buckets)
+#define KH_END(h) ((h)->n_buckets)
 
 /*! @function
   @abstract     Get the number of elements in the hash table
   @param  h     Pointer to the hash table [khash_t(name)*]
   @return       Number of elements in the hash table [khint_t]
  */
-#define kh_size(h) ((h)->size)
+#define KH_SIZE(h) ((h)->size)
 
 /*! @function
   @abstract     Get the number of buckets in the hash table
   @param  h     Pointer to the hash table [khash_t(name)*]
   @return       Number of buckets in the hash table [khint_t]
  */
-#define kh_n_buckets(h) ((h)->n_buckets)
+#define KH_N_BUCKETS(h) ((h)->n_buckets)
 
 /*! @function
   @abstract     Iterate over the entries in the hash table
@@ -555,7 +550,7 @@ static kh_inline khint_t __ac_Wang_hash(khint_t key)
   @param  vvar  Variable to which value will be assigned
   @param  code  Block of code to execute
  */
-#define kh_foreach(h, kvar, vvar, code) { khint_t __i;		\
+#define KH_FOREACH(h, kvar, vvar, code) { khint_t __i;		\
 	for (__i = kh_begin(h); __i != kh_end(h); ++__i) {		\
 		if (!kh_exist(h,__i)) continue;						\
 		(kvar) = kh_key(h,__i);								\
@@ -569,7 +564,7 @@ static kh_inline khint_t __ac_Wang_hash(khint_t key)
   @param  vvar  Variable to which value will be assigned
   @param  code  Block of code to execute
  */
-#define kh_foreach_value(h, vvar, code) { khint_t __i;		\
+#define KH_FOREACH_VALUE(h, vvar, code) { khint_t __i;		\
 	for (__i = kh_begin(h); __i != kh_end(h); ++__i) {		\
 		if (!kh_exist(h,__i)) continue;						\
 		(vvar) = kh_val(h,__i);								\

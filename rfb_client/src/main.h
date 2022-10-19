@@ -20,10 +20,8 @@
 #define FILE_NAME "-f\0"
 #define FILE_NAME_DEF "t.h264\0"
 #define SERVER "-s\0"
-//#define SERVER_DEF "58.107.224.90\0"
-#define SERVER_DEF "192.168.2.101\0"
+#define SERVER_DEF "127.0.0.1\0"
 #define PORT "-p\0"
-//#define PORT_DEF "5906\0"
 #define PORT_DEF "5900\0"
 #define VERBOSE "-d\0"
 #define VERBOSE_DEF 1
@@ -61,6 +59,11 @@
 #include <windows.h>
 #include <fcntl.h> // O_BINARY
 
+#define DEBUG(format, ...) \
+{ \
+    fprintf(stderr, "%s:%d - %s, "#format"\n", __FILE__, __LINE__, __FUNCTION__, ##__VA_ARGS__); \
+}
+
 #define GET_3RD_ARG(arg1, arg2, arg3, ...) arg3
 
 #define UNCOVERED_CASE(value, condition, expectation) \
@@ -72,45 +75,32 @@
     } \
 }
 
-#define GENERAL_CALL_2(call, error) \
+#define STANDARD_MESSAGE_STR(call, res) \
 { \
-    int res = call; \
-    if (res) { \
-        fprintf(stderr, "ERROR: "#call" returned error: %s(%d)\n%s:%d - %s\n", \
-            convert_general_error(res), res, __FILE__, __LINE__, __FUNCTION__); \
-        goto error; \
-    } \
-} \
+    fprintf(stderr, "ERROR: "#call" returned error: %s\n%s:%d - %s\n", \
+        res, __FILE__, __LINE__, __FUNCTION__); \
+}
 
-#define GENERAL_CALL_1(call) \
+#define STANDARD_MESSAGE(call) \
 { \
-    int res = call; \
-    if (res) { \
-        fprintf(stderr, "ERROR: "#call" returned error: %s(%d)\n%s:%d - %s\n", \
-            convert_general_error(res), res, __FILE__, __LINE__, __FUNCTION__); \
-    } \
-} \
-
-#define GENERAL_CALL_X(...) GET_3RD_ARG(__VA_ARGS__, GENERAL_CALL_2, GENERAL_CALL_1, )
-
-#define GENERAL_CALL(...) GENERAL_CALL_X(__VA_ARGS__)(__VA_ARGS__)
+    fprintf(stderr, "ERROR: "#call" returned error: %s\n%s:%d - %s\n", \
+        strerror(errno), __FILE__, __LINE__, __FUNCTION__); \
+}
 
 #define STANDARD_CALL_2(call, error) \
 { \
-    int res = call; \
-    if (res) { \
-        fprintf(stderr, "ERROR: "#call" returned error: %s\n%s:%d - %s\n", \
-            strerror(errno), __FILE__, __LINE__, __FUNCTION__); \
+    int res__ = call; \
+    if (res__) { \
+        STANDARD_MESSAGE(call); \
         goto error; \
     } \
 } \
 
 #define STANDARD_CALL_1(call) \
 { \
-    int res = call; \
-    if (res) { \
-        fprintf(stderr, "ERROR: "#call" returned error: %s\n%s:%d - %s\n", \
-            strerror(errno), __FILE__, __LINE__, __FUNCTION__); \
+    int res__ = call; \
+    if (res__) { \
+        STANDARD_MESSAGE(call); \
     } \
 } \
 
@@ -119,46 +109,45 @@
 
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof(a[0]))
 
-#define GENERAL_DEBUG_INT(text, value) \
+#define NETWORK_MESSAGE(call) \
 { \
-    fprintf(stderr, "INFO: %s, "#text": %d\n", \
-        __FUNCTION__, \
-        value); \
-}
-
-#define GENERAL_DEBUG_LONG(text, value) \
-{ \
-    fprintf(stderr, "INFO: %s, "#text": %lld\n", \
-        __FUNCTION__, \
-        value); \
+    char buf[256]; \
+    int err = WSAGetLastError(); \
+    FormatMessage( \
+        FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, \
+               NULL, \
+               err, \
+               MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), \
+               buf, \
+               sizeof(buf), \
+               NULL); \
+    fprintf(stderr, "ERROR: "#call" returned error: %s (%d)\n%s:%d - %s\n", \
+        buf, err, __FILE__, __LINE__, __FUNCTION__); \
 }
 
 #define NETWORK_IO_CALL(call, error) \
 { \
-    int res = call; \
-    if (res < 0) { \
-        fprintf(stderr, "ERROR: "#call" returned error: %d\n%s:%d - %s\n", \
-            WSAGetLastError(), __FILE__, __LINE__, __FUNCTION__); \
+    int res__ = call; \
+    if (res__ < 0) { \
+        NETWORK_MESSAGE(call); \
         goto error; \
     } \
 }
 
 #define NETWORK_CALL_2(call, error) \
 { \
-    int res = call; \
-    if (res) { \
-        fprintf(stderr, "ERROR: "#call" returned error: %d\n%s:%d - %s\n", \
-            WSAGetLastError(), __FILE__, __LINE__, __FUNCTION__); \
+    int res__ = call; \
+    if (res__) { \
+        NETWORK_MESSAGE(call); \
         goto error; \
     } \
 }
 
 #define NETWORK_CALL_1(call) \
 { \
-    int res = call; \
-    if (res) { \
-        fprintf(stderr, "ERROR: "#call" returned error: %d\n%s:%d - %s\n", \
-            WSAGetLastError(), __FILE__, __LINE__, __FUNCTION__); \
+    int res__ = call; \
+    if (res__) { \
+        NETWORK_MESSAGE(call); \
     } \
 }
 
@@ -222,7 +211,8 @@
 
         DXVA_PicParams_H264 pic_params;
         DXVA_Qmatrix_H264 matrices;
-        DXVA_Slice_H264_Long slice;
+        DXVA_Slice_H264_Long slice_long;
+        DXVA_Slice_H264_Short slice_short;
 
         unsigned status_report;
         unsigned slice_id;
@@ -530,7 +520,7 @@
 #ifdef ENABLE_FFMPEG
 #include <libavcodec/avcodec.h>
     struct ffmpeg_state_t {
-        AVCodec* codec;
+        const AVCodec* codec;
         AVCodecContext* ctx;
         AVFrame* fr;
         AVPacket pkt;
