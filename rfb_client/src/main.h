@@ -75,40 +75,11 @@
     } \
 }
 
-#define CALL_CUSTOM_MESSAGE_STR(call, res) \
+#define STANDARD_MESSAGE_STR(call, res) \
 { \
     fprintf(stderr, "ERROR: "#call" returned error: %s\n%s:%d - %s\n", \
         res, __FILE__, __LINE__, __FUNCTION__); \
 }
-
-#define CALL_CUSTOM_MESSAGE(call, res) \
-{ \
-    fprintf(stderr, "ERROR: "#call" returned error: %s (%d)\n%s:%d - %s\n", \
-        strerror(res), res, __FILE__, __LINE__, __FUNCTION__); \
-}
-
-#define GENERAL_CALL_2(call, error) \
-{ \
-    int res__ = call; \
-    if (res__) { \
-        fprintf(stderr, "ERROR: "#call" returned error: %s(%d)\n%s:%d - %s\n", \
-            convert_general_error(res__), res__, __FILE__, __LINE__, __FUNCTION__); \
-        goto error; \
-    } \
-} \
-
-#define GENERAL_CALL_1(call) \
-{ \
-    int res__ = call; \
-    if (res__) { \
-        fprintf(stderr, "ERROR: "#call" returned error: %s(%d)\n%s:%d - %s\n", \
-            convert_general_error(res__), res__, __FILE__, __LINE__, __FUNCTION__); \
-    } \
-} \
-
-#define GENERAL_CALL_X(...) GET_3RD_ARG(__VA_ARGS__, GENERAL_CALL_2, GENERAL_CALL_1, )
-
-#define GENERAL_CALL(...) GENERAL_CALL_X(__VA_ARGS__)(__VA_ARGS__)
 
 #define STANDARD_MESSAGE(call) \
 { \
@@ -137,20 +108,6 @@
 #define STANDARD_CALL(...) STANDARD_CALL_X(__VA_ARGS__)(__VA_ARGS__)
 
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof(a[0]))
-
-#define GENERAL_DEBUG_INT(text, value) \
-{ \
-    fprintf(stderr, "INFO: %s, "#text": %d\n", \
-        __FUNCTION__, \
-        value); \
-}
-
-#define GENERAL_DEBUG_LONG(text, value) \
-{ \
-    fprintf(stderr, "INFO: %s, "#text": %lld\n", \
-        __FUNCTION__, \
-        value); \
-}
 
 #define NETWORK_MESSAGE(call) \
 { \

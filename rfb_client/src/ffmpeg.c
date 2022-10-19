@@ -16,8 +16,10 @@
 // along with this program; if not, write to the Free Software Foundation,
 // Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
+
 #include "main.h"
 #include "utils.h"
+#include "ffmpeg.h"
 
 extern struct app_state_t app;
 
@@ -42,13 +44,13 @@ int ffmpeg_init()
     int res;
     app.ffmpeg.codec = avcodec_find_decoder(AV_CODEC_ID_H264);
     if (!app.ffmpeg.codec) {
-        DEBUG("ERROR: avcodec_find_decoder can't find decoder\n");
+        DEBUG("ERROR: avcodec_find_decoder can't find decoder");
         goto error;
     }
 
     app.ffmpeg.ctx = avcodec_alloc_context3(app.ffmpeg.codec);
     if (!app.ffmpeg.ctx) {
-        DEBUG("ERROR: avcodec_alloc_context3 can't allocate decoder context\n");
+        DEBUG("ERROR: avcodec_alloc_context3 can't allocate decoder context");
         goto error;
     }
 
@@ -57,18 +59,21 @@ int ffmpeg_init()
     if (app.server_chroma == CHROMA_FORMAT_YUV422) {
         app.ffmpeg.ctx->pix_fmt = AV_PIX_FMT_YUV422P;
     }
+    //TODO: the format is ignored it is always  YUV422P
+    app.ffmpeg.ctx->pix_fmt = AV_PIX_FMT_YUV422P;
+
     app.ffmpeg.ctx->flags2 |= AV_CODEC_FLAG2_CHUNKS;
     app.ffmpeg.ctx->debug = 1;
 
     res = avcodec_open2(app.ffmpeg.ctx, app.ffmpeg.codec, NULL);
     if (res < 0) {
-        DEBUG("ERROR: avcodec_open2 can't open decoder\n");
+        DEBUG("ERROR: avcodec_open2 can't open decoder");
         goto error;
     }
 
     app.ffmpeg.fr = av_frame_alloc();
     if (!app.ffmpeg.fr) {
-        DEBUG("ERROR: av_frame_alloc can't allocate frame\n");
+        DEBUG("ERROR: av_frame_alloc can't allocate frame");
         goto error;
     }
 
@@ -80,62 +85,62 @@ error:
     return -1;
 }
 
-int ffmpeg_decode(int start, int end)
+int ffmpeg_decode()
 {
-    DEBUG("INFO: ffmpeg_decode: app.enc_buf %p(%d)\n",
+    DEBUG("ffmpeg_decode: app.enc_buf %p(%d)",
          app.enc_buf, app.enc_buf_length);
 
-    app.ffmpeg.pkt.data = app.enc_buf + start - 4;
-    app.ffmpeg.pkt.size = end - start + 4;
-    DEBUG("INFO: start %d, end: %d\n", start, end);
-    // DEBUG("INFO: nal1 %X%X%X%X\n",
-    //     *(app.enc_buf + start - 4),
-    //     *(app.enc_buf + start - 3),
-    //     *(app.enc_buf + start - 2),
-    //     *(app.enc_buf + start - 1)
-    // );
+    app.ffmpeg.pkt.data = app.enc_buf;
+    app.ffmpeg.pkt.size = app.enc_buf_length;
+    DEBUG("nal %X%X%X%X",
+        *(app.enc_buf),
+        *(app.enc_buf + 1),
+        *(app.enc_buf + 2),
+        *(app.enc_buf + 3)
+    );
 
     int result = 0;
-    result = avcodec_send_packet(app.ffmpeg.ctx, &app.ffmpeg.pkt);
-    if (result < 0) {
-        CALL_CUSTOM_MESSAGE_STR(avcodec_send_packet, av_err2str(result));
-        goto error;
-    }
-
-    while (result >= 0) {
-        DEBUG("avcodec_receive_frame\n");
+    FFMPEG_CALL(result = avcodec_send_packet(app.ffmpeg.ctx, &app.ffmpeg.pkt), error);
+    while (result == 0) {
         result = avcodec_receive_frame(app.ffmpeg.ctx, app.ffmpeg.fr);
-        if (result == AVERROR_EOF)
+        if (result == AVERROR_EOF || result == AVERROR(EAGAIN))
             goto end;
-        /*else if (result == AVERROR(EAGAIN)) {
-            result = 0;
-            break;
-        }*/ else if (result < 0) {
-            CALL_CUSTOM_MESSAGE(avcodec_receive_frame, result);
+        else if (result != 0) {
+            FFMPEG_CALL_MESSAGE(avcodec_receive_frame, result);
             goto error;
         }
 
-        DEBUG("pthread_mutex_lock\n");
-        GENERAL_CALL(pthread_mutex_lock(&app.dec_mutex), error);
+        STANDARD_CALL(pthread_mutex_lock(&app.dec_mutex), error);
 
-        DEBUG("av_image_copy_to_buffer\n");
-        app.dec_buf_length = av_image_copy_to_buffer(
-            app.dec_buf, app.server_width * app.server_height * 4,
-            (const uint8_t* const *)app.ffmpeg.fr->data,
-            (const int*)app.ffmpeg.fr->linesize, app.ffmpeg.ctx->pix_fmt,
-            app.ffmpeg.ctx->width, app.ffmpeg.ctx->height, 1);
+        // DEBUG("linesize 1: %d, pix_fmt %d", app.ffmpeg.fr->linesize[0],
+        //     av_pix_fmt_desc_get(app.ffmpeg.ctx));
 
-        DEBUG("pthread_mutex_unlock\n");
-        GENERAL_CALL(pthread_mutex_unlock(&app.dec_mutex), unlockm);
+        for (int i = 0; i < app.ffmpeg.fr->height; i++)
+            memcpy(
+                app.dec_buf + (i * app.ffmpeg.fr->width),
+                app.ffmpeg.fr->data[0] + (i * app.ffmpeg.fr->linesize[0]),
+                app.ffmpeg.fr->width
+            );
+        app.dec_buf_length = app.ffmpeg.fr->width * app.ffmpeg.fr->height;
+
+        // app.dec_buf_length = av_image_copy_to_buffer(
+        //     app.dec_buf, app.server_width * app.server_height * 4,
+        //     (const uint8_t* const *)app.ffmpeg.fr->data,
+        //     (const int*)app.ffmpeg.fr->linesize, app.ffmpeg.ctx->pix_fmt,
+        //     app.ffmpeg.ctx->width, app.ffmpeg.ctx->height, 1);
+
+        STANDARD_CALL(pthread_mutex_unlock(&app.dec_mutex), unlockm);
+
+        DEBUG("avcodec decoded: %d bytes", app.dec_buf_length);
 unlockm:
         if (app.dec_buf_length < 0) {
-            DEBUG("ERROR: av_image_copy_to_buffer can't get buffer, res: %d\n",
+            DEBUG("ERROR: av_image_copy_to_buffer can't get buffer, res: %d",
                 app.dec_buf_length);
             goto error;
         }
 
 #ifdef ENABLE_D3D
-        GENERAL_CALL(d3d_render_image(app), error);
+        STANDARD_CALL(d3d_render_image(app), error);
 #endif //ENABLE_D3D
     }
 
@@ -146,18 +151,19 @@ unlockm:
     //     &got_frame,
     //     &app.ffmpeg.pkt
     // );
-    // //DEBUG("INFO: app.ffmpeg.codec->decode: got_frame %d\n", got_frame);
+    // //DEBUG("app.ffmpeg.codec->decode: got_frame %d", got_frame);
     // if (res < 0) {
-    //     DEBUG("ERROR: app.ffmpeg.codec->decode can't decode slice, res: %d\n", res);
+    //     DEBUG("ERROR: app.ffmpeg.codec->decode can't decode slice, res: %d", res);
     //     goto error;
     // }
     // if (got_frame) {
     // }
 
 end:
-    STANDARD_MESSAGE("ffmpeg_decode failed!!!");
-
+    DEBUG("ffmpeg_decode finished");
     return 0;
+
 error:
+    errno = EAGAIN;
     return -1;
 }

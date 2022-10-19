@@ -146,12 +146,11 @@ static void *rfb_function(void *data)
     int res;
     const int one = 1;
 
-    DEBUG("RFB thread has been started, waiting client connection!!!");
-
     while (!is_abort) {
         struct sockaddr_in client_addr;
         int addres_len = sizeof(client_addr);
 
+        DEBUG("Waiting for clients connection!!!");
         CALL(rfb.client_socket = accept(
             rfb.server_socket,
             (struct sockaddr *)&client_addr, 
@@ -274,18 +273,6 @@ static void *rfb_function(void *data)
                 DEBUG("Server received message: RFBFramebufferUpdateRequest, waiting for frame");
                 CALL(sem_post(&rfb.client_semaphore), rfb_error);
                 DEBUG("frame received!!!");
-
-                //TODO: to delete
-                /*if (camera_encode_buffer(app, app.openvg.video_buffer.c, ((app.width * app.height) << 1))) {
-                    fprintf(stderr, 
-                        "ERROR: camera_encode_buffer failed to encode h264 buffer.\n");
-                    goto rfb_error;
-                }
-                if (rfb_send_frame(app)) {
-                    fprintf(stderr, 
-                        "ERROR: rfb_send_frame failed to send h264 buffer.\n");
-                    goto rfb_error;
-                }*/
             } else if (type.message_type == RFBKeyEvent) {
                 DEBUG("RFBKeyEvent message.");
                 uint8_t downFlag;
@@ -434,6 +421,10 @@ int rfb_process_frame()
     }
     frame_count++;
     // -----
+       
+    uint32_t length_send = htonl(length);
+    CALL(send(rfb.client_socket, (char *)&update_message, sizeof(update_message), 0), cleanup);
+    CALL(send(rfb.client_socket, (char *)&length_send, sizeof(length_send), 0), cleanup);
 
     DEBUG("Bytes to send: %d, %x %x %x %x ...",
         length,
@@ -441,11 +432,7 @@ int rfb_process_frame()
         buffer[1],
         buffer[2],
         buffer[3]);
-        
-    uint32_t length_send = htonl(length);
-    CALL(send(rfb.client_socket, (char *)&update_message, sizeof(update_message), 0), cleanup);
-    CALL(send(rfb.client_socket, (char *)&length_send, sizeof(length_send), 0), cleanup);
-    CALL(send(rfb.client_socket, (char *)&buffer, length, 0), cleanup);
+    CALL(send(rfb.client_socket, (char *)buffer, length, 0), cleanup);
 
     DEBUG("r: %d, x: %d, y: %d, w: %d, h: %d", ntohs(update_message.number_of_rectangles),
         ntohs(update_message.x), ntohs(update_message.y), ntohs(update_message.width),

@@ -116,22 +116,22 @@ static void main_function()
         goto exit;
     }
 
-    GENERAL_CALL(pthread_mutex_init(&app.dec_mutex, NULL), exit);
+    STANDARD_CALL(pthread_mutex_init(&app.dec_mutex, NULL), exit);
     app.is_dec_mutex = 1;
 
 #ifdef ENABLE_CUDA
-    GENERAL_CALL(cuda_init(&app), exit);
+    STANDARD_CALL(cuda_init(&app), exit);
 #endif //ENABLE_CUDA
 
     if (app.input_type == INPUT_TYPE_RFB) {
 #ifdef ENABLE_RFB
-        GENERAL_CALL(rfb_init(), exit);
-        GENERAL_CALL(rfb_connect(), exit);
-        GENERAL_CALL(rfb_handshake(), exit);
+        STANDARD_CALL(rfb_init(), exit);
+        STANDARD_CALL(rfb_connect(), exit);
+        STANDARD_CALL(rfb_handshake(), exit);
 #endif //ENABLE_RFB
     }
     else {
-        GENERAL_CALL(file_init(&app), exit);
+        STANDARD_CALL(file_init(), exit);
     }
 
     app.instance = GetModuleHandle(NULL);
@@ -160,30 +160,30 @@ static void main_function()
         &app);
 
 #ifdef ENABLE_D3D
-    GENERAL_CALL(d3d_init(&app), exit);
+    STANDARD_CALL(d3d_init(), exit);
 #endif //ENABLE_D3Ds
 
 #ifdef ENABLE_H264
-    GENERAL_CALL(h264_init(), exit);
+    STANDARD_CALL(h264_init(), exit);
 #endif //ENABLE_H264
 
 #ifdef ENABLE_FFMPEG
-    GENERAL_CALL(ffmpeg_init(), exit);
+    STANDARD_CALL(ffmpeg_init(), exit);
 #endif //ENABLE_FFMPEG
 
     if (app.input_type == INPUT_TYPE_RFB) {
 #ifdef ENABLE_RFB
         DEBUG("RFB init");
-        GENERAL_CALL(rfb_start(), exit);
+        STANDARD_CALL(rfb_start(), exit);
 #endif //ENABLE_RFB
     }
     else {
-        GENERAL_CALL(file_start(&app), exit);
+        STANDARD_CALL(file_start(), exit);
     }
 
     ShowWindow(app.wnd, SW_SHOW);
     UpdateWindow(app.wnd);
-    GENERAL_CALL(d3d_start(&app), exit);
+    STANDARD_CALL(d3d_start(), exit);
 
     MSG msg;
     while (GetMessage(&msg, NULL, 0, 0)) {
@@ -221,7 +221,7 @@ exit:
 #endif //ENABLE_CUVID
 
 #ifdef ENABLE_D3D
-    d3d_destroy(&app);
+    d3d_destroy();
 #endif // ENABLE_D3D
 
     if (app.input_type == INPUT_TYPE_RFB) {
@@ -230,7 +230,7 @@ exit:
 #endif //ENABLE_RFB
     }
     else {
-        file_destroy(&app);
+        file_destroy();
     }
 
     if (app.is_dec_mutex) {

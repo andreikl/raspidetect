@@ -26,6 +26,7 @@
 #define RFB_SECURITY_NONE 1
 
 extern int is_terminated;
+extern struct app_state_t app;
 
 enum rfb_request_enum {
     RFBSetPixelFormat = 0,
@@ -105,12 +106,6 @@ struct rfb_buffer_update_response_message_t {
     uint32_t encoding_type;
 };
 
-struct rfb_H264_header_response_message_t {
-    uint32_t length;
-};
-
-extern struct app_state_t app;
-
 static void *rfb_function(void* data)
 {
     if (app.verbose) {
@@ -130,8 +125,7 @@ static void *rfb_function(void* data)
     };
 
     struct rfb_buffer_update_response_message_t update_response;
-    struct rfb_H264_header_response_message_t encoding_response;
-
+    
     while (!is_terminated) {
         DEBUG("new slice has been requiested: %d:%d",
             ntohs(update_request.width), ntohs(update_request.height));
@@ -163,39 +157,45 @@ static void *rfb_function(void* data)
             goto error;
         }
 
+        uint32_t length;
         NETWORK_IO_CALL(
-            recv(app.rfb.socket, (char *)&encoding_response, sizeof(encoding_response), 0),
+            recv(app.rfb.socket, (char *)&length, sizeof(length), 0),
             error);
 
         // validate
-        if (ntohl(encoding_response.length) >= app.server_width * app.server_height) {
+        if (ntohl(length) >= app.server_width * app.server_height) {
             fprintf(stderr,
                 "ERROR: H264 buffer is too big: length: %ld\n",
-                ntohl(encoding_response.length));
+                ntohl(length));
 
             goto error;
         }
 
-        app.enc_buf_length = ntohl(encoding_response.length);
+        app.enc_buf_length = ntohl(length);
 
         int res = 0;
         NETWORK_IO_CALL(
             res = recv(app.rfb.socket, (char *)app.enc_buf, app.enc_buf_length, MSG_WAITALL),
             error);
 
+        uint8_t * t = app.enc_buf;
+        uint8_t t1 = t[0];
+        uint8_t t2 = t[1];
+        uint8_t t3 = t[2];
+        uint8_t t4 = t[3];
         DEBUG("Bytes received: %d, %x %x %x %x ...",
             res,
-            app.enc_buf[0],
-            app.enc_buf[1],
-            app.enc_buf[2],
-            app.enc_buf[3]);
+            t1,
+            t2,
+            t3,
+            t4);
 
 #ifdef ENABLE_H264
-        GENERAL_CALL(h264_decode(), error);
+        STANDARD_CALL(h264_decode(), error);
 #endif //ENABLE_H264
 
 #ifdef ENABLE_FFMPEG
-        GENERAL_CALL(ffmpeg_decode(0, app.enc_buf_length), error);
+        STANDARD_CALL(ffmpeg_decode(), error);
 #endif //ENABLE_FFMPEG
     }
 
@@ -231,7 +231,7 @@ close:
     STANDARD_CALL(sem_destroy(&app.rfb.semaphore));
 
     if (app.rfb.is_thread) {
-        GENERAL_CALL(pthread_join(app.rfb.thread, NULL));
+        STANDARD_CALL(pthread_join(app.rfb.thread, NULL));
         app.rfb.is_thread = 0;
     }
 

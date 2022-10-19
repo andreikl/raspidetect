@@ -125,7 +125,6 @@ void app_set_default_state()
     app.worker_height = utils_read_int_value(WORKER_HEIGHT, WORKER_HEIGHT_DEF);
     app.worker_total_objects = 10;
     app.worker_thread_res = -1;
-    app.verbose = utils_read_int_value(VERBOSE, VERBOSE_DEF);
     app.output_path = utils_read_str_value(OUTPUT_PATH, OUTPUT_PATH_DEF);
 #ifdef TENSORFLOW
     app.model_path = utils_read_str_value(TFL_MODEL_PATH, TFL_MODEL_PATH_DEF);

@@ -197,13 +197,13 @@ int h264_get_neighbouring_macroblocks(int xD, int yD,
     // 6.4.12 Derivation process for neighbouring locations
     int SubWidthC = -1;
     int SubHeightC = -1;
-    GENERAL_CALL(
+    STANDARD_CALL(
         h264_get_chroma_variables(&SubWidthC, &SubHeightC),
         error
     );
     int maxW = SubWidthC; // (6-32)
     int maxH = SubHeightC; // (6-33)
-    GENERAL_CALL(
+    STANDARD_CALL(
         h264_get_MbAddr_type(MbAddrN, xN, yN, maxW, maxH),
         error
     );
@@ -221,7 +221,7 @@ int h264_get_neighbouring_8x8luma(int luma8x8BlkIdx, int xD, int yD,
     // 6.4.12 Derivation process for neighbouring locations
     int maxW = 16; // (6-31)
     int maxH = 16; // (6-31)
-    GENERAL_CALL(
+    STANDARD_CALL(
         h264_get_MbAddr_type(MbAddrN, xN, yN, maxW, maxH),
         error
     );
@@ -250,13 +250,13 @@ int h264_get_neighbouring_4x4chroma(
     // 6.4.12 Derivation process for neighbouring locations
     int SubWidthC = -1;
     int SubHeightC = -1;
-    GENERAL_CALL(
+    STANDARD_CALL(
         h264_get_chroma_variables(&SubWidthC, &SubHeightC),
         error
     );
     int maxW = SubWidthC; // (6-32)
     int maxH = SubHeightC; // (6-33)
-    GENERAL_CALL(
+    STANDARD_CALL(
         h264_get_MbAddr_type(MbAddrN, xN, yN, maxW, maxH),
         error
     );
@@ -280,7 +280,7 @@ int h264_cabac_derive_mb_type(
 {
     //6.4.11.1 Derivation process for neighbouring macroblocks
     int MbAddrN = -1;
-    GENERAL_CALL(
+    STANDARD_CALL(
         h264_get_neighbouring_macroblocks(xD, yD, &MbAddrN),
         error
     );
@@ -318,11 +318,11 @@ int h264_cabac_read_mb_type(struct app_state_t* app)
 
     // 9.3.3.1.1.3 Derivation process of ctxIdxInc for the syntax element mb_type
     int condTermFlagA, condTermFlagB;
-    GENERAL_CALL(
+    STANDARD_CALL(
         h264_cabac_derive_mb_type(-1, 0, ctxIdxOffset, &condTermFlagA),
         error
     );
-    GENERAL_CALL(
+    STANDARD_CALL(
         h264_cabac_derive_mb_type(0, -1, ctxIdxOffset, &condTermFlagB),
         error
     );
@@ -382,7 +382,7 @@ int h264_cabac_derive_size_8x8_flag(
 {
     //6.4.11.1 Derivation process for neighbouring macroblocks
     int MbAddrN = -1;
-    GENERAL_CALL(
+    STANDARD_CALL(
         h264_get_neighbouring_macroblocks(xD, yD, &MbAddrN),
         error
     );
@@ -414,11 +414,11 @@ int h264_cabac_read_transform_size_8x8_flag(struct app_state_t* app)
 
     // 9.3.3.1.1.10 Derivation process of ctxIdxInc for the syntax element transform_size_8x8_flag
     int condTermFlagA, condTermFlagB;
-    GENERAL_CALL(
+    STANDARD_CALL(
         h264_cabac_derive_size_8x8_flag(-1, 0, &condTermFlagA),
         error
     );
-    GENERAL_CALL(
+    STANDARD_CALL(
         h264_cabac_derive_size_8x8_flag(0, -1, &condTermFlagB),
         error
     );
@@ -461,7 +461,7 @@ int h264_cabac_derive_intra_chroma_pred_mode(
 {
     //6.4.11.1 Derivation process for neighbouring macroblocks
     int MbAddrN = -1;
-    GENERAL_CALL(
+    STANDARD_CALL(
         h264_get_neighbouring_macroblocks(xD, yD, &MbAddrN),
         error
     );
@@ -498,11 +498,11 @@ int h264_cabac_read_intra_chroma_pred_mode(struct app_state_t* app)
     int ctxIdxOffset = 64;
     // 9.3.3.1.1.8 Derivation process of ctxIdxInc for the syntax element intra_chroma_pred_mode
     int condTermFlagA, condTermFlagB;
-    GENERAL_CALL(
+    STANDARD_CALL(
         h264_cabac_derive_size_8x8_flag(-1, 0, &condTermFlagA),
         error
     );
-    GENERAL_CALL(
+    STANDARD_CALL(
         h264_cabac_derive_size_8x8_flag(0, -1, &condTermFlagB),
         error
     );
@@ -537,7 +537,7 @@ int h264_cabac_derive_coded_block_pattern_luma(struct app_state_t* app,
 {
     int MbAddrN = -1;
     int luma8x8BlkIdxN = -1;
-    GENERAL_CALL(
+    STANDARD_CALL(
         h264_get_neighbouring_8x8luma(binIdx, xD, yD, &MbAddrN, &luma8x8BlkIdxN),
         error
     );
@@ -586,7 +586,7 @@ int h264_cabac_read_coded_block_pattern_luma(struct app_state_t* app)
     int fixedLength = 4;
     for (int binIdx = 0; binIdx < fixedLength; binIdx++) {
         unsigned condTermFlagA;
-        GENERAL_CALL(
+        STANDARD_CALL(
             h264_cabac_derive_coded_block_pattern_luma(app,
                 -1, 0,
                 binIdx,
@@ -595,7 +595,7 @@ int h264_cabac_read_coded_block_pattern_luma(struct app_state_t* app)
         );
 
         unsigned condTermFlagB;
-        GENERAL_CALL(
+        STANDARD_CALL(
             h264_cabac_derive_coded_block_pattern_luma(app,
                 0, -1,
                 binIdx,
@@ -628,7 +628,7 @@ int h264_cabac_derive_coded_block_pattern_chroma(
 {
     int MbAddrN = -1;
     int luma8x8BlkIdxN = -1;
-    GENERAL_CALL(h264_get_neighbouring_8x8luma(binIdx, xD, yD, &MbAddrN, &luma8x8BlkIdxN),
+    STANDARD_CALL(h264_get_neighbouring_8x8luma(binIdx, xD, yD, &MbAddrN, &luma8x8BlkIdxN),
         error);
 
     struct h264_macroblock_t *mb_addr_n = h264_is_MbAddr_available(MbAddrN)?
@@ -674,7 +674,7 @@ int h264_cabac_read_coded_block_pattern_chroma(struct app_state_t* app)
     while (app.h264.data.curr_mb->CodedBlockPatternChroma < 2) {
         
         unsigned condTermFlagA;
-        GENERAL_CALL(
+        STANDARD_CALL(
             h264_cabac_derive_coded_block_pattern_chroma(app,
                 -1, 0,
                 binIdx,
@@ -683,7 +683,7 @@ int h264_cabac_read_coded_block_pattern_chroma(struct app_state_t* app)
         );
 
         unsigned condTermFlagB;
-        GENERAL_CALL(
+        STANDARD_CALL(
             h264_cabac_derive_coded_block_pattern_chroma(app,
                 0, -1,
                 binIdx,
@@ -713,9 +713,9 @@ error:
 // 9.3.2.6: Binarization process for coded block pattern
 int h264_cabac_read_coded_block_pattern()
 {
-    GENERAL_CALL(h264_cabac_read_coded_block_pattern_luma(), error);
+    STANDARD_CALL(h264_cabac_read_coded_block_pattern_luma(), error);
     if (app.h264.sps.ChromaArrayType != 0 || app.h264.sps.ChromaArrayType != 3) {
-        GENERAL_CALL(h264_cabac_read_coded_block_pattern_chroma(), error);
+        STANDARD_CALL(h264_cabac_read_coded_block_pattern_chroma(), error);
     }
 
     app.h264.data.curr_mb->coded_block_pattern =
@@ -802,7 +802,7 @@ int h264_cabac_coded_block_flag_ctxBlockCat(struct app_state_t* app,
 
         int SubWidthC = -1;
         int SubHeightC = -1;
-        GENERAL_CALL(
+        STANDARD_CALL(
             h264_get_chroma_variables(&SubWidthC, &SubHeightC),
             error
         );
@@ -878,7 +878,7 @@ int h264_cabac_derive_coded_block_flag_chroma_dc(
 {
     //6.4.11.1 Derivation process for neighbouring macroblocks
     int MbAddrN = -1;
-    GENERAL_CALL(
+    STANDARD_CALL(
         h264_get_neighbouring_macroblocks(xD, yD, &MbAddrN),
         error
     );
@@ -946,7 +946,7 @@ int h264_cabac_derive_coded_block_flag_chroma_ac(
     //6.4.11.1 Derivation process for neighbouring macroblocks
     int MbAddrN = -1;
     int chroma4x4BlkIdxN = -1;
-    GENERAL_CALL(
+    STANDARD_CALL(
         h264_get_neighbouring_4x4chroma(chroma4x4BlkIdx, xD, yD, &MbAddrN, &chroma4x4BlkIdxN),
         error
     );
@@ -1013,7 +1013,7 @@ int h264_cabac_read_coded_block_flag(struct app_state_t* app,
 
     int maxNumCoeff = -1;
     int ctxBlockCat = -1;
-    GENERAL_CALL(
+    STANDARD_CALL(
         h264_cabac_coded_block_flag_ctxBlockCat(type, &maxNumCoeff, &ctxBlockCat),
         error
     );
@@ -1045,14 +1045,14 @@ int h264_cabac_read_coded_block_flag(struct app_state_t* app,
     //9.3.3.1.1.9 Derivation process of ctxIdxInc for the syntax element coded_block_flag
     if (ctxBlockCat == 3) { //CHROMA_DC - ChromaDCLevel as described in clause 7.4.5.3
         //6.4.11.1 Derivation process for neighbouring macroblocks
-        GENERAL_CALL(
+        STANDARD_CALL(
             h264_cabac_derive_coded_block_flag_chroma_dc(app,
                 -1, 0,
                 blocks + blkIdx,
                 &condTermFlagA),
             error
         );
-        GENERAL_CALL(
+        STANDARD_CALL(
             h264_cabac_derive_coded_block_flag_chroma_dc(app,
                 0, -1,
                 blocks + blkIdx,
@@ -1061,14 +1061,14 @@ int h264_cabac_read_coded_block_flag(struct app_state_t* app,
         );
     } else {
         //6.4.11.1 Derivation process for neighbouring macroblocks
-        GENERAL_CALL(
+        STANDARD_CALL(
             h264_cabac_derive_coded_block_flag_chroma_ac(app,
                 -1, 0,
                 blocks, blkIdx,
                 &condTermFlagA),
             error
         );
-        GENERAL_CALL(
+        STANDARD_CALL(
             h264_cabac_derive_coded_block_flag_chroma_ac(app,
                 0, -1,
                 blocks, blkIdx,
@@ -1096,7 +1096,7 @@ int h264_cabac_read_significant_coeff_flag(struct app_state_t* app,
 
     int maxNumCoeff = -1;
     int ctxBlockCat = -1;
-    GENERAL_CALL(
+    STANDARD_CALL(
         h264_cabac_coded_block_flag_ctxBlockCat(type, &maxNumCoeff, &ctxBlockCat),
         error
     );
@@ -1139,7 +1139,7 @@ int h264_cabac_read_significant_coeff_flag(struct app_state_t* app,
     else if (ctxBlockCat == 3) {
         int SubWidthC = -1;
         int SubHeightC = -1;
-        GENERAL_CALL(
+        STANDARD_CALL(
             h264_get_chroma_variables(&SubWidthC, &SubHeightC),
             error
         );
@@ -1169,7 +1169,7 @@ int h264_cabac_read_last_significant_coeff_flag(struct app_state_t* app,
 
     int maxNumCoeff = -1;
     int ctxBlockCat = -1;
-    GENERAL_CALL(
+    STANDARD_CALL(
         h264_cabac_coded_block_flag_ctxBlockCat(type, &maxNumCoeff, &ctxBlockCat),
         error
     );
@@ -1212,7 +1212,7 @@ int h264_cabac_read_last_significant_coeff_flag(struct app_state_t* app,
     else if (ctxBlockCat == 3) {
         int SubWidthC = -1;
         int SubHeightC = -1;
-        GENERAL_CALL(
+        STANDARD_CALL(
             h264_get_chroma_variables(&SubWidthC, &SubHeightC),
             error
         );
@@ -1242,7 +1242,7 @@ int h264_cabac_read_coeff_abs_level_minus1(struct app_state_t* app,
 
     int maxNumCoeff = -1;
     int ctxBlockCat = -1;
-    GENERAL_CALL(
+    STANDARD_CALL(
         h264_cabac_coded_block_flag_ctxBlockCat(type, &maxNumCoeff, &ctxBlockCat),
         error
     );

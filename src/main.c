@@ -118,7 +118,6 @@ static int main_function()
     int res;
     char buffer[MAX_DATA];
 
-    app_set_default_state();
     app_construct();
     CALL(app_init(), error);
 
@@ -414,8 +413,18 @@ int main(int argc, char** argv)
     h = KH_INIT(argvs_hash_t);
     utils_parse_args(argc, argv);
 
-    unsigned k = KH_GET(argvs_hash_t, h, HELP);
-    if (k != KH_END(h)) {
+    app_set_default_state();
+    unsigned verbose = KH_GET(argvs_hash_t, h, VERBOSE);
+    if (verbose != KH_END(h)) {
+        app.verbose = 1;
+        DEBUG("Debug output has been enabled!!!");
+    }
+    else {
+        app.verbose = 0;
+    }
+
+    unsigned help = KH_GET(argvs_hash_t, h, HELP);
+    if (help != KH_END(h)) {
         print_help();
     }
     else {

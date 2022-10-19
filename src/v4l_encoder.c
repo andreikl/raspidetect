@@ -39,20 +39,6 @@ static struct v4l_encoder_state_t v4l = {
 extern struct app_state_t app;
 extern struct filter_t filters[MAX_FILTERS];
 
-// wrapper to allow to run test on platform where h264 Jetson encoder isn't available
-#ifdef V4L_ENCODER_WRAP
-    int NvBufferMemSyncForDevice(int fd, unsigned int plane, void **addr)
-    {
-        // determines if wrapper is available
-        #ifdef CMOCKA
-            return __wrap_NvBufferMemSyncForDevice(fd, plane, addr);
-        #endif
-
-        DEBUG("wrap NvBufferMemSyncForDevice, fd: %d, plane: %d", fd, plane);
-        return 0;
-    }
-#endif
-
 static int ioctl_enum(int fd, int request, void *arg)
 {
     int res = v4l2_ioctl(fd, request, arg);

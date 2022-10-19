@@ -20,30 +20,28 @@
 #include "utils.h"
 #include "d3d.h"
 
+extern struct app_state_t app;
 extern int is_terminated;
 
 static void *d3d_function(void* data)
 {
-    struct app_state_t * app = (struct app_state_t*) data;
-    if (app->verbose) {
-        DEBUG("INFO: Direct3d thread has been started\n");
-    }
+    DEBUG("Direct3d thread has been started");
 
-    if (sem_wait(&app->d3d.semaphore)) {
-        DEBUG("ERROR: sem_wait failed with error: %s\n", strerror(errno));
+    if (sem_wait(&app.d3d.semaphore)) {
+        DEBUG("ERROR: sem_wait failed with error: %s", strerror(errno));
         goto error;
     }
 
     while (!is_terminated) {
         if (usleep(40000)) {
-            DEBUG("ERROR: usleep failed with error: %s\n", strerror(errno));
+            DEBUG("ERROR: usleep failed with error: %s", strerror(errno));
             goto error;
         }
 
-        d3d_render_frame(app);
+        d3d_render_frame();
     }
 
-    DEBUG("INFO: d3d_function is_terminated: %d\n", is_terminated);
+    DEBUG("d3d_function is_terminated: %d", is_terminated);
     return NULL;
 
 error:
@@ -51,44 +49,44 @@ error:
     return NULL;
 }
 
-void d3d_destroy(struct app_state_t *app)
+void d3d_destroy()
 {
-    if (sem_destroy(&app->d3d.semaphore)) {
-        DEBUG("ERROR: sem_destroy failed with code: %s\n", strerror(errno));
+    if (sem_destroy(&app.d3d.semaphore)) {
+        DEBUG("ERROR: sem_destroy failed with code: %s", strerror(errno));
     }
 
-    if (app->d3d.is_thread) {
-        GENERAL_CALL(pthread_join(app->d3d.thread, NULL));
-        app->d3d.is_thread = 0;
+    if (app.d3d.is_thread) {
+        STANDARD_CALL(pthread_join(app.d3d.thread, NULL));
+        app.d3d.is_thread = 0;
     }
 
 
     for (int i = 0; i < SCREEN_BUFFERS; i++) {
-        if (app->d3d.surfaces[i]) {
-            IDirect3DSurface9_Release(app->d3d.surfaces[i]);
+        if (app.d3d.surfaces[i]) {
+            IDirect3DSurface9_Release(app.d3d.surfaces[i]);
         }
     }
 
-    if (app->d3d.dev) {
-        IDirect3DDevice9_Release(app->d3d.dev);
+    if (app.d3d.dev) {
+        IDirect3DDevice9_Release(app.d3d.dev);
     }
 
-    if (app->d3d.d3d) {
-        IDirect3D9_Release(app->d3d.d3d);
+    if (app.d3d.d3d) {
+        IDirect3D9_Release(app.d3d.d3d);
     }
 }
 
-int d3d_init(struct app_state_t *app)
+int d3d_init()
 {
     HRESULT res;
 
-    STANDARD_CALL(sem_init(&app->d3d.semaphore, 0, 0), close);
-    STANDARD_CALL(pthread_create(&app->d3d.thread, NULL, d3d_function, app), close);
-    app->d3d.is_thread = 1;
+    STANDARD_CALL(sem_init(&app.d3d.semaphore, 0, 0), close);
+    STANDARD_CALL(pthread_create(&app.d3d.thread, NULL, d3d_function, NULL), close);
+    app.d3d.is_thread = 1;
 
-    app->d3d.d3d = Direct3DCreate9(D3D_SDK_VERSION);
-    if (!app->d3d.d3d) {
-        DEBUG("ERROR: Can't create d3d interface\n");
+    app.d3d.d3d = Direct3DCreate9(D3D_SDK_VERSION);
+    if (!app.d3d.d3d) {
+        DEBUG("ERROR: Can't create d3d interface");
         goto close;
     }
 
@@ -96,21 +94,21 @@ int d3d_init(struct app_state_t *app)
     memset(&d3dpp, 0, sizeof(d3dpp));
     d3dpp.Windowed = TRUE;
     d3dpp.SwapEffect = D3DSWAPEFFECT_DISCARD;
-    d3dpp.hDeviceWindow = app->wnd;
+    d3dpp.hDeviceWindow = app.wnd;
 
     // create a device class using this information and the info from the d3dpp stuct
     res = IDirect3D9_CreateDevice(
-        app->d3d.d3d,
+        app.d3d.d3d,
         D3DADAPTER_DEFAULT,
         D3DDEVTYPE_HAL,
-        app->wnd,
+        app.wnd,
         D3DCREATE_SOFTWARE_VERTEXPROCESSING,
         &d3dpp,
-        &app->d3d.dev);
+        &app.d3d.dev);
     if (FAILED(res)) {
         fprintf(
             stderr,
-            "ERROR: IDirect3D9_CreateDevice failed with error %lx %s\n",
+            "ERROR: IDirect3D9_CreateDevice failed with error %lx %s",
             res,
             d3d_get_hresult_message(res)
         );
@@ -118,31 +116,29 @@ int d3d_init(struct app_state_t *app)
     }
 
     for (int i = 0; i < SCREEN_BUFFERS; i++) {
-        res = IDirect3DDevice9_CreateOffscreenPlainSurface(
-            app->d3d.dev,
-            app->server_width,
-            app->server_height,
-            H264CODEC_FORMAT,
+        D3D_CALL(IDirect3DDevice9_CreateOffscreenPlainSurface(
+            app.d3d.dev,
+            app.server_width,
+            app.server_height,
+            //H264CODEC_FORMAT,
+            D3DFMT_A8R8G8B8,
             D3DPOOL_DEFAULT,
-            &app->d3d.surfaces[i],
-            NULL);
-
-        if (FAILED(res)) {
-            DEBUG("ERROR: Can't create d3d surface\n");
-            goto close;
-        }
+            &app.d3d.surfaces[i],
+            NULL
+        ), close);
     }
     return 0;
 
 close:
-    d3d_destroy(app);
-    return 1;
+    d3d_destroy();
+    errno = EAGAIN;
+    return -1;
 }
 
-int d3d_render_frame(struct app_state_t *app)
+int d3d_render_frame()
 {
     /*D3D_CALL(
-        IDirect3DDevice9_Clear(app->d3d.dev,
+        IDirect3DDevice9_Clear(app.d3d.dev,
             0,
             NULL,
             D3DCLEAR_TARGET,
@@ -153,97 +149,113 @@ int d3d_render_frame(struct app_state_t *app)
         error
     );*/
 
-    D3D_CALL(IDirect3DDevice9_BeginScene(app->d3d.dev), end_scene);
+    D3D_CALL(IDirect3DDevice9_BeginScene(app.d3d.dev), end_scene);
     IDirect3DSurface9* backbuffer = NULL;
+
     D3D_CALL(
-        IDirect3DDevice9_GetBackBuffer(app->d3d.dev, 0, 0, D3DBACKBUFFER_TYPE_MONO, &backbuffer),
+        IDirect3DDevice9_GetBackBuffer(app.d3d.dev, 0, 0, D3DBACKBUFFER_TYPE_MONO, &backbuffer),
         end_scene);
 
-    GENERAL_CALL(pthread_mutex_lock(&app->dec_mutex), end_scene);
+    STANDARD_CALL(pthread_mutex_lock(&app.dec_mutex), end_scene);
+
     D3D_CALL(
-        IDirect3DDevice9_StretchRect(app->d3d.dev,
-            app->d3d.surfaces[0],
+        IDirect3DDevice9_StretchRect(app.d3d.dev,
+            app.d3d.surfaces[0],
             NULL,
             backbuffer,
             NULL,
             D3DTEXF_NONE),
         end_scene);
-    GENERAL_CALL(pthread_mutex_unlock(&app->dec_mutex), end_scene);
+
+    STANDARD_CALL(pthread_mutex_unlock(&app.dec_mutex), end_scene);
 
 end_scene:
-    D3D_CALL(IDirect3DDevice9_EndScene(app->d3d.dev), error);
+    D3D_CALL(IDirect3DDevice9_EndScene(app.d3d.dev), error);
 
     // displays the created frame on the screen
-    D3D_CALL(IDirect3DDevice9_Present(app->d3d.dev, NULL, NULL, NULL, NULL), error);
+    D3D_CALL(IDirect3DDevice9_Present(app.d3d.dev, NULL, NULL, NULL, NULL), error);
 
     return 0;
 error:
     return -1;
 }
 
-int d3d_render_image(struct app_state_t *app) {
-    int res = -1;
+int d3d_render_image() {
+    int res = 0;
     // RECT rect;
     // rect.left = 0; rect.top = 0;
     // rect.right = 640; rect.bottom = 480;
 
-    GENERAL_CALL(pthread_mutex_lock(&app->dec_mutex), exit);
+    STANDARD_CALL(pthread_mutex_lock(&app.dec_mutex), exit);
 
     D3DLOCKED_RECT d3d_rect;
-    D3D_CALL(
-        IDirect3DSurface9_LockRect(app->d3d.surfaces[0], &d3d_rect, NULL, D3DLOCK_DONOTWAIT),
-        exit);
+    HRESULT hres;
+    D3D_CALL(hres = IDirect3DSurface9_LockRect(
+        app.d3d.surfaces[0], &d3d_rect, NULL, D3DLOCK_NOSYSLOCK
+    ), unlocdec);
+
     char* bytes = d3d_rect.pBits;
-    //DEBUG("INFO: memcpy: %p(%d)\n", app->dec_buf, app->dec_buf_length);
-    //DEBUG("INFO:%X%X%X%X\n", app->dec_buf[0], app->dec_buf[1], app->dec_buf[2], app->dec_buf[3]);
-    int stride_d3d = d3d_rect.Pitch;
-    int stride_buf = app->server_width;
-    int chroma_buf_size = app->server_width * app->server_height;
-    int index_d3d = 0, index_buf = 0;
-    // DEBUG("INFO: index_d3d: %d, index_buf: %d, stride_d3d: %d, stride_buf: %d, chroma_buf_size: %d\n",
-    //     index_d3d, index_buf, stride_d3d, stride_buf, chroma_buf_size);
-    for (
-        ;
-        index_buf < chroma_buf_size;
-        index_buf += stride_buf, index_d3d += stride_d3d
-    ) {
-        memcpy(bytes + index_d3d, app->dec_buf + index_buf, stride_buf);
+    int chroma_buf_size = app.server_width * app.server_height;
+    for (int i = 0, j = 0; i < chroma_buf_size; i++, j += 4) {
+        bytes[j] = app.dec_buf[i];
+        //bytes[j] = 255;
     }
-    //memcpy(d3d_rect.pBits + index_d3d, app->dec_buf + index_buf, chroma_buf_size / 2);
-    //memcpy(d3d_rect.pBits + index_d3d + chroma_buf_size / 2, app->dec_buf + index_buf, chroma_buf_size / 2);
-    stride_d3d = stride_d3d;
-    stride_buf = stride_buf;
-    int luma_buf_end1 = chroma_buf_size + (chroma_buf_size / 2);
-    // DEBUG("INFO: index_d3d: %d, index_buf: %d, stride_d3d: %d, stride_buf: %d, chroma_buf_size: %d\n",
-    //     index_d3d, index_buf, stride_d3d, stride_buf, luma_buf_end1);
-    for (
-        ;
-        index_buf < luma_buf_end1;
-        index_buf += stride_buf, index_d3d += stride_d3d
-    ) {
-        memcpy(bytes + index_d3d, app->dec_buf + index_buf, stride_buf);
-    }
-    index_buf = chroma_buf_size;
-    index_d3d = stride_d3d * app->server_height + stride_d3d * (app->server_height / 4);
-    int luma_buf_end2 = chroma_buf_size + (chroma_buf_size / 4);
-    // DEBUG("INFO: index_d3d: %d, index_buf: %d, stride_d3d: %d, stride_buf: %d, chroma_buf_size: %d\n",
-    //     index_d3d, index_buf, stride_d3d, stride_buf, luma_buf_end1);
-    for (
-        ;
-        index_buf < luma_buf_end2;
-        index_buf += stride_buf, index_d3d += stride_d3d
-    ) {
-        memcpy(bytes + index_d3d, app->dec_buf + index_buf, stride_buf);
-    }
+    // //DEBUG("memcpy: %p(%d)", app.dec_buf, app.dec_buf_length);
+    // //DEBUG("INFO:%X%X%X%X", app.dec_buf[0], app.dec_buf[1], app.dec_buf[2], app.dec_buf[3]);
+    // int stride_d3d = d3d_rect.Pitch;
+    // int stride_buf = app.server_width;
+    
+    // int index_d3d = 0, index_buf = 0;
+    // // DEBUG("index_d3d: %d, index_buf: %d, stride_d3d: %d, stride_buf: %d, chroma_buf_size: %d",
+    // //     index_d3d, index_buf, stride_d3d, stride_buf, chroma_buf_size);
+    // for (
+    //     ;
+    //     index_buf < chroma_buf_size;
+    //     index_buf += stride_buf, index_d3d += stride_d3d
+    // ) {
+    //     memcpy(bytes + index_d3d, app.dec_buf + index_buf, stride_buf);
+    // }
+    // //memcpy(d3d_rect.pBits + index_d3d, app.dec_buf + index_buf, chroma_buf_size / 2);
+    // //memcpy(d3d_rect.pBits + index_d3d + chroma_buf_size / 2, app.dec_buf + index_buf, chroma_buf_size / 2);
+    // stride_d3d = stride_d3d;
+    // stride_buf = stride_buf;
+    // int luma_buf_end1 = chroma_buf_size + (chroma_buf_size / 2);
+    // // DEBUG("index_d3d: %d, index_buf: %d, stride_d3d: %d, stride_buf: %d, chroma_buf_size: %d",
+    // //     index_d3d, index_buf, stride_d3d, stride_buf, luma_buf_end1);
+    // for (
+    //     ;
+    //     index_buf < luma_buf_end1;
+    //     index_buf += stride_buf, index_d3d += stride_d3d
+    // ) {
+    //     memcpy(bytes + index_d3d, app.dec_buf + index_buf, stride_buf);
+    // }
+    // index_buf = chroma_buf_size;
+    // index_d3d = stride_d3d * app.server_height + stride_d3d * (app.server_height / 4);
+    // int luma_buf_end2 = chroma_buf_size + (chroma_buf_size / 4);
+    // // DEBUG("index_d3d: %d, index_buf: %d, stride_d3d: %d, stride_buf: %d, chroma_buf_size: %d",
+    // //     index_d3d, index_buf, stride_d3d, stride_buf, luma_buf_end1);
+    // for (
+    //     ;
+    //     index_buf < luma_buf_end2;
+    //     index_buf += stride_buf, index_d3d += stride_d3d
+    // ) {
+    //     memcpy(bytes + index_d3d, app.dec_buf + index_buf, stride_buf);
+    // }
 
-    res = 0;
+    D3D_CALL(hres = IDirect3DSurface9_UnlockRect(app.d3d.surfaces[0]));
+    if (FAILED(hres)) {
+        res = -1;
+    }
+        
+unlocdec:
+    int ret = 0;
+    STANDARD_CALL(ret = pthread_mutex_unlock(&app.dec_mutex));
+    if (ret)
+        res = -1;
+
 exit:
-
-    D3D_CALL(IDirect3DSurface9_UnlockRect(app->d3d.surfaces[0]), unlockrect);
-unlockrect:
-
-    GENERAL_CALL(pthread_mutex_unlock(&app->dec_mutex), unlockm);
-unlockm:
+    if (res == -1 && !errno)
+        errno = EAGAIN;
 
     return res;
 }
@@ -262,6 +274,9 @@ char* d3d_get_hresult_message(HRESULT result)
     else if (result == D3DERR_OUTOFVIDEOMEMORY) {
         return "D3DERR_OUTOFVIDEOMEMORY";
     }
+    else if (result == D3DERR_WASSTILLDRAWING) {
+        return "D3DERR_WASSTILLDRAWING";
+    }
     else if (result == E_INVALIDARG) {
         return "E_INVALIDARG";
     }
@@ -270,9 +285,9 @@ char* d3d_get_hresult_message(HRESULT result)
     }
 }
 
-int d3d_start(struct app_state_t* app)
+int d3d_start()
 {
-    STANDARD_CALL(sem_post(&app->d3d.semaphore), error);
+    STANDARD_CALL(sem_post(&app.d3d.semaphore), error);
     return 0;
 error:
     return -1;

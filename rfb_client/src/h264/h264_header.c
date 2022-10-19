@@ -149,7 +149,7 @@ static int h264_read_dec_ref_pic_marking()
         //H264_RBSP_DEBUG(header->long_term_reference_flag);
         if (header->long_term_reference_flag) {
             // ffmpeg: set mmco[0].opcode = MMCO_LONG, mmco[0].long_arg = 0; nb_mmco = 1;
-            GENERAL_DEBUG_INT("Slice is marked as 'used for reference' (long-term reference)",
+            DEBUG("Slice is marked as 'used for reference' (long-term reference) %d",
                 header->long_term_reference_flag);
 
             header->LongTermFrameIdx = 0;
@@ -158,7 +158,7 @@ static int h264_read_dec_ref_pic_marking()
             header->LongTermFrameIdx = -1;
             header->MaxLongTermFrameIdx = -1;
 
-            GENERAL_DEBUG_INT("Slice is marked as 'used for reference' (short-term reference)",
+            DEBUG("Slice is marked as 'used for reference' (short-term reference) %d",
                 header->long_term_reference_flag);
         }
         //ffmpeg: set adaptive_ref_pic_marking_mode_flag -> sl->explicit_ref_marking = 1
@@ -246,10 +246,10 @@ static int h264_read_slice_header()
     header->slice_type_origin = header->slice_type = RBSP_READ_UE(rbsp);
     if (header->slice_type >= 5) {
         header->slice_type = header->slice_type - 5;
-        H264_RBSP_DEBUG_STR(h264_get_slice_type(header->slice_type));
+        H264_RBSP_DEBUG("slice_type: %s", h264_get_slice_type(header->slice_type));
     }
     else {
-        H264_RBSP_DEBUG_STR(h264_get_slice_type(header->slice_type));
+        H264_RBSP_DEBUG("slice_type: %d", header->slice_type);
     }
 
     // ffmpeg: copy check
@@ -270,7 +270,7 @@ static int h264_read_slice_header()
     // ffmpeg: sl->frame_num
     // TODO: to find what is h->poc.frame_num
     header->frame_num = RBSP_READ_UN(rbsp, app.h264.sps.log2_max_frame_num);
-    H264_RBSP_DEBUG(header->frame_num);
+    H264_RBSP_DEBUG("frame_num: %d", header->frame_num);
 
     //7.4.3 Slice header semantics
     //ffmepg: picture_structure -> sl->picture_structure
@@ -386,7 +386,7 @@ static int h264_read_slice_header()
     UNCOVERED_CASE(app.h264.nal_unit_type, ==, 21);
 
     //TODO: set ref_count to 0 if error is happened
-    GENERAL_CALL(h264_read_ref_pic_list_modification(), error);
+    STANDARD_CALL(h264_read_ref_pic_list_modification(), error);
 
     //ffmpeg: ignores SP and SI and fill 0
     // sl->pwt.luma_weight_flag and sl->pwt.chroma_weight_flag[i]
@@ -398,12 +398,12 @@ static int h264_read_slice_header()
         )
         || (app.h264.pps.weighted_bipred_idc == 1 && header->slice_type == SliceTypeB)
     ) {
-        GENERAL_CALL(h264_read_pred_weight_table(), error);
+        STANDARD_CALL(h264_read_pred_weight_table(), error);
     }
     // 8.2.5.1 Sequence of operations for decoded reference picture marking process
     //ffmpeg: ref_idc
     if (app.h264.nal_ref_idc) {
-        GENERAL_CALL(h264_read_dec_ref_pic_marking(), error);
+        STANDARD_CALL(h264_read_dec_ref_pic_marking(), error);
     }
 
     //ffmpeg: entropy_coding_mode_flag -> cabac
@@ -440,6 +440,7 @@ static int h264_read_slice_header()
         // ffmpeg: don't save value
         header->slice_qs_delta = RBSP_READ_SE(rbsp);
     }
+
     //ffmpeg: deblocking_filter_control_present_flag -> deblocking_filter_parameters_present
     if (app.h264.pps.deblocking_filter_control_present_flag) {
         //ffmpeg: validate value disable_deblocking_filter_idc > 2 -> message
@@ -455,6 +456,7 @@ static int h264_read_slice_header()
             //H264_RBSP_DEBUG(header->slice_beta_offset_div2);
         }
     }
+
     UNCOVERED_CASE(app.h264.pps.num_slice_groups_minus1, >, 0);
 
     header->PicWidthInMbs = app.h264.sps.pic_width_in_mbs_minus1 + 1; //7-13
@@ -482,12 +484,13 @@ static int h264_read_slice_header()
     // }
 
     if (header->list_count > 0) {
-        GENERAL_DEBUG_INT("list_count", header->list_count);
+        DEBUG("list_count: %d", header->list_count);
         for (int i = 0; i < header->list_count; i++) {
-            GENERAL_DEBUG_INT("ref_count[i]", header->ref_count[i]);
+            DEBUG("ref_count[i]: %d", header->ref_count[i]);
         }
 
     }
+
     return 0;
 
 error:

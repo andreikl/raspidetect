@@ -62,12 +62,14 @@ endif
 ifeq ($(H264_ENCODER_JETSON_WRAP), 1)
 	COMMON += -DV4L_ENCODER -DV4L_ENCODER_WRAP
 	OBJ += v4l_encoder.o
+	OBJ_RELEASE_PREF += ${BUILD_DIR}/obj/test_v4l_encoder_stubs.o
 	ifeq ($(CMOCKA), 1)
 		TEST_LDFLAGS += -Wl,--wrap=v4l2_open
 		TEST_LDFLAGS += -Wl,--wrap=v4l2_ioctl
 		TEST_LDFLAGS += -Wl,--wrap=mmap
 		TEST_LDFLAGS += -Wl,--wrap=munmap
 		TEST_LDFLAGS += -Wl,--wrap=NvBufferMemSyncForDevice
+		TEST_OBJ += test_v4l_encoder_wraps.o
 	endif
 endif
 
@@ -131,21 +133,21 @@ ifeq ($(CMOCKA), 1)
 #	SDL_BlitSurface
 	TEST_LDFLAGS += -Wl,--wrap=SDL_UpperBlit
 	TEST_LDFLAGS += -Wl,--wrap=SDL_UpdateWindowSurface
-	TEST_OBJ = test.o
-	TESTS = $(addprefix ${BUILD_DIR}/obj/, $(TEST_OBJ))
+	TEST_OBJ += test.o
+	TEST_PREF = $(addprefix ${BUILD_DIR}/obj/, $(TEST_OBJ))
 endif
 
 
 OBJ += app.o utils.o file.o yuv_converter.o
-OBJS = $(addprefix ${BUILD_DIR}/obj/, $(OBJ))
-
+OBJ_PREF = $(addprefix ${BUILD_DIR}/obj/, $(OBJ))
+OBJ_RELEASE_PREF += ${BUILD_DIR}/obj/main.o
 
 all: clean setup $(BUILD_DIR)/$(EXEC) $(BUILD_DIR)/$(EXEC)_test
 
-$(BUILD_DIR)/$(EXEC): ${BUILD_DIR}/obj/main.o $(OBJS)
+$(BUILD_DIR)/$(EXEC): $(OBJ_PREF) $(OBJ_RELEASE_PREF)
 	$(CC) $(COMMON) $(CFLAGS) $^ -o $@ $(LDFLAGS)
 
-$(BUILD_DIR)/$(EXEC)_test: $(OBJS) $(TESTS)
+$(BUILD_DIR)/$(EXEC)_test: $(OBJ_PREF) $(TEST_PREF)
 	$(CC) $(TEST_COMMON) $(CFLAGS) $^ -o $@ $(TEST_LDFLAGS)
 
 ${BUILD_DIR}/obj/%.o: $(SRC_DIR)/%.c

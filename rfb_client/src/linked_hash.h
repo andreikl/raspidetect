@@ -17,6 +17,16 @@
 #define LINKED_HASH_GET_HEAD(hash) \
     &hash.head->data;
 
+#define LINKED_HASH_GET_TAIL(hash) \
+    &hash.tail->data;
+
+#define LINKED_HASH_ITER_START(hash) \
+    hash.tail;
+
+#define LINKED_HASH_ITER_NEXT(name, iter) \
+    struct linked_hash_##name * cur = (struct linked_hash_##name *)iter; \
+    cur->next;
+
 #define LINKED_HASH_INIT(hash, size) \
     hash.head = malloc(sizeof(*hash.head)); \
     memset(hash.head, 0, (int)sizeof(*hash.head)); \
@@ -30,11 +40,10 @@
     hash.max_size = size;
 
 #define LINKED_HASH_DESTROY(hash, name) \
-    if (hash.head != NULL) { \
-        struct hash_item_##name* curr = hash.head; \
-        while (curr != NULL) { \
-            curr = hash.head->next; \
-            free(hash.head); \
-            hash.head = curr; \
+    if (hash.tail != NULL) { \
+        while (hash.tail != NULL) { \
+            struct hash_item_##name* curr = hash.tail; \
+            hash.tail = curr->next; \
+            free(curr); \
         } \
     }

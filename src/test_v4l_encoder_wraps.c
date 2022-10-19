@@ -16,14 +16,30 @@
 // along with this program; if not, write to the Free Software Foundation,
 // Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
+#include "khash.h"
+#include "main.h"
+#include "utils.h"
+#include "app.h"
+#include "test.h"
+
+#include <stdarg.h> //va_list
+#include <setjmp.h> //jmp_buf
+#include <cmocka.h>
+
+#include "v4l_encoder.h"
+#include "linux/videodev2.h"
+
 #define VIDEO_PATH "./h264_test_video"
+
+extern int wrap_verbose;
+extern int test_verbose;
+
 static int encoder_width = 0;
 static int encoder_height = 0;
 static int encoder_buffer = -1;
 static void* buffers[V4L_MAX_IN_BUFS + V4L_MAX_OUT_BUFS];
 static int out_buffers[V4L_MAX_OUT_BUFS];
 char buffer[MAX_STRING];
-
 
 int __wrap_v4l2_open(const char * file, int oflag, ...)
 {
@@ -184,10 +200,19 @@ int __wrap_v4l2_ioctl(int fd, int request, void * arg)
                 //fprintf(stderr, "path: %s\n", buffer);
                 CALL(utils_fill_buffer(
                     buffer,
-                    buffers[index],
+                    buffers[V4L_MAX_IN_BUFS + index],
                     encoder_width * encoder_height,
                     &read
                 ));
+
+                char* t = (char*)buffers[V4L_MAX_IN_BUFS + index];
+                TEST_DEBUG("File has been loaded: %d, %x %x %x %x ...",
+                    V4L_MAX_IN_BUFS + index,
+                    t[0],
+                    t[1],
+                    t[2],
+                    t[3]);
+                
                 buf->index = index;
                 buf->m.planes[0].bytesused = read;
                 out_buffers[buf->index] = 0;
@@ -230,13 +255,23 @@ void * __wrap_munmap(void *addr, size_t length)
 
 int __wrap_NvBufferMemSyncForDevice(int fd, unsigned int plane, void **addr)
 {
+    WRAP_DEBUG("NvBufferMemSyncForDevice, fd: %d, index: %d", fd, plane);
+
     if (fd >= 10 && fd < 20) // ignores input buffers
         return 0;
 
     int index = (fd >= 20)? V4L_MAX_IN_BUFS + (fd - 20): (fd - 10);
-    WRAP_DEBUG("NvBufferMemSyncForDevice, index: %d", index);
     assert_in_range(index, 0, V4L_MAX_IN_BUFS + V4L_MAX_OUT_BUFS);
     assert_ptr_not_equal(buffers[index], NULL);
+
+    char* t = (char*)buffers[index];
+    TEST_DEBUG("buffer about to be copied: %d, %x %x %x %x ...",
+        index,
+        t[0],
+        t[1],
+        t[2],
+        t[3]);
+
     memcpy(*addr, buffers[index], encoder_width * encoder_height);
     return 0;
 }

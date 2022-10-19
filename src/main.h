@@ -115,7 +115,14 @@
 #define DEBUG(format, ...) \
 { \
     if (app.verbose) \
-        fprintf(stderr, "%s:%d - %s, "#format"\n", __FILE__, __LINE__, __FUNCTION__, ##__VA_ARGS__); \
+        fprintf(stderr, "\033[0;32m%s:%d - %s, "#format"\033[0m\n", \
+            __FILE__, __LINE__, __FUNCTION__, ##__VA_ARGS__); \
+}
+
+#define ERROR(format, ...) \
+{ \
+    fprintf(stderr, "\033[1;31m%s:%d - %s, "#format"\033[0m\n", \
+        __FILE__, __LINE__, __FUNCTION__, ##__VA_ARGS__); \
 }
 
 #define CALL_MESSAGE(call) \

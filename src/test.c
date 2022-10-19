@@ -20,27 +20,13 @@
 #include "main.h"
 #include "utils.h"
 #include "app.h"
+#include "test.h"
 
 #include <stdarg.h> //va_list
 #include <setjmp.h> //jmp_buf
 #include <cmocka.h>
 
-#ifdef V4L_ENCODER
-   #include "v4l_encoder.h"
-   #include "linux/videodev2.h"
-#endif
-
-#define TEST_DEBUG(format, ...) \
-{ \
-    if (test_verbose) \
-        fprintf(stderr, "TEST: %s:%d - %s, "#format"\n", __FILE__, __LINE__, __FUNCTION__, ##__VA_ARGS__); \
-}
-
-#define WRAP_DEBUG(format, ...) \
-{ \
-    if (wrap_verbose) \
-        fprintf(stderr, "WRAP: %s:%d - %s, "#format"\n", __FILE__, __LINE__, __FUNCTION__, ##__VA_ARGS__); \
-}
+#include "linux/videodev2.h"
 
 KHASH_MAP_INIT_STR(argvs_hash_t, char*)
 KHASH_T(argvs_hash_t) *h;
@@ -55,31 +41,22 @@ struct filter_t filters[MAX_FILTERS];
 struct output_t outputs[MAX_OUTPUTS];
 
 #include "test_wraps.c"
-#ifdef V4L_ENCODER
-    #include "test_v4l_encoder_wraps.c"
-#endif
 
 static int test_setup(void **state)
 {
     *state = &app;
-    memset(&app, 0, sizeof(app));
-    app_set_default_state();
     app_construct();
     return 0;
 }
 
 static int test_verbose_true(void **state)
 {
-    app.verbose = 1;
-    test_verbose = 1;
     wrap_verbose = 0;
     return 0;
 }
 
 static int test_verbose_false(void **state)
 {
-    app.verbose = 0;
-    test_verbose = 0;
     wrap_verbose = 0;
     return 0;
 }
@@ -161,7 +138,7 @@ error:
 #ifdef RFB
 #include "rfb.h"
 extern struct rfb_state_t rfb;
-static void test_rfb_loop(void **state)
+static void test_rfb(void **state)
 {
     int res = 0;
     struct output_t *output = rfb.output;
@@ -188,22 +165,62 @@ error:
 }
 #endif //RFB
 
+static void print_help()
+{
+    printf("raspidetect_test [options]\n");
+    printf("options:\n");
+    printf("\n");
+    printf("%s: print help\n", HELP);
+    printf("%s: rfb test, default: %s\n", TEST_RFB, TEST_RFB_DEF);
+    printf("%s: verbose, verbose: %d\n", VERBOSE, VERBOSE_DEF);
+    exit(0);
+}
+
 int main(int argc, char **argv)
 {
+    int res = 0;
+
     h = KH_INIT(argvs_hash_t);
     utils_parse_args(argc, argv);
 
-    const struct CMUnitTest tests[] = {
-        cmocka_unit_test_setup(test_utils_init, test_verbose_false),
-        cmocka_unit_test_setup(test_file_loop, test_verbose_false),
-#ifdef SDL
-        cmocka_unit_test_setup(test_sdl_loop, test_verbose_false),
-#endif //SDL
-#ifdef RFB
-        cmocka_unit_test_setup(test_rfb_loop, test_verbose_true)
-#endif //RFB
-    };
-    int res = cmocka_run_group_tests(tests, test_setup, test_teardown);
+    app_set_default_state();
+
+    unsigned help = KH_GET(argvs_hash_t, h, HELP);
+    unsigned rfb = KH_GET(argvs_hash_t, h, TEST_RFB);
+    unsigned verbose = KH_GET(argvs_hash_t, h, VERBOSE);
+
+    if (verbose != KH_END(h)) {
+        app.verbose = 1;
+        test_verbose = 1;
+        TEST_DEBUG("Debug output has been enabled!!!");
+    }
+    else {
+        app.verbose = 0;
+        test_verbose = 0;
+    }
+
+    if (help != KH_END(h)) {
+        print_help();
+    }
+    else if (rfb != KH_END(h)) {
+
+        const struct CMUnitTest tests[] = {
+            #ifdef RFB
+                cmocka_unit_test_setup(test_rfb, test_verbose_true)
+            #endif //RFB
+        };
+        res = cmocka_run_group_tests(tests, test_setup, test_teardown);
+    }
+    else {
+        const struct CMUnitTest tests[] = {
+            cmocka_unit_test_setup(test_utils_init, test_verbose_false),
+            cmocka_unit_test_setup(test_file_loop, test_verbose_false),
+            #ifdef SDL
+                cmocka_unit_test_setup(test_sdl_loop, test_verbose_false),
+            #endif //SDL
+        };
+        res = cmocka_run_group_tests(tests, test_setup, test_teardown);
+    }
 
     KH_DESTROY(argvs_hash_t, h);
     return res;

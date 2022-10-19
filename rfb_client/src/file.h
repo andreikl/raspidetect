@@ -1,3 +1,3 @@
-void file_destroy(struct app_state_t *app);
-int file_init(struct app_state_t *app);
-int file_read(struct app_state_t *app);
+void file_destroy();
+int file_init();
+int file_read();

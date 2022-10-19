@@ -53,7 +53,7 @@ static int h264_read_pps(int start, int end)
         UNCOVERED_CASE(app.h264.pps.pic_scaling_matrix_present_flag, !=, 0);
         app.h264.pps.second_chroma_qp_index_offset = RBSP_READ_SE(rbsp);
     }
-    GENERAL_CALL(h264_is_more_rbsp(rbsp), error);
+    STANDARD_CALL(h264_is_more_rbsp(rbsp), error);
     return 0;
 
 error:
