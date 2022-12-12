@@ -61,7 +61,15 @@
 
 #define DEBUG(format, ...) \
 { \
-    fprintf(stderr, "%s:%d - %s, "#format"\n", __FILE__, __LINE__, __FUNCTION__, ##__VA_ARGS__); \
+    if (app.verbose) \
+        fprintf(stderr, "\033[0;32m%s:%d - %s, "#format"\033[0m\n", \
+            __FILE__, __LINE__, __FUNCTION__, ##__VA_ARGS__); \
+}
+
+#define ERROR_MSG(format, ...) \
+{ \
+    fprintf(stderr, "\033[1;31m%s:%d - %s, "#format"\033[0m\n", \
+        __FILE__, __LINE__, __FUNCTION__, ##__VA_ARGS__); \
 }
 
 #define GET_3RD_ARG(arg1, arg2, arg3, ...) arg3
@@ -69,43 +77,43 @@
 #define UNCOVERED_CASE(value, condition, expectation) \
 { \
     if (value condition expectation) { \
-        fprintf(stderr, "ERROR: uncovered case "#value"(%d) "#condition" "#expectation"(%d)\n%s:%d - %s\n", \
+        fprintf(stderr, "\033[1;31muncovered case "#value"(%d) "#condition" "#expectation"(%d)\n%s:%d - %s\033[0m\n", \
             value, expectation, __FILE__, __LINE__, __FUNCTION__); \
         return -1; \
     } \
 }
 
-#define STANDARD_MESSAGE_STR(call, res) \
+#define CALL_MESSAGE_STR(call, res) \
 { \
-    fprintf(stderr, "ERROR: "#call" returned error: %s\n%s:%d - %s\n", \
+    fprintf(stderr, "\033[1;31m"#call" returned error: %s\n%s:%d - %s\033[0m\n", \
         res, __FILE__, __LINE__, __FUNCTION__); \
 }
 
-#define STANDARD_MESSAGE(call) \
+#define CALL_MESSAGE(call) \
 { \
-    fprintf(stderr, "ERROR: "#call" returned error: %s\n%s:%d - %s\n", \
+    fprintf(stderr, "\033[1;31m"#call" returned error: %s\n%s:%d - %s\033[0m\n", \
         strerror(errno), __FILE__, __LINE__, __FUNCTION__); \
 }
 
-#define STANDARD_CALL_2(call, error) \
+#define CALL_2(call, error) \
 { \
     int res__ = call; \
     if (res__) { \
-        STANDARD_MESSAGE(call); \
+        CALL_MESSAGE(call); \
         goto error; \
     } \
 } \
 
-#define STANDARD_CALL_1(call) \
+#define CALL_1(call) \
 { \
     int res__ = call; \
     if (res__) { \
-        STANDARD_MESSAGE(call); \
+        CALL_MESSAGE(call); \
     } \
 } \
 
-#define STANDARD_CALL_X(...) GET_3RD_ARG(__VA_ARGS__, STANDARD_CALL_2, STANDARD_CALL_1, )
-#define STANDARD_CALL(...) STANDARD_CALL_X(__VA_ARGS__)(__VA_ARGS__)
+#define CALL_X(...) GET_3RD_ARG(__VA_ARGS__, CALL_2, CALL_1, )
+#define CALL(...) CALL_X(__VA_ARGS__)(__VA_ARGS__)
 
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof(a[0]))
 
@@ -121,7 +129,7 @@
                buf, \
                sizeof(buf), \
                NULL); \
-    fprintf(stderr, "ERROR: "#call" returned error: %s (%d)\n%s:%d - %s\n", \
+    fprintf(stderr, "\033[1;31m"#call" returned error: %s (%d)\n%s:%d - %s\033[0m\n", \
         buf, err, __FILE__, __LINE__, __FUNCTION__); \
 }
 

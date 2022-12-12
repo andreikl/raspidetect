@@ -133,7 +133,7 @@ static int h264_read_sps(int start, int end)
             app.h264.sps.max_dec_frame_buffering = RBSP_READ_UE(rbsp);
         }
     }
-    STANDARD_CALL(h264_is_more_rbsp(rbsp), error);
+    CALL(h264_is_more_rbsp(rbsp), error);
     return 0;
 
 error:

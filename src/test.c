@@ -28,14 +28,15 @@
 
 #include "linux/videodev2.h"
 
-KHASH_MAP_INIT_STR(argvs_hash_t, char*)
+KHASH_MAP_INIT_STR(argvs_hash_t, char*);
 KHASH_T(argvs_hash_t) *h;
 
-int is_abort;
-int wrap_verbose;
-int test_verbose;
+int is_abort = 0;
+int wrap_verbose = 0;
+int test_verbose = 1;
 
 struct app_state_t app;
+
 struct input_t input;
 struct filter_t filters[MAX_FILTERS];
 struct output_t outputs[MAX_OUTPUTS];
@@ -182,16 +183,12 @@ int main(int argc, char **argv)
 
     h = KH_INIT(argvs_hash_t);
     utils_parse_args(argc, argv);
-
     app_set_default_state();
 
     unsigned help = KH_GET(argvs_hash_t, h, HELP);
     unsigned rfb = KH_GET(argvs_hash_t, h, TEST_RFB);
     unsigned verbose = KH_GET(argvs_hash_t, h, VERBOSE);
-
     if (verbose != KH_END(h)) {
-        app.verbose = 1;
-        test_verbose = 1;
         TEST_DEBUG("Debug output has been enabled!!!");
     }
     else {

@@ -127,13 +127,13 @@
 
 #define CALL_MESSAGE(call) \
 { \
-    fprintf(stderr, "ERROR: "#call" returned error: %s (%d)\n%s:%d - %s\n", \
+    fprintf(stderr, "\033[1;31m"#call" returned error: %s (%d)\n%s:%d - %s\033[0m\n", \
         strerror(errno), errno, __FILE__, __LINE__, __FUNCTION__); \
 }
 
 #define CALL_CUSTOM_MESSAGE(call, res) \
 { \
-    fprintf(stderr, "ERROR: "#call" returned error: %s (%d)\n%s:%d - %s\n", \
+    fprintf(stderr, "\033[1;31m"#call" returned error: %s (%d)\n%s:%d - %s\033[0m\n", \
         strerror(res), res, __FILE__, __LINE__, __FUNCTION__); \
 }
 

@@ -112,14 +112,12 @@ error:
 
 void app_set_default_state()
 {
-    memset(&app, 0, sizeof(struct app_state_t));
     app.video_width = utils_read_int_value(VIDEO_WIDTH, VIDEO_WIDTH_DEF);
     app.video_height = utils_read_int_value(VIDEO_HEIGHT, VIDEO_HEIGHT_DEF);
     const char* format = utils_read_str_value(VIDEO_FORMAT, VIDEO_FORMAT_DEF);
     app.video_format = app_get_video_format_int(format);
     const char *output = utils_read_str_value(VIDEO_OUTPUT, VIDEO_OUTPUT_DEF);
     app.video_output = app_get_video_output_int(output);
-
     app.port = utils_read_int_value(PORT, PORT_DEF);
     app.worker_width = utils_read_int_value(WORKER_WIDTH, WORKER_WIDTH_DEF);
     app.worker_height = utils_read_int_value(WORKER_HEIGHT, WORKER_HEIGHT_DEF);

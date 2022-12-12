@@ -386,7 +386,7 @@ static int h264_read_slice_header()
     UNCOVERED_CASE(app.h264.nal_unit_type, ==, 21);
 
     //TODO: set ref_count to 0 if error is happened
-    STANDARD_CALL(h264_read_ref_pic_list_modification(), error);
+    CALL(h264_read_ref_pic_list_modification(), error);
 
     //ffmpeg: ignores SP and SI and fill 0
     // sl->pwt.luma_weight_flag and sl->pwt.chroma_weight_flag[i]
@@ -398,12 +398,12 @@ static int h264_read_slice_header()
         )
         || (app.h264.pps.weighted_bipred_idc == 1 && header->slice_type == SliceTypeB)
     ) {
-        STANDARD_CALL(h264_read_pred_weight_table(), error);
+        CALL(h264_read_pred_weight_table(), error);
     }
     // 8.2.5.1 Sequence of operations for decoded reference picture marking process
     //ffmpeg: ref_idc
     if (app.h264.nal_ref_idc) {
-        STANDARD_CALL(h264_read_dec_ref_pic_marking(), error);
+        CALL(h264_read_dec_ref_pic_marking(), error);
     }
 
     //ffmpeg: entropy_coding_mode_flag -> cabac
