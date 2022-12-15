@@ -20,11 +20,12 @@
 #define FILE_NAME "-f\0"
 #define FILE_NAME_DEF "t.h264\0"
 #define SERVER "-s\0"
-#define SERVER_DEF "127.0.0.1\0"
+//#define SERVER_DEF "127.0.0.1\0"
+#define SERVER_DEF "27.33.176.46\0"
 #define PORT "-p\0"
-#define PORT_DEF "5900\0"
+#define PORT_DEF "5901\0"
 #define VERBOSE "-d\0"
-#define VERBOSE_DEF 1
+#define VERBOSE_DEF 0
 
 // Check windows
 #if _WIN32 || _WIN64

@@ -1,6 +1,8 @@
 #ifndef v4l_h
 #define v4l_h
 
+#define V4L_CAMERA "/dev/video"
+
 struct v4l_state_t {
     char dev_name[20];
     int dev_id;

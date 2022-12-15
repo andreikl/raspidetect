@@ -32,7 +32,7 @@ static struct format_mapping_t v4l_formats[] = {
 
 static struct format_mapping_t *v4l_format = NULL;
 
-static struct v4l_state_t v4l = {
+struct v4l_state_t v4l = {
     .dev_id = -1,
     .v4l_buf = NULL,
     .v4l_buf_len = -1,
@@ -153,7 +153,7 @@ static int v4l_init()
     ASSERT_INT(v4l.dev_id, ==, -1, cleanup);
 
     int res = 0;
-    sprintf(v4l.dev_name, "/dev/video%d", app.camera_num);
+    sprintf(v4l.dev_name, V4L_CAMERA"%d", app.camera_num);
 
     int len = app.video_width * app.video_height * 2;
     uint8_t *data = malloc(len);
@@ -276,6 +276,8 @@ static int v4l_start(int format)
 
     enum v4l2_buf_type type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
     CALL(ioctl_wait(v4l.dev_id, VIDIOC_STREAMON, &type), cleanup);
+
+    DEBUG("V4L has been started!!!");
 
     return 0;
 cleanup:

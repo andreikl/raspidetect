@@ -451,6 +451,8 @@ static int v4l_start(int input_format, int output_format)
         GEN_CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_QBUF, &out_buf), cleanup);
     }
 
+    v4l.in_curr_buf = 0;
+
     return 0;
 
 cleanup:
@@ -495,13 +497,14 @@ static int v4l_process_frame(uint8_t *buffer)
 
     int cb = v4l.in_curr_buf + 1;
     if (cb >= v4l.in_bufs_count) {
+        DEBUG("dqueue input frame, cb %d", cb);
         GEN_CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_DQBUF, &in_buf), cleanup);
         cb = in_buf.index;
     }
     else
         v4l.in_curr_buf++;
 
-    //DEBUG("queue input frame, current buf %d", cb);
+    DEBUG("queue input frame, current buf %d", cb);
     uint8_t *yi = v4l.in_bufs[cb][0].buf;
     uint8_t *ui = v4l.in_bufs[cb][1].buf;
     uint8_t *vi = v4l.in_bufs[cb][2].buf;
@@ -531,9 +534,13 @@ static int v4l_process_frame(uint8_t *buffer)
         CALL(NvBufferMemSyncForDevice(v4l.in_bufs[cb][i].fd, i, (void **)&v4l.in_bufs[cb][i].buf),
             cleanup);
     }
+
+    DEBUG("input buffer about to queued");
     GEN_CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_QBUF, &in_buf), cleanup);
+    DEBUG("input buffer has been queued");
    
     CALL(res = ioctl_again(v4l.dev_id, VIDIOC_DQBUF, &out_buf), cleanup);
+    DEBUG("output buffer has been dqueued");
     if (res != -2) {
         ASSERT_INT(out_buf.m.planes[0].bytesused, !=, 0, cleanup);
         CALL(NvBufferMemSyncForDevice(
@@ -566,6 +573,7 @@ static int v4l_process_frame(uint8_t *buffer)
         //DEBUG("q out buf: %d", out_buf.index);
         GEN_CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_QBUF, &out_buf), cleanup);
     }
+    DEBUG("encoder frame has been processed!!!");
     return 0;
 
 cleanup:
@@ -576,12 +584,24 @@ cleanup:
 
 static int v4l_stop()
 {
+    enum v4l2_buf_type type;
+    type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
+    GEN_CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_STREAMOFF, &type), cleanup);
+
+    type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+    GEN_CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_STREAMOFF, &type), cleanup);
+
     v4l_input_format = NULL;
     v4l_output_format = NULL;
 
     v4l2_clean_memory();
 
     return 0;
+
+cleanup:
+    if (errno == 0)
+        errno = EAGAIN;
+    return -1;
 }
 
 static uint8_t *v4l_get_buffer(int *in_format, int *out_format, int *length)

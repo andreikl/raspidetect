@@ -1,13 +1,16 @@
 V4L = 1
-# TODO: to check
+# It allows to run test on platform where v4l or camera isn't available
+# the test code generates static image
+V4l_WRAP = 0
+# TODO: to implement
 H264_ENCODER_RASPBERRY = 0
 H264_ENCODER_JETSON = 0
 # It allows to run test on platform where h264 Jetson encoder isn't available
 # the test code generates static h264 buffers which were recorder on Jetson platform
-H264_ENCODER_JETSON_WRAP = 1
+H264_ENCODER_WRAP = 1
 CONTROL = 0
 RFB = 1
-SDL = 1
+SDL = 0
 CMOCKA = 1
 
 OPENCV = 0
@@ -43,6 +46,14 @@ ifeq ($(V4L), 1)
 	OBJ += v4l.o
 endif
 
+ifeq ($(V4L_WRAP), 1)
+	COMMON += -DV4L_WRAP
+	OBJ += v4l.o
+	ifeq ($(CMOCKA), 1)
+		TEST_OBJ += test_v4l_wraps.o
+	endif
+endif
+
 ifeq ($(H264_ENCODER_RASPBERRY), 1) 
 	COMMON += -DMMAL_ENCODER
 	COMMON += `pkg-config --cflags mmal`
@@ -59,7 +70,7 @@ ifeq ($(H264_ENCODER_JETSON), 1)
 	OBJ += v4l_encoder.o
 endif
 
-ifeq ($(H264_ENCODER_JETSON_WRAP), 1)
+ifeq ($(H264_ENCODER_WRAP), 1)
 	COMMON += -DV4L_ENCODER -DV4L_ENCODER_WRAP
 	OBJ += v4l_encoder.o
 	OBJ_RELEASE_PREF += ${BUILD_DIR}/obj/test_v4l_encoder_stubs.o
@@ -117,7 +128,7 @@ endif
 ifeq ($(CMOCKA), 1) 
 	TEST_COMMON = $(COMMON) -DCMOCKA `pkg-config --cflags cmocka`
 	TEST_LDFLAGS += $(LDFLAGS) `pkg-config --libs cmocka`
-#	stat
+# COMMON
 	TEST_LDFLAGS += -Wl,--wrap=__xstat
 	TEST_LDFLAGS += -Wl,--wrap=open
 	TEST_LDFLAGS += -Wl,--wrap=close

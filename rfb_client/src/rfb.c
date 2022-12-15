@@ -326,6 +326,7 @@ int rfb_connect()
             cleanup
         );
 
+        DEBUG("trying connect to %s:%s", app.server_host, app.server_port);
         NETWORK_CALL(res = connect(client_socket, ptr->ai_addr, (int)ptr->ai_addrlen));
         if (res == -1) {
             NETWORK_CALL(closesocket(client_socket), cleanup);

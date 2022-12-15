@@ -141,27 +141,28 @@ extern int is_abort;
 
 static struct rfb_buffer_update_message_t update_message;
 
+static int rfb_is_started()
+{
+    return rfb.server_socket != -1? 1: 0;
+}
+
 static void *rfb_function(void *data)
 {
     int res;
     const int one = 1;
 
-    while (!is_abort) {
+    while (!is_abort && rfb_is_started()) {
         struct sockaddr_in client_addr;
         int addres_len = sizeof(client_addr);
 
-        DEBUG("Waiting for clients connection!!!");
-        CALL(rfb.client_socket = accept(
+        DEBUG("Waiting for clients connection to port: %d", app.port);
+        RFB_FUNC_CALL(rfb.client_socket = accept(
             rfb.server_socket,
             (struct sockaddr *)&client_addr, 
             (socklen_t *)&addres_len
         ), fatal_error);
 
-        // stop RFB thread
-        if (is_abort)
-            return NULL;
-
-        CALL(setsockopt(rfb.client_socket,
+        RFB_FUNC_CALL(setsockopt(rfb.client_socket,
             IPPROTO_TCP,
             TCP_NODELAY,
             (char *)&one,
@@ -169,10 +170,11 @@ static void *rfb_function(void *data)
 
         char server_rfb_version[12];
         strcpy(server_rfb_version, "RFB 003.008\0");
-        CALL(send(rfb.client_socket, server_rfb_version, sizeof(server_rfb_version), 0), rfb_error);
+        RFB_FUNC_CALL(send(rfb.client_socket, server_rfb_version, sizeof(server_rfb_version), 0),
+            rfb_error);
 
         char client_rfb_version[12];
-        CALL(recv(rfb.client_socket, client_rfb_version, sizeof(client_rfb_version), 0),
+        RFB_FUNC_CALL(recv(rfb.client_socket, client_rfb_version, sizeof(client_rfb_version), 0),
             rfb_error);
 
         DEBUG("Client rfb version. %s", client_rfb_version);
@@ -181,10 +183,10 @@ static void *rfb_function(void *data)
             .types_count = 1,
             .types = RFB_SECURITY_NONE
         };
-        CALL(send(rfb.client_socket, (char *)&security , sizeof(security), 0), rfb_error);
+        RFB_FUNC_CALL(send(rfb.client_socket, (char *)&security , sizeof(security), 0), rfb_error);
 
         uint8_t client_security_type = 0;
-        CALL(recv(
+        RFB_FUNC_CALL(recv(
             rfb.client_socket,
             (char *)&client_security_type,
             sizeof(client_security_type), 0
@@ -193,10 +195,10 @@ static void *rfb_function(void *data)
         DEBUG("Client rfb security type. %d", client_security_type);
     
         uint32_t success = 0;
-        CALL(send(rfb.client_socket, (char *)&success, sizeof(success), 0), rfb_error);
+        RFB_FUNC_CALL(send(rfb.client_socket, (char *)&success, sizeof(success), 0), rfb_error);
 
         uint8_t shared_flag;
-        CALL(recv(rfb.client_socket, (char *)&shared_flag, sizeof(shared_flag), 0), rfb_error);
+        RFB_FUNC_CALL(recv(rfb.client_socket, (char *)&shared_flag, sizeof(shared_flag), 0), rfb_error);
 
         DEBUG("Client rfb shared flag. %d", shared_flag);
 
@@ -226,7 +228,7 @@ static void *rfb_function(void *data)
         memcpy(init_message.name, APP_NAME, strlen(APP_NAME));
 
         // DEBUG("il: %d, nl: %d", sizeof(init_message.name), sizeof(init_message));
-        CALL(send(rfb.client_socket, (char *)&init_message, sizeof(init_message), 0), rfb_error);
+        RFB_FUNC_CALL(send(rfb.client_socket, (char *)&init_message, sizeof(init_message), 0), rfb_error);
 
         // if (camera_create_h264_encoder(app)) {
         //     fprintf(stderr, "ERROR: camera_create_h264_encoder failed\n");
@@ -236,15 +238,14 @@ static void *rfb_function(void *data)
         struct rfb_buffer_update_request_message_t buffer_update;
         do {
             struct rfb_type_request_message_t type;
-            CALL(res = recv(rfb.client_socket, (char *)&type, sizeof(type), 0), rfb_error);
-            if (res == 0) {
-                DEBUG("Client has closed the connection");
-                break;
-            }
-
+            RFB_FUNC_CALL(
+                res = recv(rfb.client_socket, (char *)&type, sizeof(type), 0),
+                rfb_error
+            );
             if (type.message_type == RFBSetPixelFormat)  {
                 struct rfb_pixel_format_request_message_t format;
-                CALL(recv(rfb.client_socket, (char *)&format, sizeof(format), 0), rfb_error);
+                RFB_FUNC_CALL(recv(rfb.client_socket, (char *)&format, sizeof(format), 0),
+                    rfb_error);
                 DEBUG("RFBSetPixelFormat message.");
                 DEBUG("bpp: %d, depth: %d, big_endian: %d, true_color %d.",
                     format.f.bpp, format.f.depth, format.f.big_endian, format.f.true_color);
@@ -256,54 +257,74 @@ static void *rfb_function(void *data)
             else if (type.message_type == RFBSetEncodings) {
                 DEBUG("RFBSetEncodings message.");
                 struct rfb_set_encoding_request_message_t encoding;
-                CALL(recv(rfb.client_socket, (char *)&encoding, sizeof(encoding), 0), rfb_error);
+                RFB_FUNC_CALL(recv(rfb.client_socket, (char *)&encoding, sizeof(encoding), 0), rfb_error);
 
                 DEBUG("RFBSetEncodings message, encodings: %d",
                     ntohs(encoding.number_of_encodings));
                 int32_t e;
                 for (int i = 0; i < ntohs(encoding.number_of_encodings); i++) {
-                    CALL(recv(rfb.client_socket, (char *)&e, sizeof(e), 0), rfb_error);
+                    RFB_FUNC_CALL(recv(rfb.client_socket, (char *)&e, sizeof(e), 0), rfb_error);
                     fprintf(stderr, "%d ", ntohl(e));
                 }
                 fprintf(stderr, "\n");
             } else if (type.message_type == RFBFramebufferUpdateRequest) {
-                CALL(recv(rfb.client_socket, (char *)&buffer_update, sizeof(buffer_update), 0),
-                    rfb_error);
+                RFB_FUNC_CALL(
+                    recv(rfb.client_socket, (char *)&buffer_update, sizeof(buffer_update), 0),
+                    rfb_error
+                );
 
                 DEBUG("Server received message: RFBFramebufferUpdateRequest, waiting for frame");
                 CALL(sem_post(&rfb.client_semaphore), rfb_error);
-                DEBUG("frame received!!!");
             } else if (type.message_type == RFBKeyEvent) {
                 DEBUG("RFBKeyEvent message.");
                 uint8_t downFlag;
                 uint16_t padding;
                 uint32_t key;
-                CALL(recv(rfb.client_socket, (char *)&downFlag, sizeof(downFlag), 0), rfb_error);
-                CALL(recv(rfb.client_socket, (char *)&padding, sizeof(padding), 0), rfb_error);
-                CALL(recv(rfb.client_socket, (char *)&key, sizeof(key), 0), rfb_error);
+                RFB_FUNC_CALL(recv(rfb.client_socket, (char *)&downFlag, sizeof(downFlag), 0),
+                    rfb_error);
+                RFB_FUNC_CALL(recv(rfb.client_socket, (char *)&padding, sizeof(padding), 0),
+                    rfb_error);
+                RFB_FUNC_CALL(recv(rfb.client_socket, (char *)&key, sizeof(key), 0), rfb_error);
             } else if (type.message_type == RFBPointerEvent) {
                 DEBUG("RFBPointerEvent message.");
                 uint8_t buttonMask;
                 uint16_t xPos;
                 uint16_t yPos;
-                CALL(recv(rfb.client_socket, (char *)&buttonMask, sizeof(buttonMask), 0),
+                RFB_FUNC_CALL(recv(rfb.client_socket, (char *)&buttonMask, sizeof(buttonMask), 0),
                     rfb_error);
-                CALL(recv(rfb.client_socket, (char *)&xPos, sizeof(xPos), 0), rfb_error);
-                CALL(recv(rfb.client_socket, (char *)&yPos, sizeof(yPos), 0), rfb_error);
+                RFB_FUNC_CALL(recv(rfb.client_socket, (char *)&xPos, sizeof(xPos), 0), rfb_error);
+                RFB_FUNC_CALL(recv(rfb.client_socket, (char *)&yPos, sizeof(yPos), 0), rfb_error);
             } else if (type.message_type == RFBClientCutText) {
                 DEBUG("RFBClientCutText message.");
                 char padding[3];
                 uint32_t length;
-                CALL(recv(rfb.client_socket, padding, sizeof(padding), 0), rfb_error);
-                CALL(recv(rfb.client_socket, (char *)&length, sizeof(length), 0), rfb_error);
+                RFB_FUNC_CALL(recv(rfb.client_socket, padding, sizeof(padding), 0), rfb_error);
+                RFB_FUNC_CALL(recv(rfb.client_socket, (char *)&length, sizeof(length), 0),
+                    rfb_error);
                 uint8_t *text = (uint8_t *)malloc(length);
-                CALL(recv(rfb.client_socket, (char *)text, length, 0), rfb_error);
+                RFB_FUNC_CALL(recv(rfb.client_socket, (char *)text, length, 0), rfb_error);
             } else {
                 fprintf(stderr, "WARNING: Unknown message %d.\n", type.message_type);
             }
-        } while (1);
+        } while (!is_abort && rfb_is_started());
 
 rfb_error:
+        if (errno == 104) {
+            DEBUG("Client has closed the connection");
+        }
+        // stop the input and all filters
+        CALL(input.stop(), fatal_error);
+        struct output_t *output = rfb.output;
+        for (int k = 0; k < MAX_FILTERS && output->filters[k].out_format; k++) {
+            struct filter_t *filter = filters + output->filters[k].index;
+            CALL(filter->stop(), fatal_error);
+        }
+        // int val = 0;
+        // CALL(sem_getvalue(&rfb.client_semaphore, &val));
+        // for (int i = 0; i < val; i++) {
+        //     CALL(sem_post(&rfb.client_semaphore), rfb_error);
+        // }
+
         // TODO: to delete
         // if (camera_destroy_h264_encoder(app)) {
         //     fprintf(stderr, "ERROR: camera_destroy_h264_encoder failed\n");
@@ -376,11 +397,6 @@ cleanup:
     return -1;
 }
 
-static int rfb_is_started()
-{
-    return rfb.client_socket != -1 && rfb.server_socket != -1? 1: 0;
-}
-
 int rfb_process_frame()
 {
     int res = 0;
@@ -395,7 +411,8 @@ int rfb_process_frame()
     if (!input.is_started()) CALL(input.start(in_format), cleanup);
     CALL(res = input.process_frame(), cleanup);
     int length = 0;
-    uint8_t *buffer = input.get_buffer(NULL, NULL);
+    uint8_t *buffer = input.get_buffer(NULL, &length);
+    DEBUG("buffer has been received from input[%s], length: %d!!!", input.name, length);
     for (int k = 0; k < MAX_FILTERS && output->filters[k].out_format; k++) {
         struct filter_t *filter = filters + output->filters[k].index;
         in_format = out_format;
@@ -403,6 +420,13 @@ int rfb_process_frame()
         if (!filter->is_started()) CALL(filter->start(in_format, out_format), cleanup);
         CALL(filter->process_frame(buffer), cleanup);
         buffer = filter->get_buffer(NULL, NULL, &length);
+        if (length == 0) {
+            DEBUG("The filter[%s] doesn't have buffer yet", filter->name);
+            break;
+        }
+        else {
+            DEBUG("buffer has been received from filter[%s], length: %d!!!", filter->name, length);
+        }
     }
 
     // ----- fps
@@ -421,24 +445,30 @@ int rfb_process_frame()
     }
     frame_count++;
     // -----
-       
-    uint32_t length_send = htonl(length);
-    CALL(send(rfb.client_socket, (char *)&update_message, sizeof(update_message), 0), cleanup);
-    CALL(send(rfb.client_socket, (char *)&length_send, sizeof(length_send), 0), cleanup);
 
-    DEBUG("Bytes to send: %d, %x %x %x %x ...",
-        length,
-        buffer[0],
-        buffer[1],
-        buffer[2],
-        buffer[3]);
-    CALL(send(rfb.client_socket, (char *)buffer, length, 0), cleanup);
+    if (length != 0) {
+        uint32_t length_send = htonl(length);
+        CALL(send(rfb.client_socket, (char *)&update_message, sizeof(update_message), 0), cleanup);
+        CALL(send(rfb.client_socket, (char *)&length_send, sizeof(length_send), 0), cleanup);
 
-    DEBUG("r: %d, x: %d, y: %d, w: %d, h: %d", ntohs(update_message.number_of_rectangles),
-        ntohs(update_message.x), ntohs(update_message.y), ntohs(update_message.width),
-        ntohs(update_message.height));
-    DEBUG("t: %d, e: %d, size: %ld, len: %d", update_message.message_type,
-        ntohl(update_message.encoding_type), sizeof(update_message), length);
+        DEBUG("Bytes to send: %d, %x %x %x %x ...",
+            length,
+            buffer[0],
+            buffer[1],
+            buffer[2],
+            buffer[3]);
+        CALL(send(rfb.client_socket, (char *)buffer, length, 0), cleanup);
+
+        DEBUG("r: %d, x: %d, y: %d, w: %d, h: %d", ntohs(update_message.number_of_rectangles),
+            ntohs(update_message.x), ntohs(update_message.y), ntohs(update_message.width),
+            ntohs(update_message.height));
+        DEBUG("t: %d, e: %d, size: %ld, len: %d", update_message.message_type,
+            ntohl(update_message.encoding_type), sizeof(update_message), length);
+    }
+    else {
+        DEBUG("Unblock semaphore until buffer is received");
+        CALL(sem_post(&rfb.client_semaphore), cleanup);
+    }
     return 0;
 
 cleanup:
@@ -448,6 +478,7 @@ cleanup:
 
 static int rfb_stop()
 {
+    DEBUG("rfb is stopping...");
     // shutdown the server socket terminates accept call to wait incoming connections
     if (rfb.server_socket > 0) {
         int res = shutdown(rfb.server_socket, SHUT_RDWR);
@@ -486,6 +517,7 @@ static int rfb_stop()
         else
             rfb.client_semaphore_res = -1;
     }
+    DEBUG("rfb has been stopped");
     return 0;
 
 stop_error:

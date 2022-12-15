@@ -20,6 +20,8 @@
 #include "main.h"
 #include "utils.h"
 #include "app.h"
+#include "v4l.h"
+#include "v4l_encoder.h"
 #include "test.h"
 
 #include <stdarg.h> //va_list
@@ -33,7 +35,7 @@ KHASH_T(argvs_hash_t) *h;
 
 int is_abort = 0;
 int wrap_verbose = 0;
-int test_verbose = 1;
+int test_verbose = 0;
 
 struct app_state_t app;
 
@@ -47,18 +49,6 @@ static int test_setup(void **state)
 {
     *state = &app;
     app_construct();
-    return 0;
-}
-
-static int test_verbose_true(void **state)
-{
-    wrap_verbose = 0;
-    return 0;
-}
-
-static int test_verbose_false(void **state)
-{
-    wrap_verbose = 0;
     return 0;
 }
 
@@ -159,7 +149,6 @@ static void test_rfb(void **state)
     }
 
 error:
-    TEST_DEBUG("res: %d", res);
     assert_int_not_equal(res, -1);
 
     app_cleanup();
@@ -170,10 +159,10 @@ static void print_help()
 {
     printf("raspidetect_test [options]\n");
     printf("options:\n");
-    printf("\n");
     printf("%s: print help\n", HELP);
     printf("%s: rfb test, default: %s\n", TEST_RFB, TEST_RFB_DEF);
-    printf("%s: verbose, verbose: %d\n", VERBOSE, VERBOSE_DEF);
+    printf("%s: verbose, default: %d\n", VERBOSE, VERBOSE_DEF);
+    printf("%s: wrap verbose, default: %d\n", WRAP_VERBOSE, WRAP_VERBOSE_DEF);
     exit(0);
 }
 
@@ -188,12 +177,15 @@ int main(int argc, char **argv)
     unsigned help = KH_GET(argvs_hash_t, h, HELP);
     unsigned rfb = KH_GET(argvs_hash_t, h, TEST_RFB);
     unsigned verbose = KH_GET(argvs_hash_t, h, VERBOSE);
+    unsigned w_verbose = KH_GET(argvs_hash_t, h, WRAP_VERBOSE);
     if (verbose != KH_END(h)) {
+        app.verbose = 1;
+        test_verbose = 1;
         TEST_DEBUG("Debug output has been enabled!!!");
     }
-    else {
-        app.verbose = 0;
-        test_verbose = 0;
+    if (w_verbose != KH_END(h)) {
+        wrap_verbose = 1;
+        WRAP_DEBUG("Wrap Debug output has been enabled!!!");
     }
 
     if (help != KH_END(h)) {
@@ -203,17 +195,17 @@ int main(int argc, char **argv)
 
         const struct CMUnitTest tests[] = {
             #ifdef RFB
-                cmocka_unit_test_setup(test_rfb, test_verbose_true)
+                cmocka_unit_test_setup(test_rfb, NULL)
             #endif //RFB
         };
         res = cmocka_run_group_tests(tests, test_setup, test_teardown);
     }
     else {
         const struct CMUnitTest tests[] = {
-            cmocka_unit_test_setup(test_utils_init, test_verbose_false),
-            cmocka_unit_test_setup(test_file_loop, test_verbose_false),
+            cmocka_unit_test_setup(test_utils_init, NULL),
+            cmocka_unit_test_setup(test_file_loop, NULL),
             #ifdef SDL
-                cmocka_unit_test_setup(test_sdl_loop, test_verbose_false),
+                cmocka_unit_test_setup(test_sdl_loop, NULL),
             #endif //SDL
         };
         res = cmocka_run_group_tests(tests, test_setup, test_teardown);
