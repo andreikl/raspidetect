@@ -33,7 +33,7 @@
 #define VIDEO_OUTPUT_DEF VIDEO_OUTPUT_FILE_STR","VIDEO_OUTPUT_SDL_STR","VIDEO_OUTPUT_RFB_STR
 
 #define PORT "-p"
-#define PORT_DEF 5900
+#define PORT_DEF 5901
 #define HELP "--help"
 
 #define WORKER_WIDTH "-ww"
@@ -85,29 +85,29 @@
 
 #define GET_3RD_ARG(arg1, arg2, arg3, ...) arg3
 
-#define ASSERT_INT(value, condition, expectation, error) \
+#define ASSERT_INT(value, expr, expect, error) \
 { \
-    if (!(value condition expectation)) { \
-        fprintf(stderr, "ERROR: assert "#value"(%d) "#condition" "#expectation"(%d)\n%s:%d - %s\n", \
-            value, expectation, __FILE__, __LINE__, __FUNCTION__); \
+    if (!(value expr expect)) { \
+        fprintf(stderr, "\033[1;31m"#value"(%d) "#expr" "#expect"(%d)\n%s:%d - %s\033[0m\n", \
+            value, expect, __FILE__, __LINE__, __FUNCTION__); \
         goto error; \
     } \
 }
 
-#define ASSERT_LNG(value, condition, expectation, error) \
+#define ASSERT_LNG(value, expr, expect, error) \
 { \
-    if (!(value condition expectation)) { \
-        fprintf(stderr, "ERROR: assert "#value"(%ld) "#condition" "#expectation"(%ld)\n%s:%d - %s\n", \
-            value, (long int)expectation, __FILE__, __LINE__, __FUNCTION__); \
+    if (!(value expr expect)) { \
+        fprintf(stderr, "\033[1;31m"#value"(%ld) "#expr" "#expect"(%ld)\n%s:%d - %s\033[0m\n", \
+            value, (long int)expect, __FILE__, __LINE__, __FUNCTION__); \
         goto error; \
     } \
 }
 
-#define ASSERT_PTR(value, condition, expectation, error) \
+#define ASSERT_PTR(value, expr, expect, error) \
 { \
-    if (!(value condition expectation)) { \
-        fprintf(stderr, "ERROR: assert "#value"(%p) "#condition" "#expectation"(%p)\n%s:%d - %s\n", \
-            value, expectation, __FILE__, __LINE__, __FUNCTION__); \
+    if (!(value expr expect)) { \
+        fprintf(stderr, "\033[1;31m"#value"(%p) "#expr" "#expect"(%p)\n%s:%d - %s\033[0m\n", \
+            value, expect, __FILE__, __LINE__, __FUNCTION__); \
         goto error; \
     } \
 }
@@ -127,13 +127,13 @@
 
 #define CALL_MESSAGE(call) \
 { \
-    fprintf(stderr, "ERROR: "#call" returned error: %s (%d)\n%s:%d - %s\n", \
+    fprintf(stderr, "\033[1;31m"#call" returned error: %s (%d)\n%s:%d - %s\033[0m\n", \
         strerror(errno), errno, __FILE__, __LINE__, __FUNCTION__); \
 }
 
 #define CALL_CUSTOM_MESSAGE(call, res) \
 { \
-    fprintf(stderr, "ERROR: "#call" returned error: %s (%d)\n%s:%d - %s\n", \
+    fprintf(stderr, "\033[1;31m"#call" returned error: %s (%d)\n%s:%d - %s\033[0m\n", \
         strerror(res), res, __FILE__, __LINE__, __FUNCTION__); \
 }
 

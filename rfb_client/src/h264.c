@@ -40,7 +40,7 @@ int h264_init()
     LINKED_HASH_INIT(app.h264.headers, MAX_SLICES);
 
 #ifdef ENABLE_DXVA
-    STANDARD_CALL(dxva_init(), error);
+    CALL(dxva_init(), error);
 #endif //ENABLE_DXVA
 
     return 0;
@@ -67,7 +67,7 @@ static int h264_slice_layer_without_partitioning_rbsp(int start, int end)
 
     RBSP_INIT(rbsp, &buffer[start], end - start);
 
-    STANDARD_CALL(h264_read_slice_header(), error);
+    CALL(h264_read_slice_header(), error);
 
     //ffmpeg: ignores redundant_pic_count but has check
     UNCOVERED_CASE(header->redundant_pic_cnt, !=, 0);
@@ -105,9 +105,9 @@ static int h264_slice_layer_without_partitioning_rbsp(int start, int end)
     }
 
 #ifdef ENABLE_H264_SLICE 
-    STANDARD_CALL(h264_read_slice_data(), error);
+    CALL(h264_read_slice_data(), error);
     H264_RBSP_DEBUG(*app.h264.rbsp.p);
-    STANDARD_CALL(!h264_is_more_rbsp(&app.h264.rbsp), error);
+    CALL(!h264_is_more_rbsp(&app.h264.rbsp), error);
 #endif //ENABLE_H264_SLICE
 
     return 0;
@@ -151,7 +151,7 @@ int h264_decode()
             {
                 h264_slice_layer_without_partitioning_rbsp(start, end);
                 #ifdef ENABLE_DXVA
-                    STANDARD_CALL(dxva_decode(start, end), cleanup);
+                    CALL(dxva_decode(start, end), cleanup);
                 #endif //ENABLE_DXVA
                 break;
             }

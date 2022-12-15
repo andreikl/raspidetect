@@ -4,7 +4,7 @@
 #define V4L_H264_ENCODER "/dev/nvhost-msenc"
 #define V4L_MAX_IN_BUFS 10
 #define V4L_MAX_OUT_BUFS 3 //3 is the minimum nubmer of buffers
-#define V4L_OUT_BUFFER_SIZE 10240
+#define V4L_OUT_BUFFER_SIZE 51200
 
 struct v4l_encoder_plane_t {
     uint8_t *buf;

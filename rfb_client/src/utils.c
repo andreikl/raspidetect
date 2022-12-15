@@ -24,6 +24,7 @@
 KHASH_MAP_INIT_STR(map_str, char *)
 extern KHASH_T(map_str) *h;
 
+extern struct app_state_t app;
 static char utils_buffer[MAX_BUFFER];
 
 void utils_parse_args(int argc, char** argv)

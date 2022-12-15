@@ -641,35 +641,35 @@ int dxva_decode(int start, int end) {
         goto close;
     }
 
-    STANDARD_CALL(dxva_fill_picture_parameters(), end_frame);
-    STANDARD_CALL(dxva_commit_buffer(DXVA2_PictureParametersBufferType,
+    CALL(dxva_fill_picture_parameters(), end_frame);
+    CALL(dxva_commit_buffer(DXVA2_PictureParametersBufferType,
         buffers + buffers_size,
         &app.dxva.pic_params, sizeof(app.dxva.pic_params)
     ), end_frame);
     buffers_size++;
 
-    STANDARD_CALL(dxva_fill_matrices(), end_frame);
-    STANDARD_CALL(dxva_commit_buffer(DXVA2_InverseQuantizationMatrixBufferType,
+    CALL(dxva_fill_matrices(), end_frame);
+    CALL(dxva_commit_buffer(DXVA2_InverseQuantizationMatrixBufferType,
         buffers + buffers_size,
         &app.dxva.matrices, sizeof(app.dxva.matrices)
     ), end_frame);
     buffers_size++;
 
-    STANDARD_CALL(dxva_commit_slice(buffers + buffers_size, start, end), end_frame);
+    CALL(dxva_commit_slice(buffers + buffers_size, start, end), end_frame);
     buffers_size++;
 
     if (app.dxva.cfg->ConfigBitstreamRaw != 2) {
         DEBUG("fill long slice");
-        STANDARD_CALL(dxva_fill_slice_long(start, end), end_frame);
-        STANDARD_CALL(dxva_commit_buffer(DXVA2_SliceControlBufferType,
+        CALL(dxva_fill_slice_long(start, end), end_frame);
+        CALL(dxva_commit_buffer(DXVA2_SliceControlBufferType,
             buffers + buffers_size,
             &app.dxva.slice_long, sizeof(app.dxva.slice_long)
         ), end_frame);
     }
     else {
         DEBUG("fill short slice");
-        STANDARD_CALL(dxva_fill_slice_short(start, end), end_frame);
-        STANDARD_CALL(dxva_commit_buffer(DXVA2_SliceControlBufferType,
+        CALL(dxva_fill_slice_short(start, end), end_frame);
+        CALL(dxva_commit_buffer(DXVA2_SliceControlBufferType,
             buffers + buffers_size,
             &app.dxva.slice_short, sizeof(app.dxva.slice_short)
         ), end_frame);

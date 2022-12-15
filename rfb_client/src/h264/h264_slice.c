@@ -24,7 +24,7 @@ static int h264_init_slice_data()
 
     int SubWidthC = -1;
     int SubHeightC = -1;
-    STANDARD_CALL(
+    CALL(
         h264_get_chroma_variables(&SubWidthC, &SubHeightC),
         error
     );
@@ -100,8 +100,8 @@ static int h264_init_slice_data()
         }                            
     }
 
-    STANDARD_CALL(h264_generate_MapUnitToSliceGroupMap(), error);
-    STANDARD_CALL(h264_generate_MbToSliceGroupMap(), error);
+    CALL(h264_generate_MapUnitToSliceGroupMap(), error);
+    CALL(h264_generate_MbToSliceGroupMap(), error);
     return 0;
 
 error:
@@ -114,7 +114,7 @@ static int h264_read_mb_type(struct app_state_t* app)
 
     if (app.h264.pps.entropy_coding_mode_flag) {
         UNCOVERED_CASE(app.h264.header.slice_type, !=, SliceTypeI);
-        STANDARD_CALL(h264_cabac_read_mb_type(), error);
+        CALL(h264_cabac_read_mb_type(), error);
 	    app.h264.data.curr_mb->mb_type = (H264_U_I | app.h264.data.curr_mb->mb_type_origin);
     } else {
         app.h264.data.curr_mb->mb_type_origin = RBSP_READ_UE(rbsp);
@@ -140,7 +140,7 @@ static int h264_mb_pred(struct app_state_t* app)
         if (app.h264.data.curr_mb->MbPartPredMode == H264_Intra_4x4) {
             for (int luma4x4BlkIdx = 0; luma4x4BlkIdx < 16; luma4x4BlkIdx++) {
                 if (app.h264.pps.entropy_coding_mode_flag) {
-                    STANDARD_CALL(h264_cabac_read_intra4x4_pred_mode(luma4x4BlkIdx), error);
+                    CALL(h264_cabac_read_intra4x4_pred_mode(luma4x4BlkIdx), error);
                 } else {
                     app.h264.data.curr_mb->intra4x4_pred_mode[luma4x4BlkIdx] =
                         RBSP_READ_U1(rbsp);
@@ -149,7 +149,7 @@ static int h264_mb_pred(struct app_state_t* app)
             }
             if (app.h264.sps.ChromaArrayType == 1 || app.h264.sps.ChromaArrayType == 2) {
                 if (app.h264.pps.entropy_coding_mode_flag) {
-                    STANDARD_CALL(h264_cabac_read_intra_chroma_pred_mode(), error);
+                    CALL(h264_cabac_read_intra_chroma_pred_mode(), error);
                 } else {
                     app.h264.data.curr_mb->intra_chroma_pred_mode = RBSP_READ_UE(rbsp);
                 }
@@ -181,7 +181,7 @@ int h264_residual_block(struct app_state_t* app,
     UNCOVERED_CASE(app.h264.pps.entropy_coding_mode_flag, ==, 0);
 
     if (maxNumCoeff != 64 || app.h264.sps.ChromaArrayType == 3) {
-        STANDARD_CALL(
+        CALL(
             h264_cabac_read_coded_block_flag(app,
                 type,
                 blocks,
@@ -198,7 +198,7 @@ int h264_residual_block(struct app_state_t* app,
         int numCoeff = endIdx + 1;
         int i = startIdx;
         while (i < numCoeff - 1) {
-            STANDARD_CALL(
+            CALL(
                 h264_cabac_read_significant_coeff_flag(app,
                     type,
                     coeffLevel,
@@ -207,7 +207,7 @@ int h264_residual_block(struct app_state_t* app,
             );
             //H264_RBSP_DEBUG(coeffLevel->coeff[i].significant_coeff_flag);
             if (coeffLevel->coeff[i].significant_coeff_flag) {
-                STANDARD_CALL(
+                CALL(
                     h264_cabac_read_last_significant_coeff_flag(app,
                         type,
                         coeffLevel,
@@ -223,7 +223,7 @@ int h264_residual_block(struct app_state_t* app,
             i++;        
         }
         struct h264_coeff_t* coeff = coeffLevel->coeff + (numCoeff - 1);
-        STANDARD_CALL(
+        CALL(
             h264_cabac_read_coeff_abs_level_minus1(app,
                 type,
                 coeffLevel,
@@ -232,7 +232,7 @@ int h264_residual_block(struct app_state_t* app,
         );
         //H264_RBSP_DEBUG(coeff->coeff_abs_level_minus1);
 
-        STANDARD_CALL(
+        CALL(
             h264_cabac_read_coeff_sign_flag(app,
                 coeffLevel,
                 numCoeff - 1),
@@ -251,7 +251,7 @@ int h264_residual_block(struct app_state_t* app,
         for (int i = numCoeff - 2; i >= startIdx; i--) {
             coeff = coeffLevel->coeff + i;
             if (coeff->significant_coeff_flag) {
-                STANDARD_CALL(
+                CALL(
                     h264_cabac_read_coeff_abs_level_minus1(app,
                         type,
                         coeffLevel,
@@ -260,7 +260,7 @@ int h264_residual_block(struct app_state_t* app,
                 );
                 //H264_RBSP_DEBUG(coeff->coeff_abs_level_minus1);
 
-                STANDARD_CALL(
+                CALL(
                     h264_cabac_read_coeff_sign_flag(app,
                         coeffLevel,
                         i),
@@ -369,7 +369,7 @@ static int h264_residual(struct app_state_t* app, int startIdx, int endIdx)
 
         int SubWidthC = -1;
         int SubHeightC = -1;
-        STANDARD_CALL(
+        CALL(
             h264_get_chroma_variables(&SubWidthC, &SubHeightC),
             error
         );
@@ -427,7 +427,7 @@ static int h264_macroblock_layer(struct app_state_t* app)
 {
     struct h264_rbsp_t* rbsp = &app.h264.rbsp;
 
-    STANDARD_CALL(h264_read_mb_type(), error);
+    CALL(h264_read_mb_type(), error);
 
     if (app.h264.data.curr_mb->mb_type == H264_U_I_PCM) {
         DEBUG("ERROR: h264_macroblock_layer to implement pcm_sample_luma,"
@@ -452,7 +452,7 @@ static int h264_macroblock_layer(struct app_state_t* app)
 
         int SubWidthC = -1;
         int SubHeightC = -1;
-        STANDARD_CALL(
+        CALL(
             h264_get_chroma_variables(&SubWidthC, &SubHeightC),
             error
         );
@@ -476,7 +476,7 @@ static int h264_macroblock_layer(struct app_state_t* app)
                 app.h264.data.curr_mb->mb_type == H264_U_I_NxN
             ) {
                 if (app.h264.pps.entropy_coding_mode_flag) {
-                    STANDARD_CALL(h264_cabac_read_transform_size_8x8_flag(), error);
+                    CALL(h264_cabac_read_transform_size_8x8_flag(), error);
                 } else {
                     app.h264.data.curr_mb->transform_size_8x8_flag =
                         RBSP_READ_U1(&app.h264.rbsp);
@@ -488,7 +488,7 @@ static int h264_macroblock_layer(struct app_state_t* app)
 
         if (app.h264.data.curr_mb->MbPartPredMode != H264_Intra_16x16) {
             UNCOVERED_CASE(app.h264.pps.entropy_coding_mode_flag, ==, 0);
-            STANDARD_CALL(h264_cabac_read_coded_block_pattern(), error);
+            CALL(h264_cabac_read_coded_block_pattern(), error);
             //H264_RBSP_DEBUG(app.h264.data.curr_mb->coded_block_pattern);
 
             if (app.h264.data.curr_mb->CodedBlockPatternLuma > 0 &&
@@ -509,12 +509,12 @@ static int h264_macroblock_layer(struct app_state_t* app)
                 || app.h264.data.curr_mb->MbPartPredMode == H264_Intra_16x16
             ) {
                 if (app.h264.pps.entropy_coding_mode_flag) {
-                    STANDARD_CALL(h264_cabac_read_mb_qp_delta(), error);
+                    CALL(h264_cabac_read_mb_qp_delta(), error);
                 } else {
                     app.h264.data.curr_mb->mb_qp_delta = RBSP_READ_SE(&app.h264.rbsp);
                 }
                 //H264_RBSP_DEBUG(app.h264.data.curr_mb->mb_qp_delta);
-                STANDARD_CALL(h264_residual(0, 15), error);
+                CALL(h264_residual(0, 15), error);
             }
         }
     }
@@ -541,14 +541,14 @@ static int h264_read_slice_data(struct app_state_t* app)
 {
     struct h264_rbsp_t* rbsp = &app.h264.rbsp;
 
-    STANDARD_CALL(h264_init_slice_data(), error);
+    CALL(h264_init_slice_data(), error);
 
     if (app.h264.pps.entropy_coding_mode_flag) {
         H264_RBSP_DEBUG(*rbsp->p);
         RBSP_ALLIGN(rbsp);
         H264_RBSP_DEBUG(*rbsp->p);
 
-        STANDARD_CALL(h264_cabac_init(), error);
+        CALL(h264_cabac_init(), error);
     }
 
     app.h264.data.PrevMbAddr = -1;
@@ -589,7 +589,7 @@ static int h264_read_slice_data(struct app_state_t* app)
                     rbsp->bits_left,
                     app.h264.data.curr_mb->mb_field_decoding_flag);
             }
-            STANDARD_CALL(h264_macroblock_layer(), error);
+            CALL(h264_macroblock_layer(), error);
         }
         if (!app.h264.pps.entropy_coding_mode_flag) {
             moreDataFlag = !RBSP_EOF(rbsp);
@@ -603,7 +603,7 @@ static int h264_read_slice_data(struct app_state_t* app)
             if (app.h264.header.MbaffFrameFlag && app.h264.data.CurrMbAddr % 2 == 0) {
                 moreDataFlag = 1;
             } else {
-                STANDARD_CALL(h264_cabac_end_of_slice_flag(), error);
+                CALL(h264_cabac_end_of_slice_flag(), error);
                 //H264_RBSP_DEBUG(app.h264.data.curr_mb->end_of_slice_flag);
                 moreDataFlag = !app.h264.data.curr_mb->end_of_slice_flag;
             }

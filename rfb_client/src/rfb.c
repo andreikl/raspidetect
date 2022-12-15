@@ -113,7 +113,7 @@ static void *rfb_function(void* data)
     }
 
     //wait frame from network
-    STANDARD_CALL(sem_wait(&app.rfb.semaphore), error);
+    CALL(sem_wait(&app.rfb.semaphore), error);
 
     struct rfb_buffer_update_request_message_t update_request = {
         .type = RFBFramebufferUpdateRequest,
@@ -191,11 +191,11 @@ static void *rfb_function(void* data)
             t4);
 
 #ifdef ENABLE_H264
-        STANDARD_CALL(h264_decode(), error);
+        CALL(h264_decode(), error);
 #endif //ENABLE_H264
 
 #ifdef ENABLE_FFMPEG
-        STANDARD_CALL(ffmpeg_decode(), error);
+        CALL(ffmpeg_decode(), error);
 #endif //ENABLE_FFMPEG
     }
 
@@ -204,7 +204,7 @@ static void *rfb_function(void* data)
 
 error:
     is_terminated = 1;
-    DEBUG("decoding is terminated!!!");
+    ERROR_MSG("decoding is terminated!!!");
 
     return NULL;
 }
@@ -228,10 +228,10 @@ close:
         NETWORK_CALL(closesocket(app.rfb.socket))
     }
 
-    STANDARD_CALL(sem_destroy(&app.rfb.semaphore));
+    CALL(sem_destroy(&app.rfb.semaphore));
 
     if (app.rfb.is_thread) {
-        STANDARD_CALL(pthread_join(app.rfb.thread, NULL));
+        CALL(pthread_join(app.rfb.thread, NULL));
         app.rfb.is_thread = 0;
     }
 
@@ -243,9 +243,9 @@ int rfb_init()
     WSADATA wsa;
     NETWORK_CALL(WSAStartup(MAKEWORD(2,2), &wsa), error);
 
-    STANDARD_CALL(sem_init(&app.rfb.semaphore, 0, 0), error);
+    CALL(sem_init(&app.rfb.semaphore, 0, 0), error);
 
-    STANDARD_CALL(pthread_create(&app.rfb.thread, NULL, rfb_function, NULL), error);
+    CALL(pthread_create(&app.rfb.thread, NULL, rfb_function, NULL), error);
     app.rfb.is_thread = 1;
 
     return 0;
@@ -326,6 +326,7 @@ int rfb_connect()
             cleanup
         );
 
+        DEBUG("trying connect to %s:%s", app.server_host, app.server_port);
         NETWORK_CALL(res = connect(client_socket, ptr->ai_addr, (int)ptr->ai_addrlen));
         if (res == -1) {
             NETWORK_CALL(closesocket(client_socket), cleanup);

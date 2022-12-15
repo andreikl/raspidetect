@@ -116,22 +116,22 @@ static void main_function()
         goto exit;
     }
 
-    STANDARD_CALL(pthread_mutex_init(&app.dec_mutex, NULL), exit);
+    CALL(pthread_mutex_init(&app.dec_mutex, NULL), exit);
     app.is_dec_mutex = 1;
 
 #ifdef ENABLE_CUDA
-    STANDARD_CALL(cuda_init(&app), exit);
+    CALL(cuda_init(&app), exit);
 #endif //ENABLE_CUDA
 
     if (app.input_type == INPUT_TYPE_RFB) {
 #ifdef ENABLE_RFB
-        STANDARD_CALL(rfb_init(), exit);
-        STANDARD_CALL(rfb_connect(), exit);
-        STANDARD_CALL(rfb_handshake(), exit);
+        CALL(rfb_init(), exit);
+        CALL(rfb_connect(), exit);
+        CALL(rfb_handshake(), exit);
 #endif //ENABLE_RFB
     }
     else {
-        STANDARD_CALL(file_init(), exit);
+        CALL(file_init(), exit);
     }
 
     app.instance = GetModuleHandle(NULL);
@@ -160,30 +160,30 @@ static void main_function()
         &app);
 
 #ifdef ENABLE_D3D
-    STANDARD_CALL(d3d_init(), exit);
+    CALL(d3d_init(), exit);
 #endif //ENABLE_D3Ds
 
 #ifdef ENABLE_H264
-    STANDARD_CALL(h264_init(), exit);
+    CALL(h264_init(), exit);
 #endif //ENABLE_H264
 
 #ifdef ENABLE_FFMPEG
-    STANDARD_CALL(ffmpeg_init(), exit);
+    CALL(ffmpeg_init(), exit);
 #endif //ENABLE_FFMPEG
 
     if (app.input_type == INPUT_TYPE_RFB) {
 #ifdef ENABLE_RFB
         DEBUG("RFB init");
-        STANDARD_CALL(rfb_start(), exit);
+        CALL(rfb_start(), exit);
 #endif //ENABLE_RFB
     }
     else {
-        STANDARD_CALL(file_start(), exit);
+        CALL(file_start(), exit);
     }
 
     ShowWindow(app.wnd, SW_SHOW);
     UpdateWindow(app.wnd);
-    STANDARD_CALL(d3d_start(), exit);
+    CALL(d3d_start(), exit);
 
     MSG msg;
     while (GetMessage(&msg, NULL, 0, 0)) {

@@ -110,7 +110,7 @@ int ffmpeg_decode()
             goto error;
         }
 
-        STANDARD_CALL(pthread_mutex_lock(&app.dec_mutex), error);
+        CALL(pthread_mutex_lock(&app.dec_mutex), error);
 
         // DEBUG("linesize 1: %d, pix_fmt %d", app.ffmpeg.fr->linesize[0],
         //     av_pix_fmt_desc_get(app.ffmpeg.ctx));
@@ -129,7 +129,7 @@ int ffmpeg_decode()
         //     (const int*)app.ffmpeg.fr->linesize, app.ffmpeg.ctx->pix_fmt,
         //     app.ffmpeg.ctx->width, app.ffmpeg.ctx->height, 1);
 
-        STANDARD_CALL(pthread_mutex_unlock(&app.dec_mutex), unlockm);
+        CALL(pthread_mutex_unlock(&app.dec_mutex), unlockm);
 
         DEBUG("avcodec decoded: %d bytes", app.dec_buf_length);
 unlockm:
@@ -140,7 +140,7 @@ unlockm:
         }
 
 #ifdef ENABLE_D3D
-        STANDARD_CALL(d3d_render_image(app), error);
+        CALL(d3d_render_image(app), error);
 #endif //ENABLE_D3D
     }
 

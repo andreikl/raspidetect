@@ -56,7 +56,7 @@ void d3d_destroy()
     }
 
     if (app.d3d.is_thread) {
-        STANDARD_CALL(pthread_join(app.d3d.thread, NULL));
+        CALL(pthread_join(app.d3d.thread, NULL));
         app.d3d.is_thread = 0;
     }
 
@@ -80,8 +80,8 @@ int d3d_init()
 {
     HRESULT res;
 
-    STANDARD_CALL(sem_init(&app.d3d.semaphore, 0, 0), close);
-    STANDARD_CALL(pthread_create(&app.d3d.thread, NULL, d3d_function, NULL), close);
+    CALL(sem_init(&app.d3d.semaphore, 0, 0), close);
+    CALL(pthread_create(&app.d3d.thread, NULL, d3d_function, NULL), close);
     app.d3d.is_thread = 1;
 
     app.d3d.d3d = Direct3DCreate9(D3D_SDK_VERSION);
@@ -156,7 +156,7 @@ int d3d_render_frame()
         IDirect3DDevice9_GetBackBuffer(app.d3d.dev, 0, 0, D3DBACKBUFFER_TYPE_MONO, &backbuffer),
         end_scene);
 
-    STANDARD_CALL(pthread_mutex_lock(&app.dec_mutex), end_scene);
+    CALL(pthread_mutex_lock(&app.dec_mutex), end_scene);
 
     D3D_CALL(
         IDirect3DDevice9_StretchRect(app.d3d.dev,
@@ -167,7 +167,7 @@ int d3d_render_frame()
             D3DTEXF_NONE),
         end_scene);
 
-    STANDARD_CALL(pthread_mutex_unlock(&app.dec_mutex), end_scene);
+    CALL(pthread_mutex_unlock(&app.dec_mutex), end_scene);
 
 end_scene:
     D3D_CALL(IDirect3DDevice9_EndScene(app.d3d.dev), error);
@@ -186,7 +186,7 @@ int d3d_render_image() {
     // rect.left = 0; rect.top = 0;
     // rect.right = 640; rect.bottom = 480;
 
-    STANDARD_CALL(pthread_mutex_lock(&app.dec_mutex), exit);
+    CALL(pthread_mutex_lock(&app.dec_mutex), exit);
 
     D3DLOCKED_RECT d3d_rect;
     HRESULT hres;
@@ -249,7 +249,7 @@ int d3d_render_image() {
         
 unlocdec:
     int ret = 0;
-    STANDARD_CALL(ret = pthread_mutex_unlock(&app.dec_mutex));
+    CALL(ret = pthread_mutex_unlock(&app.dec_mutex));
     if (ret)
         res = -1;
 
@@ -287,7 +287,7 @@ char* d3d_get_hresult_message(HRESULT result)
 
 int d3d_start()
 {
-    STANDARD_CALL(sem_post(&app.d3d.semaphore), error);
+    CALL(sem_post(&app.d3d.semaphore), error);
     return 0;
 error:
     return -1;

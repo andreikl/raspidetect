@@ -38,7 +38,7 @@ void utils_parse_args(int argc, char** argv)
     for (int i = 0; i < argc; i++) {
         if (argv[i][0] == '-') {
             k = KH_PUT(argvs_hash_t, h, argv[i], &ret);
-            KH_VAL(h, k) = (i + 1 < argc) ? argv[i + 1] : NULL;
+            KH_VAL(h, k) = (i + 1 < argc) ? argv[i + 1] : "";
         }
     }
 }
