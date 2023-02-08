@@ -332,7 +332,7 @@ struct filter_t {
     int (*process_frame)(uint8_t *buffer);
 
 
-    uint8_t *(*get_buffer)(int *in_format, int *out_format, int *length);
+    uint8_t *(*get_buffer)(int *out_format, int *length);
     int (*get_in_formats)(const struct format_mapping_t *formats[]);
     int (*get_out_formats)(const struct format_mapping_t *formats[]);
 };

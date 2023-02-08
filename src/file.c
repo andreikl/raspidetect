@@ -61,7 +61,7 @@ static int file_process_frame()
         if (!filter->is_started())
             CALL(filter->start(in_format, out_format), cleanup);
         CALL(filter->process_frame(buffer), cleanup);
-        buffer = filter->get_buffer(NULL, NULL, &length);
+        buffer = filter->get_buffer(NULL, &length);
         if (!length)
             break;
     }

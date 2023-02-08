@@ -419,7 +419,7 @@ int rfb_process_frame()
         out_format = output->filters[k].out_format;
         if (!filter->is_started()) CALL(filter->start(in_format, out_format), cleanup);
         CALL(filter->process_frame(buffer), cleanup);
-        buffer = filter->get_buffer(NULL, NULL, &length);
+        buffer = filter->get_buffer(NULL, &length);
         if (length == 0) {
             DEBUG("The filter[%s] doesn't have buffer yet", filter->name);
             break;

@@ -1,13 +1,15 @@
-V4L = 1
+V4L = 0
 # It allows to run test on platform where v4l or camera isn't available
 # the test code generates static image
-V4l_WRAP = 0
-# TODO: to implement
+V4L_WRAP = 1
 H264_ENCODER_RASPBERRY = 0
+# It allows to run test on platform where h264 Jetson encoder isn't available
+# the test code generates static h264 buffers which were recorder on Jetson platform
+H264_ENCODER_RASPBERRY_WRAP = 1
 H264_ENCODER_JETSON = 0
 # It allows to run test on platform where h264 Jetson encoder isn't available
 # the test code generates static h264 buffers which were recorder on Jetson platform
-H264_ENCODER_WRAP = 1
+H264_ENCODER_JETSON_WRAP = 0
 CONTROL = 0
 RFB = 1
 SDL = 0
@@ -47,10 +49,11 @@ ifeq ($(V4L), 1)
 endif
 
 ifeq ($(V4L_WRAP), 1)
-	COMMON += -DV4L_WRAP
+	COMMON += -DV4L -DV4L_WRAP
 	OBJ += v4l.o
+	OBJ_RELEASE_PREF += ${BUILD_DIR}/obj/v4l_stubs.o
 	ifeq ($(CMOCKA), 1)
-		TEST_OBJ += test_v4l_wraps.o
+		TEST_OBJ += v4l_stubs.o v4l_wraps.o
 	endif
 endif
 
@@ -59,6 +62,15 @@ ifeq ($(H264_ENCODER_RASPBERRY), 1)
 	COMMON += `pkg-config --cflags mmal`
 	LDFLAGS += `pkg-config --libs mmal`
 	OBJ += mmal_encoder.o
+endif
+
+ifeq ($(H264_ENCODER_RASPBERRY_WRAP), 1)
+	COMMON += -DMMAL_ENCODER -DMMAL_ENCODER_WRAP
+	OBJ += mmal_encoder.o
+	OBJ_RELEASE_PREF += ${BUILD_DIR}/obj/mmal_encoder_stubs.o
+	ifeq ($(CMOCKA), 1)
+		TEST_OBJ += mmal_encoder_stubs.o mmal_encoder_wraps.o
+	endif
 endif
 
 ifeq ($(H264_ENCODER_JETSON), 1)
@@ -70,7 +82,7 @@ ifeq ($(H264_ENCODER_JETSON), 1)
 	OBJ += v4l_encoder.o
 endif
 
-ifeq ($(H264_ENCODER_WRAP), 1)
+ifeq ($(H264_ENCODER_JETSON_WRAP), 1)
 	COMMON += -DV4L_ENCODER -DV4L_ENCODER_WRAP
 	OBJ += v4l_encoder.o
 	OBJ_RELEASE_PREF += ${BUILD_DIR}/obj/test_v4l_encoder_stubs.o
@@ -80,7 +92,7 @@ ifeq ($(H264_ENCODER_WRAP), 1)
 		TEST_LDFLAGS += -Wl,--wrap=mmap
 		TEST_LDFLAGS += -Wl,--wrap=munmap
 		TEST_LDFLAGS += -Wl,--wrap=NvBufferMemSyncForDevice
-		TEST_OBJ += test_v4l_encoder_wraps.o
+		TEST_OBJ += v4l_encoder_stubs.o v4l_encoder_wraps.o
 	endif
 endif
 

@@ -98,10 +98,8 @@ static int yuv_stop()
     return 0;
 }
 
-static uint8_t *yuv_get_buffer(int *in_format, int *out_format, int *length)
+static uint8_t *yuv_get_buffer(int *out_format, int *length)
 {
-    if (in_format)
-        *in_format = yuv_input_formats[0].format;
     if (out_format)
         *out_format = yuv_output_formats[0].format;
     return yuv.buffer;
