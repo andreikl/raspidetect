@@ -462,8 +462,14 @@ int rfb_process_frame()
         DEBUG("r: %d, x: %d, y: %d, w: %d, h: %d", ntohs(update_message.number_of_rectangles),
             ntohs(update_message.x), ntohs(update_message.y), ntohs(update_message.width),
             ntohs(update_message.height));
-        DEBUG("t: %d, e: %d, size: %ld, len: %d", update_message.message_type,
-            ntohl(update_message.encoding_type), sizeof(update_message), length);
+        #if defined(ENV64BIT)
+            DEBUG("t: %d, e: %d, size: %ld, len: %d", update_message.message_type,
+                ntohl(update_message.encoding_type), sizeof(update_message), length);
+        #else
+            DEBUG("t: %d, e: %d, size: %d, len: %d", update_message.message_type,
+                ntohl(update_message.encoding_type), sizeof(update_message), length);
+        #endif
+
     }
     else {
         DEBUG("Unblock semaphore until buffer is received");

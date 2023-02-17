@@ -334,11 +334,10 @@ cleanup:
 
 static int v4l_stop()
 {
+    ASSERT_PTR(v4l_format, !=, NULL, cleanup);
     enum v4l2_buf_type type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
     CALL(ioctl_wait(v4l.dev_id, VIDIOC_STREAMOFF, &type), cleanup);
-
     v4l_format = NULL;
-
     return 0;
 
 cleanup:

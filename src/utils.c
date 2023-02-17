@@ -170,7 +170,10 @@ fail_open:
 int utils_write_file(const char *path, const uint8_t *data, int len)
 {
     FILE* fstream = NULL;
-    if (strcmp(path, "stdout") == 0) {
+    if (strcmp(path, OUTPUT_PATH_NULL) == 0) {
+        return 0;
+    }
+    else if (strcmp(path, OUTPUT_PATH_STDOUT) == 0) {
         fstream = stdout;
     }
     else {
@@ -179,7 +182,7 @@ int utils_write_file(const char *path, const uint8_t *data, int len)
             CALL_MESSAGE(fopen(path, "a"));
     }
     int written = fwrite(data, len, 1, fstream) * len;
-    if (fstream && strcmp(path, "stdout") != 0) {
+    if (fstream && strcmp(path, OUTPUT_PATH_STDOUT) != 0) {
         fclose(fstream);
     }
     if (len <= 0 || written != len) {

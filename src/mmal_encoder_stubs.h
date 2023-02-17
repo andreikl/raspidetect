@@ -122,6 +122,7 @@ typedef struct MMAL_POOL_T
 
 typedef struct MMAL_PORT_T
 {
+    uint32_t is_enabled;
     MMAL_ES_FORMAT_T *format;
     uint32_t buffer_num_recommended;
     uint32_t buffer_size_recommended;

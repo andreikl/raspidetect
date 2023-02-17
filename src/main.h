@@ -27,7 +27,7 @@
 #define VIDEO_WIDTH_DEF 640
 #define VIDEO_HEIGHT "-h"
 #define VIDEO_HEIGHT_DEF 480
-#define VIDEO_FORMAT "-f"
+#define VIDEO_FORMAT "-fm"
 #define VIDEO_FORMAT_DEF VIDEO_FORMAT_YUV422_STR
 #define VIDEO_OUTPUT "-o"
 #define VIDEO_OUTPUT_DEF VIDEO_OUTPUT_FILE_STR","VIDEO_OUTPUT_SDL_STR","VIDEO_OUTPUT_RFB_STR
@@ -45,7 +45,9 @@
 #define VERBOSE "-d"
 #define VERBOSE_DEF 0
 #define OUTPUT_PATH "-f"
-#define OUTPUT_PATH_DEF "null"
+#define OUTPUT_PATH_DEF OUTPUT_PATH_NULL
+#define OUTPUT_PATH_STDOUT "stdout"
+#define OUTPUT_PATH_NULL "null"
 #define TFL_MODEL_PATH "-m"
 #define TFL_MODEL_PATH_DEF "./tflite_models/detect.tflite"
 #define DN_MODEL_PATH "-m"
@@ -63,18 +65,8 @@
 #define FONT_NAME "Vera.ttf"
 #define FONT_PATH FONT_DIR"/"FONT_NAME
 
-// Check windows
-#if _WIN32 || _WIN64
-    #if _WIN64
-        #define ENV64BIT
-    #else
-        #define ENV32BIT
-    #endif
-#endif
-
-// Check GCC
 #if __GNUC__
-    #if __x86_64__ || __ppc64__
+    #if __x86_64__ || __ppc64__ || __aarch64__
         #define ENV64BIT
     #else
         #define ENV32BIT

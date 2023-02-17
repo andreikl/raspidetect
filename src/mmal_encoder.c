@@ -60,12 +60,13 @@ static struct format_mapping_t *mmal_output_format = NULL;
 static struct mmal_encoder_state_t mmal = {
     .encoder = NULL,
     .out_buf = NULL,
+    .mmal_buf = NULL,
+    .mmal_buf_used = 0,
     .input_port = NULL,
     .input_pool = NULL,
     .output_port = NULL,
     .output_pool = NULL,
-    .is_mutex = 0,
-    .out_buf_used = 0
+    .is_mutex = 0
 };
 
 extern struct app_state_t app;
@@ -85,15 +86,15 @@ static void output_buffer_callback(MMAL_PORT_T *port, MMAL_BUFFER_HEADER_T *buff
     }
     MMAL_CALL(mmal_buffer_header_mem_lock(buffer), buffer_unlock);
 
-    ASSERT_INT(mmal.out_buf_used + buffer->length,
+    ASSERT_INT(mmal.mmal_buf_used + buffer->length,
         <,
         MMAL_OUT_BUFFER_SIZE,
         mmal_unlock);
     
     // DEBUG("copy buffer, source: %p, dest: %p, length: %d",
     //     buffer->data, mmal.out_buf, buffer->length);
-    memcpy(mmal.out_buf, buffer->data, buffer->length);
-    mmal.out_buf_used += buffer->length;
+    memcpy(mmal.mmal_buf + mmal.mmal_buf_used, buffer->data, buffer->length);
+    mmal.mmal_buf_used += buffer->length;
 
     mmal_buffer_header_mem_unlock(buffer);
 
@@ -105,14 +106,26 @@ static void output_buffer_callback(MMAL_PORT_T *port, MMAL_BUFFER_HEADER_T *buff
 
     mmal_buffer_header_release(buffer);
 
+    if (mmal.output_pool && port->is_enabled) {
+        MMAL_QUEUE_T *queue = mmal.output_pool->queue;
+
+        MMAL_BUFFER_HEADER_T *buffer = mmal_queue_get(queue);
+        if (!buffer) {
+            MMAL_MESSAGE(mmal_queue_get(queue), MMAL_EAGAIN);
+            goto error;
+        }
+        MMAL_CALL(mmal_port_send_buffer(port, buffer), error);
+    }
+
     // unlock encoder to get new buffer;
     CALL(sem_post(&mmal.semaphore), error);
+    return;
 
 mmal_unlock:
     mmal_buffer_header_mem_unlock(buffer);
 
 buffer_unlock:
-    res = pthread_mutex_unlock(mmal.mutex);
+    res = pthread_mutex_unlock(&mmal.mutex);
     if (res) {
         CALL_CUSTOM_MESSAGE(pthread_mutex_unlock(&mmal.mutex), res);
     }
@@ -155,6 +168,11 @@ static int mmal_stop()
         mmal.output_pool = NULL;
     }
 
+    if (mmal.mmal_buf) {
+        free(mmal.mmal_buf);
+        mmal.mmal_buf = NULL;
+    }
+
     if (mmal.out_buf) {
         free(mmal.out_buf);
         mmal.out_buf = NULL;
@@ -178,9 +196,11 @@ void mmal_cleanup()
     }
 
     if (mmal.is_mutex) {
-        int res = pthread_mutex_destroy(mmal.mutex);
-        if (res)
-            CALL_CUSTOM_MESSAGE(pthread_mutex_destroy(mmal.mutex), res);
+        int res = pthread_mutex_destroy(&mmal.mutex);
+        if (res) {
+            errno = res;
+            CALL_MESSAGE(pthread_mutex_destroy(&mmal.mutex));
+        }
         mmal.is_mutex = 0;
     }
 
@@ -192,6 +212,7 @@ void mmal_cleanup()
 
 static int mmal_start(int input_format, int output_format)
 {
+    ASSERT_PTR(mmal.mmal_buf, !=, NULL, cleanup);
     ASSERT_PTR(mmal.out_buf, !=, NULL, cleanup)
     ASSERT_PTR(mmal.encoder, !=, NULL, cleanup);
     ASSERT_INT(mmal.encoder->output[0]->buffer_num, >, 0, cleanup);
@@ -243,6 +264,7 @@ static int mmal_start(int input_format, int output_format)
     MMAL_CALL(mmal_port_format_commit(mmal.output_port), cleanup);
 
     ASSERT_INT(mmal.output_port->buffer_size, <=, MMAL_OUT_BUFFER_SIZE, cleanup);
+    DEBUG("mmal.input_port->buffer_num: %d", mmal.input_port->buffer_num);
 
     mmal.input_pool = mmal_port_pool_create(mmal.input_port,
         mmal.input_port->buffer_num,
@@ -263,7 +285,6 @@ static int mmal_start(int input_format, int output_format)
     MMAL_CALL(mmal_port_enable(mmal.input_port, input_buffer_callback), cleanup);
     MMAL_CALL(mmal_port_enable(mmal.output_port, output_buffer_callback), cleanup);
 
-    DEBUG("fill_port_buffer");
     CALL(fill_port_buffer(mmal.output_port, mmal.output_pool), cleanup);
 
     DEBUG("h264 mmal encoder has been started");
@@ -283,9 +304,9 @@ static int mmal_init()
     MMAL_CALL(mmal_component_create(MMAL_COMPONENT_DEFAULT_VIDEO_ENCODER, &mmal.encoder), cleanup);
 
     ASSERT_INT(mmal.is_mutex, ==, 0, cleanup)
-    int res = pthread_mutex_init(mmal.mutex, NULL);
+    int res = pthread_mutex_init(&mmal.mutex, NULL);
     if (res) {
-        CALL_CUSTOM_MESSAGE(pthread_mutex_destroy(mmal.mutex), res);
+        CALL_CUSTOM_MESSAGE(pthread_mutex_init(&mmal.mutex), res);
         goto cleanup;
     }
     mmal.is_mutex = 1;
@@ -293,6 +314,13 @@ static int mmal_init()
     ASSERT_INT(mmal.is_semaphore, ==, 0, cleanup)
     CALL(sem_init(&mmal.semaphore, 0, 0), cleanup);
     mmal.is_semaphore = 1;
+
+    ASSERT_PTR(mmal.mmal_buf, ==, NULL, cleanup)
+    mmal.mmal_buf = malloc(MMAL_OUT_BUFFER_SIZE);
+    if (!mmal.mmal_buf) {
+        CALL_MESSAGE(malloc(MMAL_OUT_BUFFER_SIZE));
+        goto cleanup;
+    }
 
     ASSERT_PTR(mmal.out_buf, ==, NULL, cleanup)
     mmal.out_buf = malloc(MMAL_OUT_BUFFER_SIZE);
@@ -332,6 +360,12 @@ static int mmal_process_frame(uint8_t *buffer)
     MMAL_CALL(mmal_port_send_buffer(mmal.input_port, mmal_buffer), cleanup);
 
     // wait when encoder encode buffer to process next one
+    int value = 0;
+    CALL(sem_getvalue(&mmal.semaphore, &value), cleanup);
+    while (value > 0) {
+        CALL(sem_wait(&mmal.semaphore), cleanup);
+        CALL(sem_getvalue(&mmal.semaphore, &value), cleanup);
+    }
     CALL(sem_wait(&mmal.semaphore), cleanup);
     return 0;
 
@@ -345,11 +379,28 @@ static uint8_t *mmal_get_buffer(int *out_format, int *length)
 {
     ASSERT_PTR(mmal_input_format, !=, NULL, cleanup);
     ASSERT_PTR(mmal_output_format, !=, NULL, cleanup);
+
     if (out_format)
         *out_format = mmal_output_format->format;
+
+    int res = pthread_mutex_lock(&mmal.mutex);
+    if (res) {
+        CALL_CUSTOM_MESSAGE(pthread_mutex_lock(&mmal.mutex), res);
+        goto cleanup;
+    }
+
     if (length)
-        *length = mmal.out_buf_used;
-    mmal.out_buf_used = 0;
+        *length = mmal.mmal_buf_used;
+    
+    memcpy(mmal.out_buf, mmal.mmal_buf, mmal.mmal_buf_used);
+    mmal.mmal_buf_used = 0;
+
+    res = pthread_mutex_unlock(&mmal.mutex);
+    if (res) {
+        CALL_CUSTOM_MESSAGE(pthread_mutex_unlock(&mmal.mutex), res);
+        goto cleanup;
+    }
+
     return mmal.out_buf;
 
 cleanup:

@@ -169,7 +169,7 @@ void app_cleanup()
         if (filters[i].is_started) CALL(filters[i].stop())
         filters[i].cleanup();
     }
-    if (input.is_started) CALL(input.stop());
+    if (input.is_started()) CALL(input.stop());
     input.cleanup();
 }
 
