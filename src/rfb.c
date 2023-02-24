@@ -215,15 +215,16 @@ static void *rfb_function(void *data)
             .pixel_format.blue_shift = 0,
             .name_length = htonl(sizeof(init_message.name))
         };
-        if (app.video_format == VIDEO_FORMAT_YUV422) {
-            init_message.pixel_format.bpp = 16;
-            init_message.pixel_format.depth = 16;
-        }
-        else {
-            DEBUG("Video format isn't supported %d", app.video_format);
-            errno = EINVAL;
-            goto rfb_error;
-        }
+        //TODO: delete if working
+        // if (app.video_format == VIDEO_FORMAT_YUV422) {
+        //     init_message.pixel_format.bpp = 16;
+        //     init_message.pixel_format.depth = 16;
+        // }
+        // else {
+        //     DEBUG("Video format isn't supported %d", app.video_format);
+        //     errno = EINVAL;
+        //     goto rfb_error;
+        // }
         memset(init_message.name, 0, sizeof(init_message.name));
         memcpy(init_message.name, APP_NAME, strlen(APP_NAME));
 
@@ -390,6 +391,8 @@ static int rfb_start()
         CALL_CUSTOM_MESSAGE(sem_init, rfb.client_semaphore_res);
         goto cleanup;
     }
+
+    DEBUG("output[%s] has been started", rfb.output->name);
     return 0;
 
 cleanup:
@@ -419,7 +422,7 @@ int rfb_process_frame()
         out_format = output->filters[k].out_format;
         if (!filter->is_started()) CALL(filter->start(in_format, out_format), cleanup);
         CALL(filter->process_frame(buffer), cleanup);
-        buffer = filter->get_buffer(NULL, NULL, &length);
+        buffer = filter->get_buffer(NULL, &length);
         if (length == 0) {
             DEBUG("The filter[%s] doesn't have buffer yet", filter->name);
             break;
@@ -462,8 +465,14 @@ int rfb_process_frame()
         DEBUG("r: %d, x: %d, y: %d, w: %d, h: %d", ntohs(update_message.number_of_rectangles),
             ntohs(update_message.x), ntohs(update_message.y), ntohs(update_message.width),
             ntohs(update_message.height));
-        DEBUG("t: %d, e: %d, size: %ld, len: %d", update_message.message_type,
-            ntohl(update_message.encoding_type), sizeof(update_message), length);
+        #if defined(ENV64BIT)
+            DEBUG("t: %d, e: %d, size: %ld, len: %d", update_message.message_type,
+                ntohl(update_message.encoding_type), sizeof(update_message), length);
+        #else
+            DEBUG("t: %d, e: %d, size: %d, len: %d", update_message.message_type,
+                ntohl(update_message.encoding_type), sizeof(update_message), length);
+        #endif
+
     }
     else {
         DEBUG("Unblock semaphore until buffer is received");
@@ -478,7 +487,6 @@ cleanup:
 
 static int rfb_stop()
 {
-    DEBUG("rfb is stopping...");
     // shutdown the server socket terminates accept call to wait incoming connections
     if (rfb.server_socket > 0) {
         int res = shutdown(rfb.server_socket, SHUT_RDWR);
@@ -517,7 +525,6 @@ static int rfb_stop()
         else
             rfb.client_semaphore_res = -1;
     }
-    DEBUG("rfb has been stopped");
     return 0;
 
 stop_error:

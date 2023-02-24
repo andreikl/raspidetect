@@ -3,6 +3,7 @@
 
 struct file_state_t {
     struct output_t *output;
+    int is_started;
 };
 
 void file_construct();

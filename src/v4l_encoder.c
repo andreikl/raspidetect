@@ -77,8 +77,32 @@ static void v4l2_clean_memory() {
         }
 }
 
+static int v4l_stop()
+{
+    enum v4l2_buf_type type;
+    type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
+    GEN_CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_STREAMOFF, &type), cleanup);
+
+    type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+    GEN_CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_STREAMOFF, &type), cleanup);
+
+    v4l_input_format = NULL;
+    v4l_output_format = NULL;
+
+    v4l2_clean_memory();
+
+    return 0;
+
+cleanup:
+    if (errno == 0)
+        errno = EAGAIN;
+    return -1;
+}
+
 static void v4l_cleanup()
 {
+    v4l_stop();
+
     if (v4l.dev_id != -1) {
         CALL(close(v4l.dev_id));
         v4l.dev_id = -1;
@@ -266,6 +290,8 @@ cleanup:
 static int v4l_start(int input_format, int output_format)
 {
     ASSERT_PTR(v4l_input_format, ==, NULL, cleanup);
+    ASSERT_PTR(v4l_output_format, ==, NULL, cleanup);
+
     int formats_len = ARRAY_SIZE(v4l_input_formats);
     for (int i = 0; i < formats_len; i++) {
         struct format_mapping_t *f = v4l_input_formats + i;
@@ -274,9 +300,12 @@ static int v4l_start(int input_format, int output_format)
             break;
         }
     }
-    ASSERT_PTR(v4l_input_format, !=, NULL, cleanup);
+    if (v4l_input_format == NULL) {
+        ERROR("Input format isn't supported by device or application");
+        errno = EINVAL;
+        goto cleanup;
+    }
 
-    ASSERT_PTR(v4l_output_format, ==, NULL, cleanup);
     formats_len = ARRAY_SIZE(v4l_output_formats);
     for (int i = 0; i < formats_len; i++) {
         struct format_mapping_t *f = v4l_output_formats + i;
@@ -285,7 +314,11 @@ static int v4l_start(int input_format, int output_format)
             break;
         }
     }
-    ASSERT_PTR(v4l_output_format, !=, NULL, cleanup);
+    if (v4l_output_format == NULL) {
+        ERROR("Outoput format isn't supported by device or application");
+        errno = EINVAL;
+        goto cleanup;
+    }
 
     struct v4l2_format fmt;
     memset(&fmt, 0, sizeof(fmt));
@@ -582,34 +615,10 @@ cleanup:
     return -1;
 }
 
-static int v4l_stop()
-{
-    enum v4l2_buf_type type;
-    type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
-    GEN_CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_STREAMOFF, &type), cleanup);
-
-    type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
-    GEN_CALL(v4l2_ioctl(v4l.dev_id, VIDIOC_STREAMOFF, &type), cleanup);
-
-    v4l_input_format = NULL;
-    v4l_output_format = NULL;
-
-    v4l2_clean_memory();
-
-    return 0;
-
-cleanup:
-    if (errno == 0)
-        errno = EAGAIN;
-    return -1;
-}
-
-static uint8_t *v4l_get_buffer(int *in_format, int *out_format, int *length)
+static uint8_t *v4l_get_buffer(int *out_format, int *length)
 {
     ASSERT_PTR(v4l_input_format, !=, NULL, cleanup);
     ASSERT_PTR(v4l_output_format, !=, NULL, cleanup);
-    if (in_format)
-        *in_format = v4l_input_format->format;
     if (out_format)
         *out_format = v4l_output_format->format;
     if (length)
@@ -646,11 +655,11 @@ void v4l_encoder_construct()
     if (i != MAX_FILTERS) {
         filters[i].name = "v4l_encoder";
         filters[i].context = &v4l;
-        filters[i].init = v4l_init;
+        filters[i].stop = v4l_stop;
         filters[i].cleanup = v4l_cleanup;
+        filters[i].init = v4l_init;
         filters[i].start = v4l_start;
         filters[i].is_started = v4l_is_started;
-        filters[i].stop = v4l_stop;
         filters[i].process_frame = v4l_process_frame;
 
         filters[i].get_buffer = v4l_get_buffer;

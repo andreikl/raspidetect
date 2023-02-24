@@ -82,6 +82,7 @@ int __wrap_select(int nfds,
         return __real_select(nfds, readfds, writefds, exceptfds, timeout);
     }
 #endif
+    usleep(50 * 1000);
     WRAP_DEBUG("select, fd: %ld", (__FDS_BITS (readfds)[0] >> 1));
     return 1;
 }

@@ -56,13 +56,12 @@ int ffmpeg_init()
 
     app.ffmpeg.ctx->width  = app.server_width;
     app.ffmpeg.ctx->height = app.server_height;
-    if (app.server_chroma == CHROMA_FORMAT_YUV422) {
-        app.ffmpeg.ctx->pix_fmt = AV_PIX_FMT_YUV422P;
-    }
-    //TODO: the format is ignored it is always  YUV422P
+
+    //TODO: the format is ignored it is always AV_PIX_FMT_GRAY8
     app.ffmpeg.ctx->pix_fmt = AV_PIX_FMT_YUV422P;
 
-    app.ffmpeg.ctx->flags2 |= AV_CODEC_FLAG2_CHUNKS;
+
+    //app.ffmpeg.ctx->flags2 |= AV_CODEC_FLAG2_CHUNKS;
     app.ffmpeg.ctx->debug = 1;
 
     res = avcodec_open2(app.ffmpeg.ctx, app.ffmpeg.codec, NULL);
@@ -87,8 +86,8 @@ error:
 
 int ffmpeg_decode()
 {
-    DEBUG("ffmpeg_decode: app.enc_buf %p(%d)",
-         app.enc_buf, app.enc_buf_length);
+    // DEBUG("ffmpeg_decode: app.enc_buf %p(%d)",
+    //      app.enc_buf, app.enc_buf_length);
 
     app.ffmpeg.pkt.data = app.enc_buf;
     app.ffmpeg.pkt.size = app.enc_buf_length;

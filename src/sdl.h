@@ -3,7 +3,7 @@
 
 #define SDL_MESSAGE(call) \
 { \
-    fprintf(stderr, "ERROR: "#call" returned error: %s\n%s:%d - %s\n", \
+    fprintf(stderr, "\033[1;31m"#call" returned error: %s\n%s:%d - %s\033[0m\n", \
         SDL_GetError(), __FILE__, __LINE__, __FUNCTION__); \
 }
 
@@ -11,7 +11,7 @@
 { \
     int __res = call; \
     if (__res != 0) { \
-        fprintf(stderr, "ERROR: "#call" returned error: %s (%d)\n%s:%d - %s\n", \
+        fprintf(stderr, "\033[1;31m"#call" returned error: %s (%d)\n%s:%d - %s\033[0m\n", \
             SDL_GetError(), __res, __FILE__, __LINE__, __FUNCTION__); \
         goto error; \
     } \

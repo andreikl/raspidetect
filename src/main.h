@@ -2,14 +2,16 @@
 #define main_h
 
 #define VIDEO_FORMAT_UNKNOWN_STR "Unknown"
+#define VIDEO_FORMAT_YUYV_STR    "YUYV"
 #define VIDEO_FORMAT_YUV422_STR  "YUV422"
 #define VIDEO_FORMAT_YUV444_STR  "YUV444"
 #define VIDEO_FORMAT_H264_STR    "H264"
 
 #define VIDEO_FORMAT_UNKNOWN 0
-#define VIDEO_FORMAT_YUV422  1
-#define VIDEO_FORMAT_YUV444  2 //three separate planes - Y, Cb, Cr
-#define VIDEO_FORMAT_H264    3
+#define VIDEO_FORMAT_YUYV    1
+#define VIDEO_FORMAT_YUV422  2
+#define VIDEO_FORMAT_YUV444  3
+#define VIDEO_FORMAT_H264    4
 
 #define VIDEO_OUTPUT_NULL_STR   "null"
 #define VIDEO_OUTPUT_FILE_STR   "file"
@@ -27,8 +29,6 @@
 #define VIDEO_WIDTH_DEF 640
 #define VIDEO_HEIGHT "-h"
 #define VIDEO_HEIGHT_DEF 480
-#define VIDEO_FORMAT "-f"
-#define VIDEO_FORMAT_DEF VIDEO_FORMAT_YUV422_STR
 #define VIDEO_OUTPUT "-o"
 #define VIDEO_OUTPUT_DEF VIDEO_OUTPUT_FILE_STR","VIDEO_OUTPUT_SDL_STR","VIDEO_OUTPUT_RFB_STR
 
@@ -45,7 +45,9 @@
 #define VERBOSE "-d"
 #define VERBOSE_DEF 0
 #define OUTPUT_PATH "-f"
-#define OUTPUT_PATH_DEF "null"
+#define OUTPUT_PATH_DEF OUTPUT_PATH_NULL
+#define OUTPUT_PATH_STDOUT "stdout"
+#define OUTPUT_PATH_NULL "null"
 #define TFL_MODEL_PATH "-m"
 #define TFL_MODEL_PATH_DEF "./tflite_models/detect.tflite"
 #define DN_MODEL_PATH "-m"
@@ -63,18 +65,8 @@
 #define FONT_NAME "Vera.ttf"
 #define FONT_PATH FONT_DIR"/"FONT_NAME
 
-// Check windows
-#if _WIN32 || _WIN64
-    #if _WIN64
-        #define ENV64BIT
-    #else
-        #define ENV32BIT
-    #endif
-#endif
-
-// Check GCC
 #if __GNUC__
-    #if __x86_64__ || __ppc64__
+    #if __x86_64__ || __ppc64__ || __aarch64__
         #define ENV64BIT
     #else
         #define ENV32BIT
@@ -332,7 +324,7 @@ struct filter_t {
     int (*process_frame)(uint8_t *buffer);
 
 
-    uint8_t *(*get_buffer)(int *in_format, int *out_format, int *length);
+    uint8_t *(*get_buffer)(int *out_format, int *length);
     int (*get_in_formats)(const struct format_mapping_t *formats[]);
     int (*get_out_formats)(const struct format_mapping_t *formats[]);
 };
@@ -363,7 +355,6 @@ struct app_state_t {
     // common properties
     int video_width;
     int video_height;
-    int video_format;
     int video_output;
 
     int port;

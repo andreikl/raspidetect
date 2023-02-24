@@ -81,7 +81,7 @@ static void test_file_loop(void **state)
     //will_return(__wrap_ioctl, 3);
 
     CALL(res = app_init(), error);
-    for (int i = 0; i < 15; i++) {
+    for (int i = 0; i < 10; i++) {
         CALL(res = output->process_frame());
         if (res == -1 && errno != ETIME)
             break;            

@@ -30,7 +30,8 @@ static struct format_mapping_t file_formats[] = {
 };
 
 struct file_state_t file = {
-    .output = NULL
+    .output = NULL,
+    .is_started = 0
 };
 
 extern struct app_state_t app;
@@ -39,15 +40,53 @@ extern struct filter_t filters[MAX_FILTERS];
 extern struct output_t outputs[MAX_OUTPUTS];
 extern int is_abort;
 
+static int file_stop()
+{
+    ASSERT_INT(file.is_started, ==, 1, cleanup);
+    file.is_started = 0;
+    DEBUG("output[%s] has been stopped", file.output->name);
+    return 0;
+
+cleanup:
+    if (!errno) errno = EAGAIN;
+    return -1;
+}
+
+static int file_is_started()
+{
+    return file.is_started;
+}
+
+static void file_cleanup()
+{
+    if (file_is_started())
+        file_stop();
+}
+
 static int file_init()
 {
     return 0;
 }
 
+static int file_start()
+{
+    ASSERT_INT(file.is_started, ==, 0, cleanup);
+    file.is_started = 1;
+    DEBUG("output[%s] has been started", file.output->name);
+    return 0;
+
+cleanup:
+    if (!errno) errno = EAGAIN;
+    return -1;
+}
+
 static int file_process_frame()
 {
     int res = 0;
+
     struct output_t *output = file.output;
+    if (!output->is_started()) CALL(output->start(), cleanup);
+
     int in_format = output->start_format;
     int out_format = output->start_format;
     if (!input.is_started()) CALL(input.start(in_format), cleanup);
@@ -61,7 +100,7 @@ static int file_process_frame()
         if (!filter->is_started())
             CALL(filter->start(in_format, out_format), cleanup);
         CALL(filter->process_frame(buffer), cleanup);
-        buffer = filter->get_buffer(NULL, NULL, &length);
+        buffer = filter->get_buffer(NULL, &length);
         if (!length)
             break;
     }
@@ -73,10 +112,6 @@ static int file_process_frame()
 cleanup:
     if (!errno) errno = EAGAIN;
     return -1;
-}
-
-static void file_cleanup()
-{
 }
 
 static int file_get_formats(const struct format_mapping_t *formats[])
@@ -98,7 +133,9 @@ void file_construct()
         outputs[i].context = &file;
         outputs[i].init = file_init;
         outputs[i].cleanup = file_cleanup;
-
+        outputs[i].is_started = file_is_started;
+        outputs[i].start = file_start;
+        outputs[i].stop = file_stop;
         outputs[i].process_frame = file_process_frame;
         outputs[i].get_formats = file_get_formats;
     }

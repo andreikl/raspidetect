@@ -96,8 +96,6 @@ static void print_help()
     printf("%s: help\n", HELP);
     printf("%s: video width, default: %d\n", VIDEO_WIDTH, VIDEO_WIDTH_DEF);
     printf("%s: video height, default: %d\n", VIDEO_HEIGHT, VIDEO_HEIGHT_DEF);
-    printf("%s: video format, default: %s\n", VIDEO_FORMAT, VIDEO_FORMAT_DEF);
-    printf("\toptions: "VIDEO_FORMAT_YUV422_STR"\n");
     printf("%s: output, default: %s\n", VIDEO_OUTPUT, VIDEO_OUTPUT_DEF);
     printf("\toptions: "VIDEO_OUTPUT_NULL_STR", "VIDEO_OUTPUT_FILE_STR", "
         VIDEO_OUTPUT_SDL_STR", "VIDEO_OUTPUT_RFB_STR"\n");
@@ -123,12 +121,11 @@ static int main_function()
 
     DEBUG("camera_num: %d", app.camera_num);
     DEBUG("camera_name: %s", app.camera_name);
-    DEBUG("camera max size: %d, %d", app.camera_max_width, app.camera_max_height);
-    DEBUG("video size: %d, %d", app.video_width, app.video_height);
-    DEBUG("video format: %s", app_get_video_format_str(app.video_format));
+    DEBUG("camera max resolution: %d, %d", app.camera_max_width, app.camera_max_height);
+    DEBUG("video resolution: %d, %d", app.video_width, app.video_height);
     DEBUG("video output: %s", app_get_video_output_str(app.video_output));
-    DEBUG("window size: %d, %d", app.window_width, app.window_height);
-    DEBUG("worker size: %d, %d", app.worker_width, app.worker_height);
+    DEBUG("window resolution: %d, %d", app.window_width, app.window_height);
+    DEBUG("worker resolution: %d, %d", app.worker_width, app.worker_height);
 
 #ifdef CONTROL
     if (control_init()) {
@@ -188,9 +185,9 @@ static int main_function()
     //     goto error;
     // }
 
-    res = pthread_mutex_init(app.buffer_mutex, NULL);
+    res = pthread_mutex_init(&app.buffer_mutex, NULL);
     if (res) {
-        fprintf(stderr, "ERROR: pthread_mutex_init failed to init buffer_mutex with code: %d\n", res);
+        CALL_CUSTOM_MESSAGE(pthread_mutex_init(&app.buffer_mutex), res);
         goto error;
     }
 
@@ -207,6 +204,7 @@ static int main_function()
 
     while (!is_abort) {
         for (int i = 0; outputs[i].context != NULL && i < MAX_OUTPUTS; i++) {
+            //DEBUG("process: %s", outputs[i].name);
             CALL(res = outputs[i].process_frame());
             if (res == -1 && errno != ETIME)
                 break;            
@@ -413,7 +411,6 @@ int main(int argc, char** argv)
     h = KH_INIT(argvs_hash_t);
     utils_parse_args(argc, argv);
 
-    app_set_default_state();
     unsigned verbose = KH_GET(argvs_hash_t, h, VERBOSE);
     if (verbose != KH_END(h)) {
         app.verbose = 1;
@@ -422,6 +419,8 @@ int main(int argc, char** argv)
     else {
         app.verbose = 0;
     }
+
+    app_set_default_state();
 
     unsigned help = KH_GET(argvs_hash_t, h, HELP);
     if (help != KH_END(h)) {

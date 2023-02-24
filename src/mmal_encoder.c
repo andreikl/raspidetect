@@ -18,69 +18,462 @@
 
 #include "main.h"
 #include "utils.h"
-#include "mmal.h"
 
-#include "bcm_host.h"
+#include "mmal_encoder.h"
+
+static char* mmal_errors[16] = {
+    "MMAL_SUCCESS",
+    "MMAL_ENOMEM",
+    "MMAL_ENOSPC",
+    "MMAL_EINVAL",
+    "MMAL_ENOSYS",
+    "MMAL_ENOENT",
+    "MMAL_ENXIO",
+    "MMAL_EIO",
+    "MMAL_ESPIPE",
+    "MMAL_ECORRUPT",
+    "MMAL_ENOTREADY",
+    "MMAL_ECONFIG",
+    "MMAL_EISCONN",
+    "MMAL_ENOTCONN",
+    "MMAL_EAGAIN",
+    "MMAL_EFAULT"
+};
+
+static struct format_mapping_t mmal_input_formats[] = {
+    {
+        .format = VIDEO_FORMAT_YUYV,
+        .internal_format = MMAL_ENCODING_I422,
+        .is_supported = 1
+    }
+};
+static struct format_mapping_t mmal_output_formats[] = {
+    {
+        .format = VIDEO_FORMAT_H264,
+        .internal_format = MMAL_ENCODING_H264,
+        .is_supported = 1
+    }
+};
+
+static struct format_mapping_t *mmal_input_format = NULL;
+static struct format_mapping_t *mmal_output_format = NULL;
+static struct mmal_encoder_state_t mmal = {
+    .filter = NULL,
+    .encoder = NULL,
+    .input_port = NULL,
+    .input_pool = NULL,
+    .output_port = NULL,
+    .output_pool = NULL,
+    .is_mutex = 0,
+    .in_buf = NULL,
+    .out_buf = NULL,
+    .out_mmal_buf = NULL,
+    .out_buf_used = 0
+};
 
 extern struct app_state_t app;
-extern int is_abort;
+extern struct filter_t filters[MAX_FILTERS];
 
-static const char* get_mmal_message(int result)
+static void input_buffer_callback(MMAL_PORT_T *port, MMAL_BUFFER_HEADER_T *buffer)
 {
-    if (result == MMAL_SUCCESS) {
-        return "MMAL_SUCCESS";
+    mmal_buffer_header_release(buffer);
+}
+
+static void output_buffer_callback(MMAL_PORT_T *port, MMAL_BUFFER_HEADER_T *buffer)
+{
+    int res = pthread_mutex_lock(&mmal.mutex);
+    if (res) {
+        CALL_CUSTOM_MESSAGE(pthread_mutex_lock(&mmal.mutex), res);
+        goto error;
     }
-    else if (result == MMAL_ENOMEM) {
-        return "MMAL_ENOMEM: Out of memory";
+    MMAL_CALL(mmal_buffer_header_mem_lock(buffer), buffer_unlock);
+
+    ASSERT_INT(mmal.out_buf_used + buffer->length,
+        <,
+        MMAL_OUT_BUFFER_SIZE,
+        mmal_unlock);
+    
+    // DEBUG("copy buffer, source: %p, dest: %p, length: %d",
+    //     buffer->data, mmal.out_buf, buffer->length);
+    memcpy(mmal.out_mmal_buf + mmal.out_buf_used, buffer->data, buffer->length);
+    mmal.out_buf_used += buffer->length;
+
+    mmal_buffer_header_mem_unlock(buffer);
+
+    res = pthread_mutex_unlock(&mmal.mutex);
+    if (res) {
+        CALL_CUSTOM_MESSAGE(pthread_mutex_unlock(&mmal.mutex), res);
+        goto error;
     }
-    else if (result == MMAL_ENOSPC) {
-        return "MMAL_ENOSPC: Out of resources (other than memory)";
+
+    mmal_buffer_header_release(buffer);
+
+    if (mmal.output_pool && port->is_enabled) {
+        MMAL_QUEUE_T *queue = mmal.output_pool->queue;
+
+        MMAL_BUFFER_HEADER_T *buffer = mmal_queue_get(queue);
+        if (!buffer) {
+            MMAL_MESSAGE(mmal_queue_get(queue), MMAL_EAGAIN);
+            goto error;
+        }
+        MMAL_CALL(mmal_port_send_buffer(port, buffer), error);
     }
-    else if (result == MMAL_EINVAL) {
-        return "MMAL_EINVAL: Argument is invalid";
+
+    // unlock encoder to get new buffer;
+    CALL(sem_post(&mmal.semaphore), error);
+    return;
+
+mmal_unlock:
+    mmal_buffer_header_mem_unlock(buffer);
+
+buffer_unlock:
+    res = pthread_mutex_unlock(&mmal.mutex);
+    if (res) {
+        CALL_CUSTOM_MESSAGE(pthread_mutex_unlock(&mmal.mutex), res);
     }
-    else if (result == MMAL_ENOSYS) {
-        return "MMAL_ENOSYS: Function not implemented";
+error:
+    return;
+}
+
+static int fill_port_buffer(MMAL_PORT_T *port, MMAL_POOL_T *pool)
+{
+    int num = mmal_queue_length(pool->queue);
+    for (int q = 0; q < num; q++) {
+        MMAL_BUFFER_HEADER_T *buffer = mmal_queue_get(pool->queue);
+        if (!buffer) {
+            MMAL_MESSAGE(mmal_queue_get(pool->queue), MMAL_EAGAIN);
+            goto cleanup;
+        }
+        MMAL_CALL(mmal_port_send_buffer(port, buffer), cleanup);
     }
-    else if (result == MMAL_ENOENT) {
-        return "MMAL_ENOENT: No such file or directory";
+    return 0;
+
+cleanup:
+    if (errno == 0)
+        errno = EAGAIN;
+    return -1;
+}
+
+static int mmal_stop()
+{
+    ASSERT_PTR(mmal_input_format, !=, NULL, cleanup);
+    ASSERT_PTR(mmal_output_format, !=, NULL, cleanup);
+
+    if (mmal_input_format) {
+        MMAL_CALL(mmal_port_disable(mmal.input_port), cleanup);
+        mmal_input_format = NULL;
+        mmal.input_port = NULL;
+        mmal.input_pool = NULL;
     }
-    else if (result == MMAL_ENXIO) {
-        return "MMAL_ENXIO: No such device or address";
+
+    if (mmal_output_format) {
+        MMAL_CALL(mmal_port_disable(mmal.output_port), cleanup);
+        mmal_output_format = NULL;
+        mmal.output_port = NULL;
+        mmal.output_pool = NULL;
     }
-    else if (result == MMAL_EIO) {
-        return "MMAL_EIO: I/O error";
+
+    DEBUG("filter[%s] has been stopped", mmal.filter->name);
+    return 0;
+
+cleanup:
+    if (errno == 0)
+        errno = EAGAIN;
+    return -1;
+}
+
+static int mmal_is_started()
+{
+    return mmal_input_format != NULL && mmal_output_format != NULL? 1: 0;
+}
+
+void mmal_cleanup()
+{
+    if (mmal_is_started())
+        mmal_stop();
+
+    if (mmal.out_mmal_buf) {
+        free(mmal.out_mmal_buf);
+        mmal.out_mmal_buf = NULL;
     }
-    else if (result == MMAL_ESPIPE) {
-        return "MMAL_ESPIPE: Illegal seek";
+
+    if (mmal.out_buf) {
+        free(mmal.out_buf);
+        mmal.out_buf = NULL;
     }
-    else if (result == MMAL_ECORRUPT) {
-        return "MMAL_ECORRUPT: Data is corrupt";
+
+    if (mmal.in_buf) {
+        free(mmal.in_buf);
+        mmal.in_buf = NULL;
     }
-    else if (result == MMAL_ENOTREADY) {
-        return "MMAL_ENOTREADY: Component is not ready";
+
+    if (mmal.encoder) {
+        MMAL_CALL(mmal_component_destroy(mmal.encoder));
+        mmal.encoder = NULL;
     }
-    else if (result == MMAL_ECONFIG) {
-        return "MMAL_ECONFIG: Component is not configured";
+
+    if (mmal.is_mutex) {
+        int res = pthread_mutex_destroy(&mmal.mutex);
+        if (res) {
+            errno = res;
+            CALL_MESSAGE(pthread_mutex_destroy(&mmal.mutex));
+        }
+        mmal.is_mutex = 0;
     }
-    else if (result == MMAL_EISCONN) {
-        return "MMAL_EISCONN: Port is already connected";
-    }
-    else if (result == MMAL_ENOTCONN) {
-        return "MMAL_ENOTCONN: Port is disconnected";
-    }
-    else if (result == MMAL_EAGAIN) {
-        return "MMAL_EAGAIN: Resource temporarily unavailable. Try again later";
-    }
-    else if (result == MMAL_EFAULT) {
-        return "MMAL_EFAULT: Bad address";
-    }
-    else {
-        return "UNKNOWN";
+
+    if (mmal.is_semaphore) {
+        CALL(sem_destroy(&mmal.semaphore));
+        mmal.is_semaphore = 0;
     }
 }
 
-int mmal_get_capabilities(int camera_num, char *camera_name, int *width, int *height )
+static int mmal_start(int input_format, int output_format)
+{
+    ASSERT_PTR(mmal.out_mmal_buf, !=, NULL, cleanup);
+    ASSERT_PTR(mmal.out_buf, !=, NULL, cleanup)
+    ASSERT_PTR(mmal.encoder, !=, NULL, cleanup);
+    ASSERT_INT(mmal.encoder->output[0]->buffer_num, >, 0, cleanup);
+    ASSERT_PTR(mmal_input_format, ==, NULL, cleanup);
+    ASSERT_PTR(mmal_output_format, ==, NULL, cleanup);
+
+    int formats_len = ARRAY_SIZE(mmal_input_formats);
+    for (int i = 0; i < formats_len; i++) {
+        struct format_mapping_t *f = mmal_input_formats + i;
+        if (f->format == input_format && f->is_supported) {
+            mmal_input_format = f;
+            break;
+        }
+    }
+    if (mmal_input_format == NULL) {
+        ERROR("Input format isn't supported by device or application");
+        errno = EINVAL;
+        goto cleanup;
+    }
+
+    formats_len = ARRAY_SIZE(mmal_output_formats);
+    for (int i = 0; i < formats_len; i++) {
+        struct format_mapping_t *f = mmal_output_formats + i;
+        if (f->format == output_format && f->is_supported) {
+            mmal_output_format = f;
+            break;
+        }
+    }
+    if (mmal_output_format == NULL) {
+        ERROR("Outoput format isn't supported by device or application");
+        errno = EINVAL;
+        goto cleanup;
+    }
+
+
+    mmal.input_port = mmal.encoder->input[0];
+    mmal.input_port->format->encoding = mmal_input_format->internal_format;
+    mmal.input_port->format->es->video.width = app.video_width;
+    mmal.input_port->format->es->video.height = app.video_height;
+    mmal.input_port->format->es->video.crop.x = 0;
+    mmal.input_port->format->es->video.crop.y = 0;
+    mmal.input_port->format->es->video.crop.width = app.video_width;
+    mmal.input_port->format->es->video.crop.height = app.video_height;
+    mmal.input_port->buffer_size = mmal.input_port->buffer_size_recommended;
+    mmal.input_port->buffer_num = mmal.input_port->buffer_num_recommended;
+    MMAL_CALL(mmal_port_format_commit(mmal.input_port), cleanup);
+
+    mmal.output_port = mmal.encoder->output[0];
+    mmal.output_port->format->encoding =  mmal_output_format->internal_format;
+    mmal.output_port->format->es->video.width = app.video_width;
+    mmal.output_port->format->es->video.height = app.video_height;
+    mmal.output_port->format->es->video.crop.x = 0;
+    mmal.output_port->format->es->video.crop.y = 0;
+    mmal.output_port->format->es->video.crop.width = app.video_width;
+    mmal.output_port->format->es->video.crop.height = app.video_height;
+    mmal.output_port->buffer_size = mmal.output_port->buffer_size_recommended;
+    mmal.output_port->buffer_num = mmal.output_port->buffer_num_recommended;
+    MMAL_CALL(mmal_port_format_commit(mmal.output_port), cleanup);
+
+    ASSERT_INT(mmal.output_port->buffer_size, <=, MMAL_OUT_BUFFER_SIZE, cleanup);
+    //DEBUG("mmal.input_port->buffer_num: %d", mmal.input_port->buffer_num);
+
+    mmal.input_pool = mmal_port_pool_create(mmal.input_port,
+        mmal.input_port->buffer_num,
+        mmal.input_port->buffer_size);
+    if (!mmal.input_pool) {
+        MMAL_MESSAGE(mmal_port_pool_create(mmal.input_port, ...), MMAL_EAGAIN);
+        goto cleanup;
+    }
+
+    mmal.output_pool = mmal_port_pool_create(mmal.output_port,
+        mmal.output_port->buffer_num,
+        mmal.output_port->buffer_size);
+    if (!mmal.output_port) {
+        MMAL_MESSAGE(mmal_port_pool_create(mmal.output_port, ...), MMAL_EAGAIN);
+        goto cleanup;
+    }
+
+    MMAL_CALL(mmal_port_enable(mmal.input_port, input_buffer_callback), cleanup);
+    MMAL_CALL(mmal_port_enable(mmal.output_port, output_buffer_callback), cleanup);
+
+    CALL(fill_port_buffer(mmal.output_port, mmal.output_pool), cleanup);
+
+    DEBUG("filter[%s] has been started", mmal.filter->name);
+    return 0;
+
+cleanup:
+    mmal_input_format = NULL;
+    mmal_output_format = NULL;
+
+    if (errno == 0)
+        errno = EAGAIN;
+    return -1;
+}
+
+static int mmal_init()
+{
+    MMAL_CALL(mmal_component_create(MMAL_COMPONENT_DEFAULT_VIDEO_ENCODER, &mmal.encoder), cleanup);
+
+    ASSERT_INT(mmal.is_mutex, ==, 0, cleanup)
+    int res = pthread_mutex_init(&mmal.mutex, NULL);
+    if (res) {
+        CALL_CUSTOM_MESSAGE(pthread_mutex_init(&mmal.mutex), res);
+        goto cleanup;
+    }
+    mmal.is_mutex = 1;
+
+    ASSERT_INT(mmal.is_semaphore, ==, 0, cleanup)
+    CALL(sem_init(&mmal.semaphore, 0, 0), cleanup);
+    mmal.is_semaphore = 1;
+
+    ASSERT_PTR(mmal.out_mmal_buf, ==, NULL, cleanup)
+    mmal.out_mmal_buf = malloc(MMAL_OUT_BUFFER_SIZE);
+    if (!mmal.out_mmal_buf) {
+        CALL_MESSAGE(malloc(MMAL_OUT_BUFFER_SIZE));
+        goto cleanup;
+    }
+
+    ASSERT_PTR(mmal.out_buf, ==, NULL, cleanup)
+    mmal.out_buf = malloc(MMAL_OUT_BUFFER_SIZE);
+    if (!mmal.out_buf) {
+        CALL_MESSAGE(malloc(MMAL_OUT_BUFFER_SIZE));
+        goto cleanup;
+    }
+    return 0;
+
+cleanup:
+    mmal_cleanup();
+    if (errno == 0)
+        errno = EAGAIN;
+    return -1;
+}
+
+static int mmal_process_frame(uint8_t *buffer)
+{
+    ASSERT_PTR(mmal_input_format, !=, NULL, cleanup);
+    ASSERT_PTR(mmal_output_format, !=, NULL, cleanup);
+
+    if (!mmal.in_buf) {
+        mmal.in_buf = malloc((app.video_width * app.video_height) << 1);
+        if (!mmal.in_buf) {
+            CALL_MESSAGE(malloc());
+            goto cleanup;
+        }
+    }
+
+    // convert YUYV to YUV422
+    int half = (app.video_width * app.video_height);
+    int quarter = half >> 1;
+    // convert Y parts
+    uint8_t* in = buffer;
+    uint8_t* out = mmal.in_buf;
+    int len = half;
+    // DEBUG("len: %d, half: %d, quarter: %d", (app.video_width * app.video_height) << 1, half,
+    //     quarter);
+    while (len > 0) {
+        *out = *in;
+        out++;
+        len--;
+        in += 2;
+    }
+    // convert U parts
+    in = buffer + 1;
+    len = quarter;
+    while (len > 0) {
+        *out = *in;
+        out++;
+        len--;
+        in += 4;
+    }
+    // convert V parts
+    in = buffer + 3;
+    len = quarter;
+    while (len > 0) {
+        *out = *in;
+        out++;
+        len--;
+        in += 4;
+    }
+
+    MMAL_BUFFER_HEADER_T *mmal_buffer = mmal_queue_get(mmal.input_pool->queue);
+    if (!mmal_buffer) {
+        MMAL_MESSAGE(mmal_queue_get(pool->queue), MMAL_EAGAIN);
+        goto cleanup;
+    }
+
+    mmal_buffer->length = (app.video_width * app.video_height) << 1;
+    //DEBUG("copy buffer, data: %p, length: %d", mmal_buffer->data, mmal_buffer->length);
+    memcpy(mmal_buffer->data, mmal.in_buf, mmal_buffer->length);
+
+    // wait when encoder encode buffer to process next one
+    int value = 0;
+    CALL(sem_getvalue(&mmal.semaphore, &value), cleanup);
+    while (value > 0) {
+        CALL(sem_wait(&mmal.semaphore), cleanup);
+        CALL(sem_getvalue(&mmal.semaphore, &value), cleanup);
+    }
+
+    MMAL_CALL(mmal_port_send_buffer(mmal.input_port, mmal_buffer), cleanup);
+
+    CALL(sem_wait(&mmal.semaphore), cleanup);
+    return 0;
+
+cleanup:
+    if (errno == 0)
+        errno = EAGAIN;
+    return -1;
+}
+
+static uint8_t *mmal_get_buffer(int *out_format, int *length)
+{
+    ASSERT_PTR(mmal_input_format, !=, NULL, cleanup);
+    ASSERT_PTR(mmal_output_format, !=, NULL, cleanup);
+
+    if (out_format)
+        *out_format = mmal_output_format->format;
+
+    int res = pthread_mutex_lock(&mmal.mutex);
+    if (res) {
+        CALL_CUSTOM_MESSAGE(pthread_mutex_lock(&mmal.mutex), res);
+        goto cleanup;
+    }
+
+    if (length)
+        *length = mmal.out_buf_used;
+    
+    memcpy(mmal.out_buf, mmal.out_mmal_buf, mmal.out_buf_used);
+    mmal.out_buf_used = 0;
+
+    res = pthread_mutex_unlock(&mmal.mutex);
+    if (res) {
+        CALL_CUSTOM_MESSAGE(pthread_mutex_unlock(&mmal.mutex), res);
+        goto cleanup;
+    }
+
+    return mmal.out_buf;
+
+cleanup:
+    if (errno == 0)
+        errno = EOPNOTSUPP;
+    return (uint8_t *)-1;
+}
+
+/*int mmal_get_capabilities(int camera_num, char *camera_name, int *width, int *height )
 {
     MMAL_COMPONENT_T *camera_info;
     MMAL_STATUS_T status;
@@ -139,95 +532,6 @@ static void control_callback(MMAL_PORT_T *port, MMAL_BUFFER_HEADER_T *buffer)
 
         }
     }
-}
-
-static void h264_input_buffer_callback(MMAL_PORT_T *port, MMAL_BUFFER_HEADER_T *buffer)
-{
-    app_state_t *app = (app_state_t *) port->userdata;
-    //    DEBUG("h264_input_buffer_callback: %s", __func__);
-    mmal_buffer_header_release(buffer);
-}
-
-static void h264_output_buffer_callback(MMAL_PORT_T *port, MMAL_BUFFER_HEADER_T *buffer)
-{
-    int res;
-    MMAL_BUFFER_HEADER_T *new_buffer;
-    app_state_t *app = (app_state_t *) port->userdata;
-    MMAL_POOL_T *pool = app.mmal.h264_output_pool;
-
-    res = pthread_mutex_lock(&app.mmal.h264_mutex);
-    if (res)
-        fprintf(stderr, "ERROR: pthread_mutex_lock failed to lock h264 buffer with code %d\n", res);
-
-    mmal_buffer_header_mem_lock(buffer);
-    memcpy(app.mmal.h264_buffer, buffer->data, buffer->length);
-    app.mmal.h264_buffer_length = buffer->length;
-    mmal_buffer_header_mem_unlock(buffer);
-
-    if (app.output_type == OUTPUT_STREAM) {
-        fwrite(app.mmal.h264_buffer, 1, app.mmal.h264_buffer_length, stdout);
-    }
-
-    res = pthread_mutex_unlock(&app.mmal.h264_mutex);
-    if (res)
-        fprintf(stderr, "ERROR: pthread_mutex_unlock failed to unlock h264 buffer with code %d\n", res);
-
-    res = sem_post(&app.mmal.h264_semaphore);
-    if (res) {
-        fprintf(stderr, "ERROR: sem_post failed to increase h264 buffer semaphore\n");
-    }
-
-    mmal_buffer_header_release(buffer);
-    if (port->is_enabled) {
-        MMAL_STATUS_T status;
-
-        new_buffer = mmal_queue_get(pool->queue);
-
-        if (new_buffer) {
-            status = mmal_port_send_buffer(port, new_buffer);
-        }
-
-        if (!new_buffer || status != MMAL_SUCCESS) {
-            fprintf(stderr, "ERROR: Unable to return a buffer to the video port\n");
-        }
-    }
-}
-
-static void fill_port_buffer(MMAL_PORT_T *port, MMAL_POOL_T *pool)
-{
-    int num = mmal_queue_length(pool->queue);
-
-    for (int q = 0; q < num; q++) {
-        MMAL_BUFFER_HEADER_T *buffer = mmal_queue_get(pool->queue);
-        if (!buffer) {
-            fprintf(stderr, "ERROR: Unable to get a required buffer %d from pool queue\n", q);
-        } else {
-            int res = mmal_port_send_buffer(port, buffer);
-            if (res) {
-                fprintf(stderr, "ERROR: mmal_port_send_buffer failed to send buffer to port with error: %d\n", res);
-            }
-        }
-    }
-}
-
-int camera_encode_buffer(char *buffer, int length)
-{
-    MMAL_BUFFER_HEADER_T *output_buffer = mmal_queue_get(app.mmal.h264_input_pool->queue);
-    int res = -1;
-
-    if (output_buffer) {
-        memcpy(output_buffer->data, buffer, length);
-        output_buffer->length = length;
-
-        res = mmal_port_send_buffer(app.mmal.h264_input_port, output_buffer);
-        if (res) {
-            fprintf(stderr, "ERROR: mmal_port_send_buffer failed to send buffer to encoder with error(%d, %s)\n", res, get_mmal_message(res));
-        }
-    }
-    else {
-        fprintf(stderr, "ERROR: h264 queue returns empty buffer\n");
-    }
-    return res;
 }
 
 int camera_open()
@@ -367,150 +671,41 @@ void camera_cleanup()
         mmal_component_destroy(app.mmal.camera);
         app.mmal.camera = NULL;
     }
+}*/
+
+static int mmal_get_in_formats(const struct format_mapping_t *formats[])
+{
+    if (mmal_input_formats != NULL)
+        *formats = mmal_input_formats;
+    return ARRAY_SIZE(mmal_input_formats);
 }
 
-int camera_create_h264_encoder()
+static int mmal_get_out_formats(const struct format_mapping_t *formats[])
 {
-    int res;
-    MMAL_STATUS_T status;
-    MMAL_COMPONENT_T *encoder = 0;
-
-    MMAL_PORT_T *input_port = NULL, *output_port = NULL;
-    MMAL_POOL_T *input_port_pool = NULL, *output_port_pool = NULL;
-
-    app.mmal.h264_buffer = malloc((app.width * app.height) << 1);
-    if (app.mmal.h264_buffer == NULL) {
-        fprintf(stderr, "ERROR: malloc failed to allocate memory for h264 buffer.\n");
-        goto error;
-    }
-
-    res = pthread_mutex_init(&app.mmal.h264_mutex, NULL);
-    if (res) {
-        fprintf(stderr, "ERROR: pthread_mutex_init failed to init h264 buffer mutex with code: %d\n", res);
-        goto error;
-    } else {
-        app.mmal.is_h264_mutex = 1;
-    }
-
-    res = sem_init(&app.mmal.h264_semaphore, 0, 0);
-    if (res) {
-	    fprintf(stderr, "ERROR: Failed to create h264 semaphore, return code: %d\n", res);
-        goto error;
-    } else {
-        app.mmal.is_h264_semaphore = 1;
-    }
-
-    status = mmal_component_create(MMAL_COMPONENT_DEFAULT_VIDEO_ENCODER, &encoder);
-    if (status != MMAL_SUCCESS) {
-        fprintf(stderr, "ERROR: unable to create encoder (%x)\n", status);
-        goto error;
-    }
-
-    app.mmal.h264_input_port = input_port = encoder->input[0];
-    app.mmal.h264_output_port = output_port = encoder->output[0];
-
-    mmal_format_copy(input_port->format, app.mmal.video_port->format);
-    //input_port->format->encoding = MMAL_ENCODING_RGB24;
-    //input_port->format->encoding_variant = MMAL_ENCODING_RGB24;
-    // input_port->format->es->video.width = app.worker_width;
-    // input_port->format->es->video.height = app.worker_height;
-    // input_port->format->es->video.crop.x = 0;
-    // input_port->format->es->video.crop.y = 0;
-    // input_port->format->es->video.crop.width = app.worker_width;
-    // input_port->format->es->video.crop.height = app.worker_height;
-    input_port->buffer_size = input_port->buffer_size_recommended;
-    input_port->buffer_num = input_port->buffer_num_recommended;
-
-    // Commit the port changes to the input port
-    status = mmal_port_format_commit(input_port);
-    if (status != MMAL_SUCCESS) {
-        fprintf(stderr, "ERROR: unable to commit encoder input port format (%x)\n", status);
-        goto error;
-    }
-
-    mmal_format_copy(output_port->format, input_port->format);
-    output_port->format->encoding = MMAL_ENCODING_H264;
-    //output_port->format->bitrate = 2000000;
-    //output_port->format->bitrate = 0;
-
-    output_port->buffer_size = output_port->buffer_size_recommended;
-    output_port->buffer_num = output_port->buffer_num_recommended;
-
-    // Commit the port changes to the output port
-    status = mmal_port_format_commit(output_port);
-    if (status != MMAL_SUCCESS) {
-        fprintf(stderr, "ERROR: unable to commit encoder output port format (%x)\n", status);
-        goto error;
-    }
-
-    //DEBUG("encoder h264 input buffer_size = %d", input_port->buffer_size);
-    //DEBUG("encoder h264 input buffer_num = %d", input_port->buffer_num);
-    //DEBUG("encoder h264 output buffer_size = %d", output_port->buffer_size);
-    //DEBUG("encoder h264 output buffer_num = %d", output_port->buffer_num);
-
-    app.mmal.h264_input_pool = input_port_pool = (MMAL_POOL_T *) mmal_port_pool_create(input_port,
-        input_port->buffer_num,
-        input_port->buffer_size);
-    input_port->userdata = (struct MMAL_PORT_USERDATA_T *) app;
-
-    status = mmal_port_enable(input_port, h264_input_buffer_callback);
-    if (status != MMAL_SUCCESS) {
-        fprintf(stderr, "ERROR: unable to enable encoder input port (%x)\n", status);
-        goto error;
-    }
-
-    app.mmal.h264_output_pool = output_port_pool = (MMAL_POOL_T *) mmal_port_pool_create(output_port,
-        output_port->buffer_num,
-        output_port->buffer_size);
-    output_port->userdata = (struct MMAL_PORT_USERDATA_T *) app;
-
-    status = mmal_port_enable(output_port, h264_output_buffer_callback);
-    if (status != MMAL_SUCCESS) {
-        fprintf(stderr, "ERROR: unable to enable encoder h264 output port (%x)\n", status);
-        goto error;
-    }
-
-    fill_port_buffer(output_port, output_port_pool);
-    app.mmal.encoder_h264 = encoder;
-
-    DEBUG("Encoder h264 has been created");
-    return 0;
-
-error:
-    camera_destroy_h264_encoder();
-    return 1;
+    if (mmal_output_formats != NULL)
+        *formats = mmal_output_formats;
+    return ARRAY_SIZE(mmal_output_formats);
 }
 
-void camera_cleanup_h264_encoder()
+void mmal_encoder_construct()
 {
-    int res = 0;
+    int i = 0;
+    while (i < MAX_FILTERS && filters[i].context != NULL)
+        i++;
 
-    if (app.mmal.encoder_h264) {
-        res = mmal_component_destroy(app.mmal.encoder_h264);
-        if (res) {
-            fprintf(stderr, "ERROR: mmal_component_destroy failed to destroy h264 encoder %d\n", res);
-        }
-        app.mmal.encoder_h264 = NULL;
-    }
+    if (i != MAX_FILTERS) {
+        mmal.filter = filters + i;
+        filters[i].name = "mmal_encoder";
+        filters[i].context = &mmal;
+        filters[i].stop = mmal_stop;
+        filters[i].cleanup = mmal_cleanup;
+        filters[i].init = mmal_init;
+        filters[i].start = mmal_start;
+        filters[i].is_started = mmal_is_started;
+        filters[i].process_frame = mmal_process_frame;
 
-    if (app.mmal.h264_buffer != NULL) {
-        free(app.mmal.h264_buffer);
-        app.mmal.h264_buffer = NULL;
-    }
-
-    if (app.mmal.is_h264_mutex) {
-        res = pthread_mutex_destroy(&app.mmal.h264_mutex);
-        if (res) {
-            fprintf(stderr, "ERROR: pthread_mutex_destroy failed to destroy h264 buffer mutex with code %d\n", res);
-        }
-        app.mmal.is_h264_mutex = 0;
-    }
-
-    if (app.mmal.is_h264_semaphore) {
-        res = sem_destroy(&app.mmal.h264_semaphore);
-        if (res) {
-            fprintf(stderr, "ERROR: sem_destroy failed to destroy h264 semaphore mutex with code %d\n", res);
-        }
-        app.mmal.is_h264_semaphore = 0;
+        filters[i].get_buffer = mmal_get_buffer;
+        filters[i].get_in_formats = mmal_get_in_formats;
+        filters[i].get_out_formats = mmal_get_out_formats;
     }
 }

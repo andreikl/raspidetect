@@ -28,6 +28,7 @@ extern struct output_t outputs[MAX_OUTPUTS];
 
 const char *video_formats[] = {
     VIDEO_FORMAT_UNKNOWN_STR,
+    VIDEO_FORMAT_YUYV_STR,
     VIDEO_FORMAT_YUV422_STR,
     VIDEO_FORMAT_YUV444_STR,
     VIDEO_FORMAT_H264_STR
@@ -68,17 +69,6 @@ error:
     return NULL;
 }
 
-int app_get_video_format_int(const char* format)
-{
-    int size = ARRAY_SIZE(video_formats);
-    for (int i = 1; i < size; i++) {
-        if (!strcmp(video_formats[i], format)) {
-            return i;
-        }
-    }
-    return 0;    
-}
-
 int app_get_video_output_int(const char* output)
 {
     ASSERT_PTR(output, !=, NULL, error);
@@ -114,8 +104,6 @@ void app_set_default_state()
 {
     app.video_width = utils_read_int_value(VIDEO_WIDTH, VIDEO_WIDTH_DEF);
     app.video_height = utils_read_int_value(VIDEO_HEIGHT, VIDEO_HEIGHT_DEF);
-    const char* format = utils_read_str_value(VIDEO_FORMAT, VIDEO_FORMAT_DEF);
-    app.video_format = app_get_video_format_int(format);
     const char *output = utils_read_str_value(VIDEO_OUTPUT, VIDEO_OUTPUT_DEF);
     app.video_output = app_get_video_output_int(output);
     app.port = utils_read_int_value(PORT, PORT_DEF);
@@ -166,10 +154,12 @@ void app_cleanup()
         outputs[i].cleanup();
     }
     for (int i = 0; i < MAX_FILTERS && filters[i].context != NULL; i++) {
-        if (filters[i].is_started) CALL(filters[i].stop())
+        if (filters[i].is_started()) {
+            CALL(filters[i].stop())
+        }
         filters[i].cleanup();
     }
-    if (input.is_started) CALL(input.stop());
+    if (input.is_started()) CALL(input.stop());
     input.cleanup();
 }
 
@@ -361,16 +351,16 @@ static int find_path(
 
 int app_init()
 {
-    DEBUG("input[%s].init...", input.name);
+    //DEBUG("input[%s].init...", input.name);
     CALL(input.init(), error);
 
     for (int i = 0; i < MAX_OUTPUTS && outputs[i].context != NULL; i++) {
-        DEBUG("output[%s].init...", outputs[i].name);
+        //DEBUG("output[%s].init...", outputs[i].name);
         CALL(outputs[i].init(), error);
     }
         
     for (int i = 0; i < MAX_FILTERS && filters[i].context != NULL; i++) {
-        DEBUG("filters[%s].init...", filters[i].name);
+        //DEBUG("filters[%s].init...", filters[i].name);
         CALL(filters[i].init(), error);
     }
 
@@ -460,6 +450,7 @@ int app_init()
         for (int i = 0; i < MAX_OUTPUTS && outputs[i].context != NULL; i++) {
             if (outputs[i].start_format != 0) {
                 buffer[0] = '\0';
+                int last_filter = -1;
                 for (int k = 0; k < MAX_FILTERS && outputs[i].filters[k].out_format; k++) {
                     int index = outputs[i].filters[k].index;
                     strcat(buffer, " -> ");
@@ -467,13 +458,25 @@ int app_init()
                     strcat(buffer, "[");
                     strcat(buffer, app_get_video_format_str(outputs[i].filters[k].out_format));
                     strcat(buffer, "]");
+                    last_filter = k;
                 }
-                DEBUG("path for %s, %s[%s]%s",
-                    outputs[i].name,
-                    input.name,
-                    app_get_video_format_str(outputs[i].start_format),
-                    buffer);
-            } else {
+                if (last_filter >= 0) {
+                    DEBUG("path for %s[%s]: %s[%s]%s",
+                        outputs[i].name,
+                        app_get_video_format_str(outputs[i].filters[last_filter].out_format),
+                        input.name,
+                        app_get_video_format_str(outputs[i].start_format),
+                        buffer);
+                }
+                else {
+                    DEBUG("path for %s[%s]: %s[%s]",
+                        outputs[i].name,
+                        app_get_video_format_str(outputs[i].start_format),
+                        input.name,
+                        app_get_video_format_str(outputs[i].start_format));
+                }
+            }
+            else {
                 DEBUG("path for %s doesn't exist", outputs[i].name);
             }
         }

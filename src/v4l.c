@@ -24,8 +24,13 @@
 
 static struct format_mapping_t v4l_formats[] = {
     {
-        .format = VIDEO_FORMAT_YUV422,
+        .format = VIDEO_FORMAT_YUYV,
         .internal_format = V4L2_PIX_FMT_YUYV,
+        .is_supported = 0
+    },
+    {
+        .format = VIDEO_FORMAT_YUV422,
+        .internal_format = V4L2_PIX_FMT_YUV422P,
         .is_supported = 0
     }
 };
@@ -196,9 +201,9 @@ static int v4l_init()
         .index = 0, .type = type
     };
     CALL(res = ioctl_enum(v4l.dev_id, VIDIOC_ENUM_FMT, &fmt), cleanup);
-    while (res >= 0 && !is_found) {
-        // DEBUG("pixelformat %c %c %c %c", GET_B(fmt.pixelformat),
-        //     GET_G(fmt.pixelformat), GET_R(fmt.pixelformat), GET_A(fmt.pixelformat));
+    while (res >= 0) {
+        // DEBUG("pixelformat %c %c %c %c", GET_B(fmt.pixelformat), GET_G(fmt.pixelformat),
+        //     GET_R(fmt.pixelformat), GET_A(fmt.pixelformat));
         for (int i = 0; i < formats_len; i++) {
             struct format_mapping_t *f = v4l_formats + i;
             if (f->internal_format == fmt.pixelformat) {
@@ -215,8 +220,8 @@ static int v4l_init()
                         app.video_height);
 
                     is_found = 1;
+                    break;
                 }
-                break;
             }
         }
 
@@ -247,7 +252,11 @@ static int v4l_start(int format)
             break;
         }
     }
-    ASSERT_PTR(v4l_format, !=, NULL, cleanup);
+    if (v4l_format == NULL) {
+        ERROR("Format isn't supported by device or application");
+        errno = EINVAL;
+        return -1;
+    }
 
     struct v4l2_format fmt;
     memset(&fmt, 0, sizeof(fmt));
@@ -277,7 +286,7 @@ static int v4l_start(int format)
     enum v4l2_buf_type type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
     CALL(ioctl_wait(v4l.dev_id, VIDIOC_STREAMON, &type), cleanup);
 
-    DEBUG("V4L has been started!!!");
+    DEBUG("input[%s] has been started!!!", input.name);
 
     return 0;
 cleanup:
@@ -334,11 +343,11 @@ cleanup:
 
 static int v4l_stop()
 {
+    ASSERT_PTR(v4l_format, !=, NULL, cleanup);
     enum v4l2_buf_type type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
     CALL(ioctl_wait(v4l.dev_id, VIDIOC_STREAMOFF, &type), cleanup);
-
     v4l_format = NULL;
-
+    DEBUG("input[%s] has been stopped!!!", input.name);
     return 0;
 
 cleanup:
