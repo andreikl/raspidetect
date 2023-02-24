@@ -551,6 +551,7 @@ extern "C" {
         const AVCodec* codec;
         AVCodecContext* ctx;
         AVFrame* fr;
+        AVFrame* hw_fr;
         AVPacket* pkt;
     };
 #endif //ENABLE_FFMPEG

@@ -12,6 +12,10 @@ void ffmpeg_destroy(struct app_state_t* app)
         av_packet_free(&app->ffmpeg.pkt);
         app->ffmpeg.pkt = NULL;
     }
+    if (app->ffmpeg.hw_fr) {
+        av_frame_free(&app->ffmpeg.hw_fr);
+        app->ffmpeg.hw_fr = NULL;
+    }
     if (app->ffmpeg.fr) {
         av_frame_free(&app->ffmpeg.fr);
         app->ffmpeg.fr = NULL;
@@ -91,6 +95,12 @@ int ffmpeg_init(struct app_state_t* app)
         goto error;
     }
 
+    app->ffmpeg.hw_fr = av_frame_alloc();
+    if (!app->ffmpeg.hw_fr) {
+        fprintf(stderr, "ERROR: av_frame_alloc can't allocate frame\n");
+        goto error;
+    }
+
     app->ffmpeg.pkt = av_packet_alloc();
     //av_init_packet(&app->ffmpeg.pkt);
 
@@ -115,28 +125,43 @@ int ffmpeg_decode(struct app_state_t* app, int start, int end)
     //     *(app->enc_buf + start - 1)
     // );
 
-    int got_frame = 0;
-    int res = app->ffmpeg.codec->decode(
-        app->ffmpeg.ctx,
-        app->ffmpeg.fr,
-        &got_frame,
-        app->ffmpeg.pkt
-    );
-    //fprintf(stderr, "INFO: app->ffmpeg.codec->decode: got_frame %d\n", got_frame);
+    int res = avcodec_send_packet(app->ffmpeg.ctx, app->ffmpeg.pkt);
     if (res < 0) {
-        fprintf(stderr, "ERROR: app->ffmpeg.codec->decode can't decode slice, res: %d\n", res);
+        fprintf(stderr, "ERROR: avcodec_send_packet failed to send package, res: %d\n", res);
         goto error;
     }
-    if (got_frame) {
-        GENERAL_CALL(pthread_mutex_lock(&app->dec_mutex), error);
+
+    res = avcodec_receive_frame(app->ffmpeg.ctx, app->ffmpeg.fr);
+    if (res < 0 && res != AVERROR(EAGAIN)) {
+        fprintf(stderr, "ERROR: avcodec_receive_frame failed to get package, res: %d\n", res);
+        goto error;
+    }
+
+    // int got_frame = 0;
+    // int res = app->ffmpeg.codec->decode(
+    //     app->ffmpeg.ctx,
+    //     app->ffmpeg.fr,
+    //     &got_frame,
+    //     app->ffmpeg.pkt
+    // );
+    //fprintf(stderr, "INFO: app->ffmpeg.codec->decode: got_frame %d\n", got_frame);
+    // if (res < 0) {
+    //     fprintf(stderr, "ERROR: app->ffmpeg.codec->decode can't decode slice, res: %d\n", res);
+    //     goto error;
+    // }
+    if (res != AVERROR(EAGAIN)) {
+        res = av_hwframe_transfer_data(app->ffmpeg.hw_fr, app->ffmpeg.fr, 0);
+        if (res < 0) {
+            fprintf(stderr, "ERROR: av_hwframe_transfer_data failed to transfer, res: %d\n", res);
+            goto error;
+        }
 
         app->dec_buf_length = av_image_copy_to_buffer(
             app->dec_buf, app->server_width * app->server_height * 4,
-            (const uint8_t* const *)app->ffmpeg.fr->data,
-            (const int*)app->ffmpeg.fr->linesize, app->ffmpeg.ctx->pix_fmt,
-            app->ffmpeg.ctx->width, app->ffmpeg.ctx->height, 1);
+            (const uint8_t* const *)app->ffmpeg.hw_fr->data,
+            (const int*)app->ffmpeg.hw_fr->linesize, (AVPixelFormat)app->ffmpeg.hw_fr->format,
+            app->ffmpeg.hw_fr->width, app->ffmpeg.hw_fr->height, 1);
 
-        GENERAL_CALL(pthread_mutex_unlock(&app->dec_mutex), unlockm);
 unlockm:
 
         // fprintf(stderr, "INFO: av_image_copy_to_buffer get buffer! size: %d\n",
@@ -148,15 +173,14 @@ unlockm:
         }
 
 #ifdef ENABLE_D3D
-        GENERAL_CALL(d3d_render_image(app), error);
+        //GENERAL_CALL(d3d_render_image(app), error);
 #endif //ENABLE_D3D
     }
 
     fprintf(
         stderr,
-        "INFO: app->ffmpeg.ctx->codec->decode returns %d, got_frame %d\n",
-        res,
-        got_frame);
+        "INFO: app->ffmpeg.ctx->codec->decode returns %d\n",
+        res);
 
     return 0;
 error:
