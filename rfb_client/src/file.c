@@ -16,8 +16,11 @@
 // along with this program; if not, write to the Free Software Foundation,
 // Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
+#include <unistd.h>
+
 #include "main.h"
 #include "utils.h"
+#include "ffmpeg.h"
 
 extern int is_terminated;
 extern struct app_state_t app;
@@ -73,7 +76,7 @@ static void *file_function(void* data)
 #endif //ENABLE_H264
 
 #ifdef ENABLE_FFMPEG
-        CALL(ffmpeg_decode(start, end), error);
+        CALL(ffmpeg_decode(), error);
 #endif //ENABLE_FFMPEG
     }
 

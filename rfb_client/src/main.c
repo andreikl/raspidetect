@@ -29,7 +29,9 @@
 #include "d3d.h"
 #include "dxva.h"
 #include "rfb.h"
+#include "file.h"
 #include "cuda.h"
+#include "ffmpeg.h"
 
 KHASH_MAP_INIT_STR(map_str, char*)
 KHASH_T(map_str) *h;

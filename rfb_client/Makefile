@@ -26,7 +26,7 @@ LDFLAGS = -Llib/x64 -Llib
 #COBJMACROS - allow c calls
 COMMON = -I../external/klib -DCOBJMACROS
 #-D_POSIX_C_SOURCE=199309L fixes some errors
-CFLAGS = -pthread -O3 -fPIC -Wall -Wno-implicit-function-declaration -Wno-unused-function -DNDEBUG -std=c17 -D_POSIX_C_SOURCE=199309L
+CFLAGS = -pthread -O3 -fPIC -Wall -Wno-unused-function -DNDEBUG -std=c17 -D_POSIX_C_SOURCE=199309L
 OBJ = main.o utils.o file.o
 
 ifeq ($(ENABLE_RFB), 1) 

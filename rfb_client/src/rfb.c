@@ -22,6 +22,7 @@
 #include "main.h"
 #include "utils.h"
 #include "rfb.h"
+#include "ffmpeg.h"
 
 #define RFB_SECURITY_NONE 1
 

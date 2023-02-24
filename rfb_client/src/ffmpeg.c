@@ -20,6 +20,7 @@
 #include "main.h"
 #include "utils.h"
 #include "ffmpeg.h"
+#include "d3d.h"
 
 extern struct app_state_t app;
 
