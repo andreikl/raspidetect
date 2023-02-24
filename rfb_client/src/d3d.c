@@ -38,6 +38,8 @@ static void *d3d_function(void* data)
             goto error;
         }
 
+        DEBUG("render");
+
         d3d_render_frame();
     }
 
@@ -180,7 +182,8 @@ error:
     return -1;
 }
 
-int d3d_render_image() {
+int d3d_render_image()
+{
     int res = 0;
     // RECT rect;
     // rect.left = 0; rect.top = 0;
@@ -194,59 +197,30 @@ int d3d_render_image() {
         app.d3d.surfaces[0], &d3d_rect, NULL, D3DLOCK_NOSYSLOCK
     ), unlocdec);
 
-    char* bytes = d3d_rect.pBits;
-    int chroma_buf_size = app.server_width * app.server_height;
-    for (int i = 0, j = 0; i < chroma_buf_size; i++, j += 4) {
-        bytes[j] = app.dec_buf[i];
-        //bytes[j] = 255;
+    //TODO: move to shader
+    // convert Grayscale to ARGB
+    uint8_t* in = app.dec_buf;
+    uint8_t* out = d3d_rect.pBits;
+    int len = app.server_width * app.server_height;
+    while(len >= 0) {
+        uint8_t y = *in;
+        in++;
+        *out = y;
+        out++;
+        *out = y;
+        out++;
+        *out = y;
+        out += 2;
+        len--;
     }
     // //DEBUG("memcpy: %p(%d)", app.dec_buf, app.dec_buf_length);
     // //DEBUG("INFO:%X%X%X%X", app.dec_buf[0], app.dec_buf[1], app.dec_buf[2], app.dec_buf[3]);
-    // int stride_d3d = d3d_rect.Pitch;
-    // int stride_buf = app.server_width;
-    
-    // int index_d3d = 0, index_buf = 0;
-    // // DEBUG("index_d3d: %d, index_buf: %d, stride_d3d: %d, stride_buf: %d, chroma_buf_size: %d",
-    // //     index_d3d, index_buf, stride_d3d, stride_buf, chroma_buf_size);
-    // for (
-    //     ;
-    //     index_buf < chroma_buf_size;
-    //     index_buf += stride_buf, index_d3d += stride_d3d
-    // ) {
-    //     memcpy(bytes + index_d3d, app.dec_buf + index_buf, stride_buf);
-    // }
-    // //memcpy(d3d_rect.pBits + index_d3d, app.dec_buf + index_buf, chroma_buf_size / 2);
-    // //memcpy(d3d_rect.pBits + index_d3d + chroma_buf_size / 2, app.dec_buf + index_buf, chroma_buf_size / 2);
-    // stride_d3d = stride_d3d;
-    // stride_buf = stride_buf;
-    // int luma_buf_end1 = chroma_buf_size + (chroma_buf_size / 2);
-    // // DEBUG("index_d3d: %d, index_buf: %d, stride_d3d: %d, stride_buf: %d, chroma_buf_size: %d",
-    // //     index_d3d, index_buf, stride_d3d, stride_buf, luma_buf_end1);
-    // for (
-    //     ;
-    //     index_buf < luma_buf_end1;
-    //     index_buf += stride_buf, index_d3d += stride_d3d
-    // ) {
-    //     memcpy(bytes + index_d3d, app.dec_buf + index_buf, stride_buf);
-    // }
-    // index_buf = chroma_buf_size;
-    // index_d3d = stride_d3d * app.server_height + stride_d3d * (app.server_height / 4);
-    // int luma_buf_end2 = chroma_buf_size + (chroma_buf_size / 4);
-    // // DEBUG("index_d3d: %d, index_buf: %d, stride_d3d: %d, stride_buf: %d, chroma_buf_size: %d",
-    // //     index_d3d, index_buf, stride_d3d, stride_buf, luma_buf_end1);
-    // for (
-    //     ;
-    //     index_buf < luma_buf_end2;
-    //     index_buf += stride_buf, index_d3d += stride_d3d
-    // ) {
-    //     memcpy(bytes + index_d3d, app.dec_buf + index_buf, stride_buf);
-    // }
 
     D3D_CALL(hres = IDirect3DSurface9_UnlockRect(app.d3d.surfaces[0]));
     if (FAILED(hres)) {
         res = -1;
     }
-        
+
 unlocdec:
     int ret = 0;
     CALL(ret = pthread_mutex_unlock(&app.dec_mutex));

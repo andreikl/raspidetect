@@ -42,7 +42,7 @@ static char* mmal_errors[16] = {
 
 static struct format_mapping_t mmal_input_formats[] = {
     {
-        .format = VIDEO_FORMAT_YUV422,
+        .format = VIDEO_FORMAT_YUYV,
         .internal_format = MMAL_ENCODING_I422,
         .is_supported = 1
     }
@@ -58,15 +58,17 @@ static struct format_mapping_t mmal_output_formats[] = {
 static struct format_mapping_t *mmal_input_format = NULL;
 static struct format_mapping_t *mmal_output_format = NULL;
 static struct mmal_encoder_state_t mmal = {
+    .filter = NULL,
     .encoder = NULL,
-    .out_buf = NULL,
-    .mmal_buf = NULL,
-    .mmal_buf_used = 0,
     .input_port = NULL,
     .input_pool = NULL,
     .output_port = NULL,
     .output_pool = NULL,
-    .is_mutex = 0
+    .is_mutex = 0,
+    .in_buf = NULL,
+    .out_buf = NULL,
+    .out_mmal_buf = NULL,
+    .out_buf_used = 0
 };
 
 extern struct app_state_t app;
@@ -86,15 +88,15 @@ static void output_buffer_callback(MMAL_PORT_T *port, MMAL_BUFFER_HEADER_T *buff
     }
     MMAL_CALL(mmal_buffer_header_mem_lock(buffer), buffer_unlock);
 
-    ASSERT_INT(mmal.mmal_buf_used + buffer->length,
+    ASSERT_INT(mmal.out_buf_used + buffer->length,
         <,
         MMAL_OUT_BUFFER_SIZE,
         mmal_unlock);
     
     // DEBUG("copy buffer, source: %p, dest: %p, length: %d",
     //     buffer->data, mmal.out_buf, buffer->length);
-    memcpy(mmal.mmal_buf + mmal.mmal_buf_used, buffer->data, buffer->length);
-    mmal.mmal_buf_used += buffer->length;
+    memcpy(mmal.out_mmal_buf + mmal.out_buf_used, buffer->data, buffer->length);
+    mmal.out_buf_used += buffer->length;
 
     mmal_buffer_header_mem_unlock(buffer);
 
@@ -154,6 +156,9 @@ cleanup:
 
 static int mmal_stop()
 {
+    ASSERT_PTR(mmal_input_format, !=, NULL, cleanup);
+    ASSERT_PTR(mmal_output_format, !=, NULL, cleanup);
+
     if (mmal_input_format) {
         MMAL_CALL(mmal_port_disable(mmal.input_port), cleanup);
         mmal_input_format = NULL;
@@ -168,16 +173,7 @@ static int mmal_stop()
         mmal.output_pool = NULL;
     }
 
-    if (mmal.mmal_buf) {
-        free(mmal.mmal_buf);
-        mmal.mmal_buf = NULL;
-    }
-
-    if (mmal.out_buf) {
-        free(mmal.out_buf);
-        mmal.out_buf = NULL;
-    }
-
+    DEBUG("filter[%s] has been stopped", mmal.filter->name);
     return 0;
 
 cleanup:
@@ -186,9 +182,30 @@ cleanup:
     return -1;
 }
 
+static int mmal_is_started()
+{
+    return mmal_input_format != NULL && mmal_output_format != NULL? 1: 0;
+}
+
 void mmal_cleanup()
 {
-    mmal_stop();
+    if (mmal_is_started())
+        mmal_stop();
+
+    if (mmal.out_mmal_buf) {
+        free(mmal.out_mmal_buf);
+        mmal.out_mmal_buf = NULL;
+    }
+
+    if (mmal.out_buf) {
+        free(mmal.out_buf);
+        mmal.out_buf = NULL;
+    }
+
+    if (mmal.in_buf) {
+        free(mmal.in_buf);
+        mmal.in_buf = NULL;
+    }
 
     if (mmal.encoder) {
         MMAL_CALL(mmal_component_destroy(mmal.encoder));
@@ -212,12 +229,13 @@ void mmal_cleanup()
 
 static int mmal_start(int input_format, int output_format)
 {
-    ASSERT_PTR(mmal.mmal_buf, !=, NULL, cleanup);
+    ASSERT_PTR(mmal.out_mmal_buf, !=, NULL, cleanup);
     ASSERT_PTR(mmal.out_buf, !=, NULL, cleanup)
     ASSERT_PTR(mmal.encoder, !=, NULL, cleanup);
     ASSERT_INT(mmal.encoder->output[0]->buffer_num, >, 0, cleanup);
-
     ASSERT_PTR(mmal_input_format, ==, NULL, cleanup);
+    ASSERT_PTR(mmal_output_format, ==, NULL, cleanup);
+
     int formats_len = ARRAY_SIZE(mmal_input_formats);
     for (int i = 0; i < formats_len; i++) {
         struct format_mapping_t *f = mmal_input_formats + i;
@@ -226,9 +244,12 @@ static int mmal_start(int input_format, int output_format)
             break;
         }
     }
-    ASSERT_PTR(mmal_input_format, !=, NULL, cleanup);
+    if (mmal_input_format == NULL) {
+        ERROR("Input format isn't supported by device or application");
+        errno = EINVAL;
+        goto cleanup;
+    }
 
-    ASSERT_PTR(mmal_output_format, ==, NULL, cleanup);
     formats_len = ARRAY_SIZE(mmal_output_formats);
     for (int i = 0; i < formats_len; i++) {
         struct format_mapping_t *f = mmal_output_formats + i;
@@ -237,7 +258,12 @@ static int mmal_start(int input_format, int output_format)
             break;
         }
     }
-    ASSERT_PTR(mmal_output_format, !=, NULL, cleanup);
+    if (mmal_output_format == NULL) {
+        ERROR("Outoput format isn't supported by device or application");
+        errno = EINVAL;
+        goto cleanup;
+    }
+
 
     mmal.input_port = mmal.encoder->input[0];
     mmal.input_port->format->encoding = mmal_input_format->internal_format;
@@ -264,7 +290,7 @@ static int mmal_start(int input_format, int output_format)
     MMAL_CALL(mmal_port_format_commit(mmal.output_port), cleanup);
 
     ASSERT_INT(mmal.output_port->buffer_size, <=, MMAL_OUT_BUFFER_SIZE, cleanup);
-    DEBUG("mmal.input_port->buffer_num: %d", mmal.input_port->buffer_num);
+    //DEBUG("mmal.input_port->buffer_num: %d", mmal.input_port->buffer_num);
 
     mmal.input_pool = mmal_port_pool_create(mmal.input_port,
         mmal.input_port->buffer_num,
@@ -287,7 +313,7 @@ static int mmal_start(int input_format, int output_format)
 
     CALL(fill_port_buffer(mmal.output_port, mmal.output_pool), cleanup);
 
-    DEBUG("h264 mmal encoder has been started");
+    DEBUG("filter[%s] has been started", mmal.filter->name);
     return 0;
 
 cleanup:
@@ -315,9 +341,9 @@ static int mmal_init()
     CALL(sem_init(&mmal.semaphore, 0, 0), cleanup);
     mmal.is_semaphore = 1;
 
-    ASSERT_PTR(mmal.mmal_buf, ==, NULL, cleanup)
-    mmal.mmal_buf = malloc(MMAL_OUT_BUFFER_SIZE);
-    if (!mmal.mmal_buf) {
+    ASSERT_PTR(mmal.out_mmal_buf, ==, NULL, cleanup)
+    mmal.out_mmal_buf = malloc(MMAL_OUT_BUFFER_SIZE);
+    if (!mmal.out_mmal_buf) {
         CALL_MESSAGE(malloc(MMAL_OUT_BUFFER_SIZE));
         goto cleanup;
     }
@@ -337,15 +363,52 @@ cleanup:
     return -1;
 }
 
-static int mmal_is_started()
-{
-    return mmal_input_format != NULL && mmal_output_format != NULL? 1: 0;
-}
-
 static int mmal_process_frame(uint8_t *buffer)
 {
     ASSERT_PTR(mmal_input_format, !=, NULL, cleanup);
     ASSERT_PTR(mmal_output_format, !=, NULL, cleanup);
+
+    if (!mmal.in_buf) {
+        mmal.in_buf = malloc((app.video_width * app.video_height) << 1);
+        if (!mmal.in_buf) {
+            CALL_MESSAGE(malloc());
+            goto cleanup;
+        }
+    }
+
+    // convert YUYV to YUV422
+    int half = (app.video_width * app.video_height);
+    int quarter = half >> 1;
+    // convert Y parts
+    uint8_t* in = buffer;
+    uint8_t* out = mmal.in_buf;
+    int len = half;
+    // DEBUG("len: %d, half: %d, quarter: %d", (app.video_width * app.video_height) << 1, half,
+    //     quarter);
+    while (len > 0) {
+        *out = *in;
+        out++;
+        len--;
+        in += 2;
+    }
+    // convert U parts
+    in = buffer + 1;
+    len = quarter;
+    while (len > 0) {
+        *out = *in;
+        out++;
+        len--;
+        in += 4;
+    }
+    // convert V parts
+    in = buffer + 3;
+    len = quarter;
+    while (len > 0) {
+        *out = *in;
+        out++;
+        len--;
+        in += 4;
+    }
 
     MMAL_BUFFER_HEADER_T *mmal_buffer = mmal_queue_get(mmal.input_pool->queue);
     if (!mmal_buffer) {
@@ -353,11 +416,9 @@ static int mmal_process_frame(uint8_t *buffer)
         goto cleanup;
     }
 
-    mmal_buffer->length = app.video_width * app.video_height * 2;
+    mmal_buffer->length = (app.video_width * app.video_height) << 1;
     //DEBUG("copy buffer, data: %p, length: %d", mmal_buffer->data, mmal_buffer->length);
-    memcpy(mmal_buffer->data, buffer, mmal_buffer->length);
-
-    MMAL_CALL(mmal_port_send_buffer(mmal.input_port, mmal_buffer), cleanup);
+    memcpy(mmal_buffer->data, mmal.in_buf, mmal_buffer->length);
 
     // wait when encoder encode buffer to process next one
     int value = 0;
@@ -366,6 +427,9 @@ static int mmal_process_frame(uint8_t *buffer)
         CALL(sem_wait(&mmal.semaphore), cleanup);
         CALL(sem_getvalue(&mmal.semaphore, &value), cleanup);
     }
+
+    MMAL_CALL(mmal_port_send_buffer(mmal.input_port, mmal_buffer), cleanup);
+
     CALL(sem_wait(&mmal.semaphore), cleanup);
     return 0;
 
@@ -390,10 +454,10 @@ static uint8_t *mmal_get_buffer(int *out_format, int *length)
     }
 
     if (length)
-        *length = mmal.mmal_buf_used;
+        *length = mmal.out_buf_used;
     
-    memcpy(mmal.out_buf, mmal.mmal_buf, mmal.mmal_buf_used);
-    mmal.mmal_buf_used = 0;
+    memcpy(mmal.out_buf, mmal.out_mmal_buf, mmal.out_buf_used);
+    mmal.out_buf_used = 0;
 
     res = pthread_mutex_unlock(&mmal.mutex);
     if (res) {
@@ -630,6 +694,7 @@ void mmal_encoder_construct()
         i++;
 
     if (i != MAX_FILTERS) {
+        mmal.filter = filters + i;
         filters[i].name = "mmal_encoder";
         filters[i].context = &mmal;
         filters[i].stop = mmal_stop;

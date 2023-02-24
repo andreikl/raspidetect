@@ -2,14 +2,16 @@
 #define main_h
 
 #define VIDEO_FORMAT_UNKNOWN_STR "Unknown"
+#define VIDEO_FORMAT_YUYV_STR    "YUYV"
 #define VIDEO_FORMAT_YUV422_STR  "YUV422"
 #define VIDEO_FORMAT_YUV444_STR  "YUV444"
 #define VIDEO_FORMAT_H264_STR    "H264"
 
 #define VIDEO_FORMAT_UNKNOWN 0
-#define VIDEO_FORMAT_YUV422  1
-#define VIDEO_FORMAT_YUV444  2 //three separate planes - Y, Cb, Cr
-#define VIDEO_FORMAT_H264    3
+#define VIDEO_FORMAT_YUYV    1
+#define VIDEO_FORMAT_YUV422  2
+#define VIDEO_FORMAT_YUV444  3
+#define VIDEO_FORMAT_H264    4
 
 #define VIDEO_OUTPUT_NULL_STR   "null"
 #define VIDEO_OUTPUT_FILE_STR   "file"
@@ -27,8 +29,6 @@
 #define VIDEO_WIDTH_DEF 640
 #define VIDEO_HEIGHT "-h"
 #define VIDEO_HEIGHT_DEF 480
-#define VIDEO_FORMAT "-fm"
-#define VIDEO_FORMAT_DEF VIDEO_FORMAT_YUV422_STR
 #define VIDEO_OUTPUT "-o"
 #define VIDEO_OUTPUT_DEF VIDEO_OUTPUT_FILE_STR","VIDEO_OUTPUT_SDL_STR","VIDEO_OUTPUT_RFB_STR
 
@@ -355,7 +355,6 @@ struct app_state_t {
     // common properties
     int video_width;
     int video_height;
-    int video_format;
     int video_output;
 
     int port;

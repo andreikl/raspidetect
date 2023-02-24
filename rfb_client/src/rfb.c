@@ -127,8 +127,8 @@ static void *rfb_function(void* data)
     struct rfb_buffer_update_response_message_t update_response;
     
     while (!is_terminated) {
-        DEBUG("new slice has been requiested: %d:%d",
-            ntohs(update_request.width), ntohs(update_request.height));
+        // DEBUG("new slice has been requiested: %d:%d",
+        //     ntohs(update_request.width), ntohs(update_request.height));
 
         NETWORK_IO_CALL(
             send(app.rfb.socket, (char *)&update_request, sizeof(update_request), 0),
@@ -178,17 +178,17 @@ static void *rfb_function(void* data)
             res = recv(app.rfb.socket, (char *)app.enc_buf, app.enc_buf_length, MSG_WAITALL),
             error);
 
-        uint8_t * t = app.enc_buf;
-        uint8_t t1 = t[0];
-        uint8_t t2 = t[1];
-        uint8_t t3 = t[2];
-        uint8_t t4 = t[3];
-        DEBUG("Bytes received: %d, %x %x %x %x ...",
-            res,
-            t1,
-            t2,
-            t3,
-            t4);
+        // uint8_t * t = app.enc_buf;
+        // uint8_t t1 = t[0];
+        // uint8_t t2 = t[1];
+        // uint8_t t3 = t[2];
+        // uint8_t t4 = t[3];
+        // DEBUG("Bytes received: %d, %x %x %x %x ...",
+        //     res,
+        //     t1,
+        //     t2,
+        //     t3,
+        //     t4);
 
 #ifdef ENABLE_H264
         CALL(h264_decode(), error);

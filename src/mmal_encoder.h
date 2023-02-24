@@ -49,6 +49,7 @@
 #define MMAL_CALL(...) MMAL_X(__VA_ARGS__)(__VA_ARGS__)
 
 struct mmal_encoder_state_t {
+    struct filter_t* filter;
     MMAL_COMPONENT_T *encoder;
     MMAL_PORT_T *input_port;
     MMAL_POOL_T *input_pool;
@@ -58,9 +59,10 @@ struct mmal_encoder_state_t {
     int is_mutex;
     sem_t semaphore;
     int is_semaphore;
-    uint8_t *mmal_buf;
+    uint8_t *in_buf;
+    uint8_t *out_mmal_buf;
     uint8_t *out_buf;
-    int mmal_buf_used;
+    int out_buf_used;
 };
 
 void mmal_encoder_construct();

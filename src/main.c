@@ -96,8 +96,6 @@ static void print_help()
     printf("%s: help\n", HELP);
     printf("%s: video width, default: %d\n", VIDEO_WIDTH, VIDEO_WIDTH_DEF);
     printf("%s: video height, default: %d\n", VIDEO_HEIGHT, VIDEO_HEIGHT_DEF);
-    printf("%s: video format, default: %s\n", VIDEO_FORMAT, VIDEO_FORMAT_DEF);
-    printf("\toptions: "VIDEO_FORMAT_YUV422_STR"\n");
     printf("%s: output, default: %s\n", VIDEO_OUTPUT, VIDEO_OUTPUT_DEF);
     printf("\toptions: "VIDEO_OUTPUT_NULL_STR", "VIDEO_OUTPUT_FILE_STR", "
         VIDEO_OUTPUT_SDL_STR", "VIDEO_OUTPUT_RFB_STR"\n");
@@ -125,7 +123,6 @@ static int main_function()
     DEBUG("camera_name: %s", app.camera_name);
     DEBUG("camera max resolution: %d, %d", app.camera_max_width, app.camera_max_height);
     DEBUG("video resolution: %d, %d", app.video_width, app.video_height);
-    DEBUG("video format: %s", app_get_video_format_str(app.video_format));
     DEBUG("video output: %s", app_get_video_output_str(app.video_output));
     DEBUG("window resolution: %d, %d", app.window_width, app.window_height);
     DEBUG("worker resolution: %d, %d", app.worker_width, app.worker_height);
@@ -197,7 +194,6 @@ static int main_function()
     CALL(sem_init(&app.buffer_semaphore, 0, 0), error);
     CALL(sem_init(&app.worker_semaphore, 0, 0), error);
 
-    DEBUG("pthread_create");
     app.worker_thread_res = pthread_create(&app.worker_thread, NULL, worker_function);
     if (app.worker_thread_res) {
 	    fprintf(stderr,
@@ -208,7 +204,7 @@ static int main_function()
 
     while (!is_abort) {
         for (int i = 0; outputs[i].context != NULL && i < MAX_OUTPUTS; i++) {
-            DEBUG("process: %s", outputs[i].name);
+            //DEBUG("process: %s", outputs[i].name);
             CALL(res = outputs[i].process_frame());
             if (res == -1 && errno != ETIME)
                 break;            

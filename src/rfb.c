@@ -215,15 +215,16 @@ static void *rfb_function(void *data)
             .pixel_format.blue_shift = 0,
             .name_length = htonl(sizeof(init_message.name))
         };
-        if (app.video_format == VIDEO_FORMAT_YUV422) {
-            init_message.pixel_format.bpp = 16;
-            init_message.pixel_format.depth = 16;
-        }
-        else {
-            DEBUG("Video format isn't supported %d", app.video_format);
-            errno = EINVAL;
-            goto rfb_error;
-        }
+        //TODO: delete if working
+        // if (app.video_format == VIDEO_FORMAT_YUV422) {
+        //     init_message.pixel_format.bpp = 16;
+        //     init_message.pixel_format.depth = 16;
+        // }
+        // else {
+        //     DEBUG("Video format isn't supported %d", app.video_format);
+        //     errno = EINVAL;
+        //     goto rfb_error;
+        // }
         memset(init_message.name, 0, sizeof(init_message.name));
         memcpy(init_message.name, APP_NAME, strlen(APP_NAME));
 
@@ -390,6 +391,8 @@ static int rfb_start()
         CALL_CUSTOM_MESSAGE(sem_init, rfb.client_semaphore_res);
         goto cleanup;
     }
+
+    DEBUG("output[%s] has been started", rfb.output->name);
     return 0;
 
 cleanup:
@@ -484,7 +487,6 @@ cleanup:
 
 static int rfb_stop()
 {
-    DEBUG("rfb is stopping...");
     // shutdown the server socket terminates accept call to wait incoming connections
     if (rfb.server_socket > 0) {
         int res = shutdown(rfb.server_socket, SHUT_RDWR);
@@ -523,7 +525,6 @@ static int rfb_stop()
         else
             rfb.client_semaphore_res = -1;
     }
-    DEBUG("rfb has been stopped");
     return 0;
 
 stop_error:

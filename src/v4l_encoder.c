@@ -290,6 +290,8 @@ cleanup:
 static int v4l_start(int input_format, int output_format)
 {
     ASSERT_PTR(v4l_input_format, ==, NULL, cleanup);
+    ASSERT_PTR(v4l_output_format, ==, NULL, cleanup);
+
     int formats_len = ARRAY_SIZE(v4l_input_formats);
     for (int i = 0; i < formats_len; i++) {
         struct format_mapping_t *f = v4l_input_formats + i;
@@ -298,9 +300,12 @@ static int v4l_start(int input_format, int output_format)
             break;
         }
     }
-    ASSERT_PTR(v4l_input_format, !=, NULL, cleanup);
+    if (v4l_input_format == NULL) {
+        ERROR("Input format isn't supported by device or application");
+        errno = EINVAL;
+        goto cleanup;
+    }
 
-    ASSERT_PTR(v4l_output_format, ==, NULL, cleanup);
     formats_len = ARRAY_SIZE(v4l_output_formats);
     for (int i = 0; i < formats_len; i++) {
         struct format_mapping_t *f = v4l_output_formats + i;
@@ -309,7 +314,11 @@ static int v4l_start(int input_format, int output_format)
             break;
         }
     }
-    ASSERT_PTR(v4l_output_format, !=, NULL, cleanup);
+    if (v4l_output_format == NULL) {
+        ERROR("Outoput format isn't supported by device or application");
+        errno = EINVAL;
+        goto cleanup;
+    }
 
     struct v4l2_format fmt;
     memset(&fmt, 0, sizeof(fmt));
