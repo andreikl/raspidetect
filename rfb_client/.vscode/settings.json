@@ -1,7 +1,16 @@
 {
-    "terminal.integrated.shell.windows": "cmd.exe",
     "editor.rulers": [100,120],
     "workbench.colorCustomizations": {
         "editorRuler.foreground": "#ff4081"
-    }
+    },
+    "terminal.integrated.profiles.windows": {
+        "CLANGARM64": {
+            "path": "C:\\msys64\\usr\\bin\\env.exe",
+            "args": [
+                "MSYSTEM=CLANGARM64",
+                "/usr/bin/bash"
+            ]
+        }
+    },
+    "terminal.integrated.defaultProfile.windows": "CLANGARM64"
 }

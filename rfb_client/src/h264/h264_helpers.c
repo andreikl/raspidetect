@@ -134,13 +134,13 @@ static int h264_MbPartPredMode(struct h264_macroblock_t *mb)
         mb->MbPartPredMode = H264_Intra_16x16;
         return 0;
     }
-    DEBUG("ERROR: TO IMPLEMENT h264_MbPartPredMode for other slices %d, %s - %s:%d\n",
+    DEBUG_MSG("ERROR: TO IMPLEMENT h264_MbPartPredMode for other slices %d, %s - %s:%d\n",
         mb->mb_type, __FILE__, __FUNCTION__, __LINE__);
     return -1;
 }
 
 int h264_NumMbPart(int mb_type) {
-    DEBUG("ERROR: TO IMPLEMENT h264_MbPartPredMode for other slices %d, %s - %s:%d\n",
+    DEBUG_MSG("ERROR: TO IMPLEMENT h264_MbPartPredMode for other slices %d, %s - %s:%d\n",
         mb_type, __FILE__, __FUNCTION__, __LINE__);
     return -1;
 }

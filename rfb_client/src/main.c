@@ -26,6 +26,7 @@
 
 #include "main.h"
 #include "utils.h"
+#include "app.h"
 #include "d3d.h"
 #include "dxva.h"
 #include "rfb.h"
@@ -33,11 +34,13 @@
 #include "cuda.h"
 #include "ffmpeg.h"
 
-KHASH_MAP_INIT_STR(map_str, char*)
-KHASH_T(map_str) *h;
+KHASH_MAP_INIT_STR(argvs_hash_t, char*)
+KHASH_T(argvs_hash_t) *h;
+
+int is_aborted = 0;
 
 struct app_state_t app;
-int is_terminated = 0;
+struct filter_t filters[MAX_FILTERS];
 
 static LRESULT CALLBACK window_proc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam)
 {
@@ -49,7 +52,7 @@ static LRESULT CALLBACK window_proc(HWND hwnd, UINT message, WPARAM wparam, LPAR
 
         case WM_CREATE:
             /*app = (struct app_state_t*)lparam;
-            DEBUG("INFO: window(%d:%d) has been created!\n",
+            DEBUG_MSG("INFO: window(%d:%d) has been created!\n",
                 app->server_width, app->server_height);*/
             return 0;
     }
@@ -73,30 +76,15 @@ static void print_help(void)
 
 static void signal_handler(int signal_number)
 {
-    DEBUG("INFO: Other signal %d\n", signal_number);
-    is_terminated = 1;
+    DEBUG_MSG("INFO: Other signal %d\n", signal_number);
+    is_aborted = 1;
 }
 
 static void main_function()
 {
     setmode(fileno(stdout), O_BINARY);
 
-    memset(&app, 0, sizeof(struct app_state_t));
-    char* input_type = utils_read_str_value(INPUT_TYPE, INPUT_TYPE_DEF);
-    DEBUG("INFO: input_type %s\n", input_type);
-    if (!strcmp(input_type, INPUT_TYPE_FILE_STR)) {
-        app.input_type = INPUT_TYPE_FILE;
-    }
-    else {
-        app.input_type = INPUT_TYPE_RFB;
-    }   
-    app.file.file_name = utils_read_str_value(FILE_NAME, FILE_NAME_DEF);
-    app.server_port = utils_read_str_value(PORT, PORT_DEF);
-    app.server_host = utils_read_str_value(SERVER, SERVER_DEF);
-    app.server_width = 640;
-    app.server_height = 480;
-    app.server_chroma = CHROMA_FORMAT_YUV422;
-    app.verbose = utils_read_int_value(VERBOSE, VERBOSE_DEF);
+    app_set_default_state();
 
     app.enc_buf_length = app.server_width * app.server_height + 1;
     app.enc_buf = malloc(app.enc_buf_length);
@@ -105,7 +93,7 @@ static void main_function()
             stderr,
             "ERROR: malloc can't allocate memory for encoding buffer, size: %d\n",
             app.enc_buf_length);
-        goto exit;
+        goto error;
     }
 
     app.dec_buf_length = app.server_width * app.server_height * 4 + 1;
@@ -115,25 +103,25 @@ static void main_function()
             stderr,
             "ERROR: malloc can't allocate memory for decoding buffer, size: %d\n",
             app.dec_buf_length);
-        goto exit;
+        goto error;
     }
 
-    CALL(pthread_mutex_init(&app.dec_mutex, NULL), exit);
+    CALL(pthread_mutex_init(&app.dec_mutex, NULL), error);
     app.is_dec_mutex = 1;
 
 #ifdef ENABLE_CUDA
-    CALL(cuda_init(&app), exit);
+    CALL(cuda_init(&app), error);
 #endif //ENABLE_CUDA
 
     if (app.input_type == INPUT_TYPE_RFB) {
 #ifdef ENABLE_RFB
-        CALL(rfb_init(), exit);
-        CALL(rfb_connect(), exit);
-        CALL(rfb_handshake(), exit);
+        CALL(rfb_init(), error);
+        CALL(rfb_connect(), error);
+        CALL(rfb_handshake(), error);
 #endif //ENABLE_RFB
     }
     else {
-        CALL(file_init(), exit);
+        CALL(file_init(), error);
     }
 
     app.instance = GetModuleHandle(NULL);
@@ -162,39 +150,40 @@ static void main_function()
         &app);
 
 #ifdef ENABLE_D3D
-    CALL(d3d_init(), exit);
+    CALL(d3d_init(), error);
 #endif //ENABLE_D3Ds
 
 #ifdef ENABLE_H264
-    CALL(h264_init(), exit);
+    CALL(h264_init(), error);
 #endif //ENABLE_H264
 
-#ifdef ENABLE_FFMPEG
-    CALL(ffmpeg_init(), exit);
-#endif //ENABLE_FFMPEG
+for (int i = 0; i < MAX_FILTERS && filters[i].context != NULL; i++) {
+    //DEBUG_MSG("filters[%s].init...", filters[i].name);
+    CALL(filters[i].init(), error);
+}
 
     if (app.input_type == INPUT_TYPE_RFB) {
 #ifdef ENABLE_RFB
-        DEBUG("RFB init");
-        CALL(rfb_start(), exit);
+        DEBUG_MSG("RFB init");
+        CALL(rfb_start(), error);
 #endif //ENABLE_RFB
     }
     else {
-        CALL(file_start(), exit);
+        CALL(file_start(), error);
     }
 
     ShowWindow(app.wnd, SW_SHOW);
     UpdateWindow(app.wnd);
-    CALL(d3d_start(), exit);
+    CALL(d3d_start(), error);
 
     MSG msg;
     while (GetMessage(&msg, NULL, 0, 0)) {
         TranslateMessage(&msg);
         DispatchMessage(&msg);
 
-        if (is_terminated && app.wnd) {
+        if (is_aborted && app.wnd) {
             //TODO: remove direct3d first
-            DEBUG("INFO: about to destroy window\n");
+            DEBUG_MSG("INFO: about to destroy window\n");
             if (!DestroyWindow(app.wnd)) {
                 fprintf(stderr,
                     "ERROR: DestroyWindow failed with code. res: %ld\n",
@@ -207,12 +196,15 @@ static void main_function()
         }
     }
 
-exit:
-    DEBUG("INFO: exit\n");
+error:
+    DEBUG_MSG("INFO: error\n");
 
-#ifdef ENABLE_FFMPEG
-    ffmpeg_destroy();
-#endif //ENABLE_FFMPEG
+    for (int i = 0; i < MAX_FILTERS && filters[i].context != NULL; i++) {
+        if (filters[i].is_started()) {
+            CALL(filters[i].stop())
+        }
+        filters[i].cleanup();
+    }
 
 #ifdef ENABLE_H264
     h264_destroy();
@@ -256,7 +248,7 @@ exit:
         app.enc_buf = NULL;
     }
 
-    DEBUG("INFO: main_exit, is_terminated: %d\n", is_terminated);
+    DEBUG_MSG("INFO: main_exit, is_aborted: %d\n", is_aborted);
 
     return;
 }
@@ -265,10 +257,10 @@ int main(int argc, char** argv)
 {
     signal(SIGINT, signal_handler);
 
-    h = KH_INIT(map_str);
+    h = KH_INIT(argvs_hash_t);
     utils_parse_args(argc, argv);
 
-    unsigned k = KH_GET(map_str, h, HELP);
+    unsigned k = KH_GET(argvs_hash_t, h, HELP);
     if (k != KH_END(h)) {
         print_help();
     }
@@ -276,6 +268,6 @@ int main(int argc, char** argv)
         main_function();
     }
 
-    KH_DESTROY(map_str, h);
+    KH_DESTROY(argvs_hash_t, h);
     return 0;
 }

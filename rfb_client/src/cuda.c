@@ -41,7 +41,7 @@ int cuda_init(app_state_t* app)
     CUDA_API_CALL(cuDeviceGetCount(&gpu_count), error);
 
     if (gpu_count <= 0) {
-        DEBUG("ERROR: Device doesn't have cuda\n%s:%s:%d\n", __FILE__, __FUNCTION__, __LINE__);
+        DEBUG_MSG("ERROR: Device doesn't have cuda\n%s:%s:%d\n", __FILE__, __FUNCTION__, __LINE__);
         goto error;
     }
 
@@ -49,7 +49,7 @@ int cuda_init(app_state_t* app)
     CUDA_API_CALL(cuDeviceGetName(app->cuda.name, sizeof(app->cuda.name), app->cuda.device), error);
 
     if (app->verbose) {
-        DEBUG("INFO: Cuda device: %s\n%s:%s:%d\n", app->cuda.name, __FILE__, __FUNCTION__, __LINE__);
+        DEBUG_MSG("INFO: Cuda device: %s\n%s:%s:%d\n", app->cuda.name, __FILE__, __FUNCTION__, __LINE__);
     }
    
     CUDA_API_CALL(cuCtxCreate(&app->cuda.context, 0, app->cuda.device), error);

@@ -26,8 +26,9 @@
 
 #define RFB_SECURITY_NONE 1
 
-extern int is_terminated;
 extern struct app_state_t app;
+extern struct filter_t filters[MAX_FILTERS];
+extern int is_aborted;
 
 enum rfb_request_enum {
     RFBSetPixelFormat = 0,
@@ -110,7 +111,7 @@ struct rfb_buffer_update_response_message_t {
 static void *rfb_function(void* data)
 {
     if (app.verbose) {
-        DEBUG("INFO: RFB thread has been started\n");
+        DEBUG_MSG("INFO: RFB thread has been started\n");
     }
 
     //wait frame from network
@@ -127,8 +128,8 @@ static void *rfb_function(void* data)
 
     struct rfb_buffer_update_response_message_t update_response;
     
-    while (!is_terminated) {
-        // DEBUG("new slice has been requiested: %d:%d",
+    while (!is_aborted) {
+        // DEBUG_MSG("new slice has been requiested: %d:%d",
         //     ntohs(update_request.width), ntohs(update_request.height));
 
         NETWORK_IO_CALL(
@@ -148,7 +149,7 @@ static void *rfb_function(void* data)
             || ntohs(update_response.height) != app.server_height
             || ntohl(update_response.encoding_type) != RFBEncodingH264) {
 
-            DEBUG("ERROR: RFBFramebufferUpdate response isn't valid: message_type: %d,"
+            DEBUG_MSG("ERROR: RFBFramebufferUpdate response isn't valid: message_type: %d,"
                 " width: %d, height: %d, encoding_type: %lx\n",
                 update_response.message_type,
                 ntohs(update_response.width),
@@ -184,7 +185,7 @@ static void *rfb_function(void* data)
         // uint8_t t2 = t[1];
         // uint8_t t3 = t[2];
         // uint8_t t4 = t[3];
-        // DEBUG("Bytes received: %d, %x %x %x %x ...",
+        // DEBUG_MSG("Bytes received: %d, %x %x %x %x ...",
         //     res,
         //     t1,
         //     t2,
@@ -195,17 +196,31 @@ static void *rfb_function(void* data)
         CALL(h264_decode(), error);
 #endif //ENABLE_H264
 
-#ifdef ENABLE_FFMPEG
-        CALL(ffmpeg_decode(), error);
-#endif //ENABLE_FFMPEG
+        uint8_t *buffer = app.enc_buf;
+        int len = app.enc_buf_length;
+        for (int i = 0; i < MAX_FILTERS && filters[i].context != NULL; i++) {
+            struct filter_t *filter = filters + i;
+            if (!filter->is_started())
+                CALL(filter->start(VIDEO_FORMAT_H264, VIDEO_FORMAT_GRAYSCALE), error);
+            CALL(filter->process_frame(buffer, len), error);
+            buffer = filter->get_buffer(NULL, &len);
+            if (len == 0) {
+                DEBUG_MSG("The filter[%s] doesn't have buffer yet", filter->name);
+                break;
+            }
+            else {
+                DEBUG_MSG("buffer has been received from filter[%s], length: %d!!!", filter->name, len);
+            }
+            break;
+        }
     }
 
-    DEBUG("INFO: rfb_function is_terminated: %d\n", is_terminated);
+    DEBUG_MSG("INFO: rfb_function is_aborted: %d\n", is_aborted);
     return NULL;
 
 error:
-    is_terminated = 1;
-    ERROR_MSG("decoding is terminated!!!");
+    is_aborted = 1;
+    ERROR_MSG("decoding is aborted!!!");
 
     return NULL;
 }
@@ -221,7 +236,7 @@ void rfb_destroy()
         do {
             NETWORK_IO_CALL(res = recv(app.rfb.socket, buffer, MAX_BUFFER, 0), close);
             if (res == 0 && app.verbose) {
-                DEBUG("INFO: Connection closed\n");
+                DEBUG_MSG("INFO: Connection closed\n");
             }
         } while (res > 0);
 
@@ -265,7 +280,7 @@ int rfb_handshake()
     strcpy(client_rfb_version, "RFB 003.008\0");
     NETWORK_IO_CALL(send(app.rfb.socket, client_rfb_version, sizeof(client_rfb_version), 0), error);
     if (app.verbose) {
-        DEBUG("Server rfb version. %s\n", server_rfb_version);
+        DEBUG_MSG("Server rfb version. %s\n", server_rfb_version);
     }
 
     struct rfb_security_message_t security = {
@@ -279,13 +294,13 @@ int rfb_handshake()
         send(app.rfb.socket, (char *)&client_security_type, sizeof(client_security_type), 0),
         error);
     if (app.verbose) {
-        DEBUG("INFO: Server rfb security types(%d) 0:%d\n", security.types_count, security.types);
+        DEBUG_MSG("INFO: Server rfb security types(%d) 0:%d\n", security.types_count, security.types);
     }
 
     uint32_t success = 0;
     NETWORK_IO_CALL(recv(app.rfb.socket, (char *)&success, sizeof(success), 0), error);
     if (success) {
-        DEBUG("ERROR: RFB handshake isn't successful\n");
+        DEBUG_MSG("ERROR: RFB handshake isn't successful\n");
         return -1;
     }
 
@@ -298,7 +313,7 @@ int rfb_handshake()
     app.server_width = ntohs(init_message.framebuffer_width);
     app.server_height = ntohs(init_message.framebuffer_height);
     if (app.verbose) {
-        DEBUG("server_width: %d, server_height: %d, server_name: %s\n",
+        DEBUG_MSG("server_width: %d, server_height: %d, server_name: %s\n",
             app.server_width, app.server_height, app.server_name);
     }
     return 0;
@@ -327,7 +342,7 @@ int rfb_connect()
             cleanup
         );
 
-        DEBUG("trying connect to %s:%s", app.server_host, app.server_port);
+        DEBUG_MSG("trying connect to %s:%s", app.server_host, app.server_port);
         NETWORK_CALL(res = connect(client_socket, ptr->ai_addr, (int)ptr->ai_addrlen));
         if (res == -1) {
             NETWORK_CALL(closesocket(client_socket), cleanup);
@@ -352,7 +367,7 @@ cleanup:
 int rfb_start()
 {
     if (sem_post(&app.rfb.semaphore)) {
-        DEBUG("ERROR: sem_post Failed to start rfb with error: %d\n", errno);
+        DEBUG_MSG("ERROR: sem_post Failed to start rfb with error: %d\n", errno);
         return -1;
     }
     return 0;

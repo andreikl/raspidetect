@@ -6,8 +6,13 @@
         {
             "label": "build",
             "type": "process",
-            "command": "make",
+            "command": "C:\\msys64\\usr\\bin\\env.exe",
+            //   'cd ~/raspidetect/rfb_client; make'
             "args": [
+                "MSYSTEM=CLANGARM64",
+                "/usr/bin/bash",
+                "-lc",
+                "cd ~/raspidetect/rfb_client; make;"
             ],
             "group": "build",
             "presentation": {

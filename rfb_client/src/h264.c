@@ -106,7 +106,7 @@ static int h264_slice_layer_without_partitioning_rbsp(int start, int end)
 
 #ifdef ENABLE_H264_SLICE 
     CALL(h264_read_slice_data(), error);
-    H264_RBSP_DEBUG(*app.h264.rbsp.p);
+    H264_RBSP_DEBUG_MSG(*app.h264.rbsp.p);
     CALL(!h264_is_more_rbsp(&app.h264.rbsp), error);
 #endif //ENABLE_H264_SLICE
 
@@ -131,11 +131,11 @@ int h264_decode()
         UNCOVERED_CASE(app.h264.nal_unit_type, ==, 20);
         UNCOVERED_CASE(app.h264.nal_unit_type, ==, 21);
 
-        DEBUG("INFO: nal_unit_type %d(%s), size %d",
+        DEBUG_MSG("INFO: nal_unit_type %d(%s), size %d",
             app.h264.nal_unit_type,
             h264_get_nal_unit_type(app.h264.nal_unit_type),
             end - start);
-        DEBUG("INFO: nal_ref_idc (%d, %s)", app.h264.nal_ref_idc, h264_get_nal_ref_idc(app.h264.nal_ref_idc));
+        DEBUG_MSG("INFO: nal_ref_idc (%d, %s)", app.h264.nal_ref_idc, h264_get_nal_ref_idc(app.h264.nal_ref_idc));
 
         switch (app.h264.nal_unit_type) {
             case NAL_UNIT_TYPE_SPS:
@@ -163,12 +163,12 @@ int h264_decode()
         //char* rbsp = &app.buffer[start + 1];
         //int rbsp_size = end - start - 1;
 
-        DEBUG("INFO: rbsp package has processed: start (%d) end (%d)", start, end);
+        DEBUG_MSG("INFO: rbsp package has processed: start (%d) end (%d)", start, end);
     }
     return 0;
 
 cleanup:
-    DEBUG("h264_decode cleanup")
+    DEBUG_MSG("h264_decode cleanup")
     if (errno == 0)
         errno = EAGAIN;
     return -1;

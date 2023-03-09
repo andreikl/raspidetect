@@ -20,7 +20,7 @@
 
 static int h264_init_slice_data()
 {
-    DEBUG("INFO: app.h264.data.PicSizeInMbs(%d)\n", app.h264.header.PicSizeInMbs);
+    DEBUG_MSG("INFO: app.h264.data.PicSizeInMbs(%d)\n", app.h264.header.PicSizeInMbs);
 
     int SubWidthC = -1;
     int SubHeightC = -1;
@@ -174,7 +174,7 @@ int h264_residual_block(struct app_state_t* app,
     int endIdx,
     int maxNumCoeff)
 {
-    //DEBUG("INFO: h264_residual_block, blkIdx (%d)\n", blkIdx);
+    //DEBUG_MSG("INFO: h264_residual_block, blkIdx (%d)\n", blkIdx);
     //struct h264_rbsp_t* rbsp = &app.h264.rbsp;
     struct h264_coeff_level_t* coeffLevel = blocks + blkIdx;
 
@@ -437,10 +437,10 @@ static int h264_macroblock_layer(struct app_state_t* app)
         //RBSP_ALLIGN(rbsp);
         while (!RBSP_IS_ALLIGN(rbsp)) {
             int rbsp_alignment_zero_bit = RBSP_READ_U1(rbsp);
-            DEBUG("INFO: h264_macroblock_layer, rbsp_alignment_zero_bit (%lld:%d) %d\n",
+            DEBUG_MSG("INFO: h264_macroblock_layer, rbsp_alignment_zero_bit (%lld:%d) %d\n",
                 rbsp->p - rbsp->start, rbsp->bits_left, rbsp_alignment_zero_bit);
             if (rbsp_alignment_zero_bit) {
-                DEBUG("ERROR: h264_macroblock_layer failed to read,"
+                DEBUG_MSG("ERROR: h264_macroblock_layer failed to read,"
                     " rbsp_alignment_zero_bit != 0\n");
                 //return -1;
             }
@@ -467,7 +467,7 @@ static int h264_macroblock_layer(struct app_state_t* app)
         if (app.h264.data.curr_mb->mb_type != H264_U_I_NxN &&
             app.h264.data.curr_mb->MbPartPredMode != H264_Intra_16x16 &&
             h264_NumMbPart(app.h264.data.curr_mb->mb_type) == 4) {
-            DEBUG("ERROR: TO IMPLEMENT mb_type %d, %s - %s:%d\n",
+            DEBUG_MSG("ERROR: TO IMPLEMENT mb_type %d, %s - %s:%d\n",
                 app.h264.data.curr_mb->mb_type, __FILE__, __FUNCTION__, __LINE__);
             return -1;
         } else {
@@ -500,7 +500,7 @@ static int h264_macroblock_layer(struct app_state_t* app)
                     app.h264.sps.direct_8x8_inference_flag
                 )) {
 
-                DEBUG("ERROR: TO IMPLEMENT transform_size_8x8_flag, %s - %s:%d\n",
+                DEBUG_MSG("ERROR: TO IMPLEMENT transform_size_8x8_flag, %s - %s:%d\n",
                     __FILE__, __FUNCTION__, __LINE__);
             }
 
@@ -566,7 +566,7 @@ static int h264_read_slice_data(struct app_state_t* app)
 
             //fixedLength:Ceil(Log2(2)) = 1
             app.h264.data.curr_mb->mb_skip_flag = RBSP_READ_U1(rbsp);
-            DEBUG("ERROR: h264_read_slice_data, mb_skip_flag (%lld:%d, %d)\n",
+            DEBUG_MSG("ERROR: h264_read_slice_data, mb_skip_flag (%lld:%d, %d)\n",
                 rbsp->p - rbsp->start,
                 rbsp->bits_left,
                 app.h264.data.curr_mb->mb_skip_flag);

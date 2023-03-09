@@ -25,6 +25,13 @@
 
 #define FFMPEG_CALL(...) FFMPEG_CALL_X(__VA_ARGS__)(__VA_ARGS__)
 
-void ffmpeg_destroy();
-int ffmpeg_init();
-int ffmpeg_decode();
+#include <libavcodec/avcodec.h>
+struct ffmpeg_state_t {
+    struct filter_t* filter;
+    const AVCodec* codec;
+    AVCodecContext* ctx;
+    AVFrame* fr;
+    AVPacket pkt;
+};
+
+void ffmpeg_decoder_construct();

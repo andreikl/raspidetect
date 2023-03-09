@@ -6,6 +6,7 @@ ENABLE_H264 = 0
 ENABLE_H264_SLICE = 0
 ENABLE_CUDA = 0
 ENABLE_FFMPEG = 1
+CMOCKA = 1
 
 EXEC = rfb_client
 OBJDIR = ./obj/
@@ -20,14 +21,15 @@ SRCDIR = ./src/
 
 #CC = arm-linux-gnueabihf-gcc
 #-mcpu=arm6 -mfpu=vfp
-CC = gcc
+CC = clang
 
 LDFLAGS = -Llib/x64 -Llib
 #COBJMACROS - allow c calls
 COMMON = -I../external/klib -DCOBJMACROS
 #-D_POSIX_C_SOURCE=199309L fixes some errors
 CFLAGS = -pthread -O3 -fPIC -Wall -Wno-unused-function -DNDEBUG -std=c17 -D_POSIX_C_SOURCE=199309L
-OBJ = main.o utils.o file.o
+OBJ = utils.o file.o app.o
+OBJ_EXE = $(OBJDIR)main.o 
 
 ifeq ($(ENABLE_RFB), 1) 
 	COMMON += -DENABLE_RFB
@@ -64,18 +66,29 @@ ifeq ($(ENABLE_CUDA), 1)
 endif
 
 ifeq ($(ENABLE_FFMPEG), 1)
-	COMMON += -IC:\cygwin\usr\local\include -DENABLE_FFMPEG
-	LDFLAGS += -LC:\cygwin\usr\local\lib -lavcodec -lavutil -lbcrypt
-#	 -liconv
+	COMMON += -DENABLE_FFMPEG
+	COMMON += `pkg-config --cflags libavcodec libavutil` -IC:\cygwin\usr\local\include 
+#	-lavcodec -lavutil -lbcrypt
+	LDFLAGS += `pkg-config --libs libavcodec libavutil`
+#	-LC:\cygwin\usr\local\lib 
 	OBJ += ffmpeg.o
+endif
+
+ifeq ($(CMOCKA), 1) 
+	TEST_COMMON = $(COMMON) -DCMOCKA `pkg-config --cflags cmocka`
+	TEST_LDFLAGS += $(LDFLAGS) `pkg-config --libs cmocka`
+	OBJ_TEST = $(OBJDIR)test.o
 endif
 
 OBJS = $(addprefix $(OBJDIR), $(OBJ))
 
-all: clean obj $(EXEC)
+all: clean obj $(EXEC) $(EXEC)_test
 
-$(EXEC): $(OBJS)
+$(EXEC): $(OBJS) $(OBJ_EXE)
 	$(CC) $(COMMON) $(CFLAGS) $^ -o $@ $(LDFLAGS)
+
+$(EXEC)_test: $(OBJS) $(OBJ_TEST)
+	$(CC) $(COMMON) $(TEST_COMMON) $(CFLAGS) $^ -o $@ $(LDFLAGS) $(TEST_LDFLAGS)
 
 $(OBJDIR)%.o: $(SRCDIR)%.c
 	$(CC) $(COMMON) $(CFLAGS) -c $< -o $@

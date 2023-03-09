@@ -22,7 +22,7 @@ const char* cuda_get_error_message(CUresult error)
     const char* error_str = NULL;
     CUresult res = cuGetErrorString(error, &error_str);
     if (res != CUDA_SUCCESS) {
-        DEBUG("ERROR: Failed to get error string, res %d\n%s:%s:%d\n", res, __FILE__, __FUNCTION__, __LINE__);
+        DEBUG_MSG("ERROR: Failed to get error string, res %d\n%s:%s:%d\n", res, __FILE__, __FUNCTION__, __LINE__);
         return unknown_error;
     }
     if (error_str == NULL) {
