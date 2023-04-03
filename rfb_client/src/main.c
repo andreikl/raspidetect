@@ -71,7 +71,7 @@ static void print_help(void)
     printf("%s: file name, default: %s\n", FILE_NAME, FILE_NAME_DEF);
     printf("%s: server, default: %s\n", SERVER, SERVER_DEF);
     printf("%s: port, default: %s\n", PORT, PORT_DEF);
-    printf("%s: verbose, verbose: %d\n", VERBOSE, VERBOSE_DEF);
+    printf("%s: verbose\n", VERBOSE);
 }
 
 static void signal_handler(int signal_number)
@@ -84,30 +84,8 @@ static void main_function()
 {
     setmode(fileno(stdout), O_BINARY);
 
-    app_set_default_state();
-
-    app.enc_buf_length = app.server_width * app.server_height + 1;
-    app.enc_buf = malloc(app.enc_buf_length);
-    if (app.enc_buf == NULL) {
-        fprintf(
-            stderr,
-            "ERROR: malloc can't allocate memory for encoding buffer, size: %d\n",
-            app.enc_buf_length);
-        goto error;
-    }
-
-    app.dec_buf_length = app.server_width * app.server_height * 4 + 1;
-    app.dec_buf = malloc(app.dec_buf_length);
-    if (app.dec_buf == NULL) {
-        fprintf(
-            stderr,
-            "ERROR: malloc can't allocate memory for decoding buffer, size: %d\n",
-            app.dec_buf_length);
-        goto error;
-    }
-
-    CALL(pthread_mutex_init(&app.dec_mutex, NULL), error);
-    app.is_dec_mutex = 1;
+    app_construct();
+    CALL(app_init(), error);
 
 #ifdef ENABLE_CUDA
     CALL(cuda_init(&app), error);
@@ -157,19 +135,17 @@ static void main_function()
     CALL(h264_init(), error);
 #endif //ENABLE_H264
 
-for (int i = 0; i < MAX_FILTERS && filters[i].context != NULL; i++) {
-    //DEBUG_MSG("filters[%s].init...", filters[i].name);
-    CALL(filters[i].init(), error);
-}
-
     if (app.input_type == INPUT_TYPE_RFB) {
 #ifdef ENABLE_RFB
-        DEBUG_MSG("RFB init");
         CALL(rfb_start(), error);
 #endif //ENABLE_RFB
     }
     else {
         CALL(file_start(), error);
+    }
+
+    for (int i = 0; i < MAX_FILTERS && filters[i].context != NULL; i++) {
+        CALL(filters[i].start(VIDEO_FORMAT_H264, VIDEO_FORMAT_GRAYSCALE), error);
     }
 
     ShowWindow(app.wnd, SW_SHOW);
@@ -197,15 +173,6 @@ for (int i = 0; i < MAX_FILTERS && filters[i].context != NULL; i++) {
     }
 
 error:
-    DEBUG_MSG("INFO: error\n");
-
-    for (int i = 0; i < MAX_FILTERS && filters[i].context != NULL; i++) {
-        if (filters[i].is_started()) {
-            CALL(filters[i].stop())
-        }
-        filters[i].cleanup();
-    }
-
 #ifdef ENABLE_H264
     h264_destroy();
 #endif //ENABLE_H264
@@ -227,26 +194,7 @@ error:
         file_destroy();
     }
 
-    if (app.is_dec_mutex) {
-        int res = pthread_mutex_destroy(&app.dec_mutex);
-        if (res) {
-            fprintf(
-                stderr,
-                "ERROR: pthread_mutex_destroy can't destroy decoder mutex, res %d\n",
-                res);
-        }
-        app.is_dec_mutex = 0;
-    }
-
-    if (app.dec_buf != NULL) {
-        free(app.dec_buf);
-        app.dec_buf = NULL;
-    }
-
-    if (app.enc_buf != NULL) {
-        free(app.enc_buf);
-        app.enc_buf = NULL;
-    }
+    app_cleanup();
 
     DEBUG_MSG("INFO: main_exit, is_aborted: %d\n", is_aborted);
 
@@ -259,6 +207,17 @@ int main(int argc, char** argv)
 
     h = KH_INIT(argvs_hash_t);
     utils_parse_args(argc, argv);
+
+    unsigned verbose = KH_GET(argvs_hash_t, h, VERBOSE);
+    if (verbose != KH_END(h)) {
+        app.verbose = 1;
+        DEBUG_MSG("Debug output has been enabled!!!");
+    }
+    else {
+        app.verbose = 0;
+    }
+
+    app_set_default_state();
 
     unsigned k = KH_GET(argvs_hash_t, h, HELP);
     if (k != KH_END(h)) {

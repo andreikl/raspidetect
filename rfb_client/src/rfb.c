@@ -23,6 +23,7 @@
 #include "utils.h"
 #include "rfb.h"
 #include "ffmpeg.h"
+#include "d3d.h"
 
 #define RFB_SECURITY_NONE 1
 
@@ -110,9 +111,7 @@ struct rfb_buffer_update_response_message_t {
 
 static void *rfb_function(void* data)
 {
-    if (app.verbose) {
-        DEBUG_MSG("INFO: RFB thread has been started\n");
-    }
+    DEBUG_MSG("INFO: RFB thread has been started\n");
 
     //wait frame from network
     CALL(sem_wait(&app.rfb.semaphore), error);
@@ -192,17 +191,13 @@ static void *rfb_function(void* data)
         //     t3,
         //     t4);
 
-#ifdef ENABLE_H264
-        CALL(h264_decode(), error);
-#endif //ENABLE_H264
-
         uint8_t *buffer = app.enc_buf;
         int len = app.enc_buf_length;
         for (int i = 0; i < MAX_FILTERS && filters[i].context != NULL; i++) {
             struct filter_t *filter = filters + i;
             if (!filter->is_started())
                 CALL(filter->start(VIDEO_FORMAT_H264, VIDEO_FORMAT_GRAYSCALE), error);
-            CALL(filter->process_frame(buffer, len), error);
+            CALL(filter->process(buffer, len), error);
             buffer = filter->get_buffer(NULL, &len);
             if (len == 0) {
                 DEBUG_MSG("The filter[%s] doesn't have buffer yet", filter->name);
@@ -213,6 +208,13 @@ static void *rfb_function(void* data)
             }
             break;
         }
+#ifdef ENABLE_H264
+        CALL(h264_decode(), error);
+#endif //ENABLE_H264
+
+#ifdef ENABLE_D3D
+        CALL(d3d_render_image(), error);
+#endif //ENABLE_D3D
     }
 
     DEBUG_MSG("INFO: rfb_function is_aborted: %d\n", is_aborted);
@@ -228,13 +230,13 @@ error:
 void rfb_destroy()
 {
     int res = 0;
-    char buffer[MAX_BUFFER];
+    char buffer[MAX_DATA];
 
     if (app.rfb.socket > 0) {
         // shutdown the connection since no more data will be sent
         NETWORK_CALL(shutdown(app.rfb.socket, SD_SEND), close);
         do {
-            NETWORK_IO_CALL(res = recv(app.rfb.socket, buffer, MAX_BUFFER, 0), close);
+            NETWORK_IO_CALL(res = recv(app.rfb.socket, buffer, MAX_DATA, 0), close);
             if (res == 0 && app.verbose) {
                 DEBUG_MSG("INFO: Connection closed\n");
             }

@@ -38,14 +38,17 @@
 // #include "rfb.h"
 // #include "file.h"
 // #include "cuda.h"
-// #include "ffmpeg.h"
 
 KHASH_MAP_INIT_STR(argvs_hash_t, char*)
 KHASH_T(argvs_hash_t) *h;
 
+#define VIDEO_PATH "./../h264_test_video"
+
 int is_aborted = 0;
 int wrap_verbose = 0;
 int test_verbose = 0;
+char buffer[MAX_STRING];
+uint8_t ffmpeg_buffer[MAX_DATA];
 
 struct app_state_t app;
 struct filter_t filters[MAX_FILTERS];
@@ -73,13 +76,58 @@ static void test_utils_init(void **state)
     app_cleanup();
 }
 
+#ifdef ENABLE_FFMPEG
+#include "ffmpeg.h"
+
+extern struct ffmpeg_state_t ffmpeg;
+static void test_ffmpeg_loop(void **state)
+{
+    int res = 0;
+    CALL(res = app_init(), error);
+
+    struct filter_t *filter = ffmpeg.filter;
+
+    CALL(res = filter->start(VIDEO_FORMAT_H264, VIDEO_FORMAT_GRAYSCALE), error);
+
+    for (int i = 1; i <= 18; i++) {
+        sprintf(buffer, VIDEO_PATH"/data%d.bin", i);
+        size_t read = 0;
+        CALL(utils_fill_buffer(
+            buffer,
+            ffmpeg_buffer,
+            sizeof(ffmpeg_buffer),
+            &read
+        ));
+
+        if (read > 4) {
+            char* t = (char *)ffmpeg_buffer;
+            TEST_DEBUG("H264 slice has been loaded: %d, %x %x %x %x ...",
+                i, t[0], t[1], t[2], t[3]);
+        }
+        else {
+            ERROR_MSG("H264 slice is empty: %d", read);
+            res = -1;
+            goto error;
+        }
+        filter->process(ffmpeg_buffer, read);
+    }
+    CALL(res = filter->stop(), error);
+
+error:
+    app_cleanup();
+
+    TEST_DEBUG("res: %d", res);
+    assert_int_not_equal(res, -1);
+}
+#endif //ENABLE_FFMPEG
+
 static void print_help()
 {
     printf("rfb_client_test [options]\n");
     printf("options:\n");
     printf("%s: print help\n", HELP);
-    printf("%s: verbose, default: %d\n", VERBOSE, VERBOSE_DEF);
-    printf("%s: wrap verbose, default: %d\n", WRAP_VERBOSE, WRAP_VERBOSE_DEF);
+    printf("%s: verbose\n", VERBOSE);
+    printf("%s: wrap verbose\n", WRAP_VERBOSE);
     exit(0);
 }
 
@@ -110,6 +158,9 @@ int main(int argc, char **argv)
     else {
         const struct CMUnitTest tests[] = {
             cmocka_unit_test_setup(test_utils_init, NULL),
+#ifdef ENABLE_FFMPEG
+            cmocka_unit_test_setup(test_ffmpeg_loop, NULL),
+#endif // ENABLE_FFMPEG
         };
         res = cmocka_run_group_tests(tests, test_setup, test_teardown);
     }

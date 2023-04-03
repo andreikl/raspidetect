@@ -39,7 +39,7 @@ static struct format_mapping_t ffmpeg_output_formats[] = {
 
 static struct format_mapping_t *ffmpeg_input_format = NULL;
 static struct format_mapping_t *ffmpeg_output_format = NULL;
-static struct ffmpeg_state_t ffmpeg = {
+struct ffmpeg_state_t ffmpeg = {
     .filter = NULL,
     .codec = NULL,
     .ctx = NULL,
@@ -166,9 +166,9 @@ static int ffmpeg_init()
     return 0;
 }
 
-static int ffmpeg_process_frame(uint8_t *buffer, int length)
+static int ffmpeg_process_slice(uint8_t *buffer, int length)
 {
-    //DEBUG_MSG("ffmpeg_decode: app.enc_buf %p(%d)", buffer, length);
+    DEBUG_MSG("ffmpeg_decode: app.enc_buf %p(%d)", buffer, length);
     ffmpeg.pkt.data = buffer;
     ffmpeg.pkt.size = length;
     DEBUG_MSG("nal %X%X%X%X",
@@ -204,6 +204,7 @@ static int ffmpeg_process_frame(uint8_t *buffer, int length)
                 ffmpeg.fr->width
             );
         app.dec_buf_length = ffmpeg.fr->width * ffmpeg.fr->height;
+        //DEBUG_MSG("memcpy: %p(%d)", app.dec_buf, app.dec_buf_length);
 
         // app.dec_buf_length = av_image_copy_to_buffer(
         //     app.dec_buf, app.server_width * app.server_height * 4,
@@ -224,10 +225,6 @@ unlockm:
                 app.dec_buf_length);
             goto error;
         }
-
-#ifdef ENABLE_D3D
-        CALL(d3d_render_image(), error);
-#endif //ENABLE_D3D
     }
 
     // int got_frame = 0;
@@ -264,7 +261,7 @@ static uint8_t *ffmpeg_get_buffer(int *out_format, int *length)
     if (length)
         *length = app.dec_buf_length;
     
-    app.dec_buf_length = 0;
+    //app.dec_buf_length = 0;
 
     return app.dec_buf;
 
@@ -297,16 +294,16 @@ void ffmpeg_decoder_construct()
 
     if (i != MAX_FILTERS) {
         ffmpeg.filter = filters + i;
-        filters[i].name = "ffmpeg_decoder";
-        filters[i].context = &ffmpeg;
-        filters[i].init = ffmpeg_init;
-        filters[i].cleanup = ffmpeg_cleanup;
-        filters[i].start = ffmpeg_start;
-        filters[i].stop = ffmpeg_stop;
-        filters[i].is_started = ffmpeg_is_started;
-        filters[i].process_frame = ffmpeg_process_frame;
-        filters[i].get_buffer = ffmpeg_get_buffer;
-        filters[i].get_in_formats = ffmpeg_get_in_formats;
-        filters[i].get_out_formats = ffmpeg_get_out_formats;
+        ffmpeg.filter->name = "ffmpeg_decoder";
+        ffmpeg.filter->context = &ffmpeg;
+        ffmpeg.filter->init = ffmpeg_init;
+        ffmpeg.filter->cleanup = ffmpeg_cleanup;
+        ffmpeg.filter->start = ffmpeg_start;
+        ffmpeg.filter->stop = ffmpeg_stop;
+        ffmpeg.filter->is_started = ffmpeg_is_started;
+        ffmpeg.filter->process = ffmpeg_process_slice;
+        ffmpeg.filter->get_buffer = ffmpeg_get_buffer;
+        ffmpeg.filter->get_in_formats = ffmpeg_get_in_formats;
+        ffmpeg.filter->get_out_formats = ffmpeg_get_out_formats;
     }
 }

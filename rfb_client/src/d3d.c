@@ -211,7 +211,7 @@ int d3d_render_image()
         out += 2;
         len--;
     }
-    // //DEBUG_MSG("memcpy: %p(%d)", app.dec_buf, app.dec_buf_length);
+    //DEBUG_MSG("memcpy: %p(%d)", app.dec_buf, app.dec_buf_length);
     // //DEBUG_MSG("INFO:%X%X%X%X", app.dec_buf[0], app.dec_buf[1], app.dec_buf[2], app.dec_buf[3]);
 
     D3D_CALL(IDirect3DSurface9_UnlockRect(app.d3d.surfaces[0]), unlocdec);

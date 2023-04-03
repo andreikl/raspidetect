@@ -5,7 +5,8 @@
 #define VIDEO_FORMAT_GRAYSCALE  1
 #define VIDEO_FORMAT_H264       2
 
-#define MAX_BUFFER      255
+#define MAX_STRING 256
+#define MAX_DATA 1024
 #define MAX_NAME_SIZE   16
 #define MAX_FILTERS     4
 
@@ -30,7 +31,6 @@
 #define PORT "-p\0"
 #define PORT_DEF "5901\0"
 #define VERBOSE "-d\0"
-#define VERBOSE_DEF 0
 
 // Check windows
 #if _WIN32 || _WIN64
@@ -594,7 +594,7 @@ struct filter_t {
     int (*start)(int input_format, int output_format);
     int (*is_started)();
     int (*stop)();
-    int (*process_frame)(uint8_t *buffer, int length);
+    int (*process)(uint8_t *buffer, int length);
 
     uint8_t *(*get_buffer)(int *out_format, int *length);
     int (*get_in_formats)(const struct format_mapping_t *formats[]);

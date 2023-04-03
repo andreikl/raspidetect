@@ -21,6 +21,7 @@
 #include "main.h"
 #include "utils.h"
 #include "ffmpeg.h"
+#include "d3d.h"
 
 extern struct app_state_t app;
 extern struct filter_t filters[MAX_FILTERS];
@@ -72,17 +73,13 @@ static void *file_function(void* data)
             }
         }
 
-#ifdef ENABLE_H264
-        CALL(h264_decode(), error);
-#endif //ENABLE_H264
-
         uint8_t *buffer = app.enc_buf;
         int len = app.enc_buf_length;
         for (int i = 0; i < MAX_FILTERS && filters[i].context != NULL; i++) {
             struct filter_t *filter = filters + i;
             if (!filter->is_started())
                 CALL(filter->start(VIDEO_FORMAT_H264, VIDEO_FORMAT_GRAYSCALE), error);
-            CALL(filter->process_frame(buffer, len), error);
+            CALL(filter->process(buffer, len), error);
             buffer = filter->get_buffer(NULL, &len);
             if (len == 0) {
                 DEBUG_MSG("The filter[%s] doesn't have buffer yet", filter->name);
@@ -93,6 +90,14 @@ static void *file_function(void* data)
             }
             break;
         }
+
+#ifdef ENABLE_H264
+        CALL(h264_decode(), error);
+#endif //ENABLE_H264
+
+#ifdef ENABLE_D3D
+        CALL(d3d_render_image(), error);
+#endif //ENABLE_D3D
     }
 
     DEBUG_MSG("INFO: file_function is_aborted: %d\n", is_aborted);

@@ -25,7 +25,7 @@ KHASH_MAP_INIT_STR(argvs_hash_t, char *)
 extern KHASH_T(argvs_hash_t) *h;
 
 extern struct app_state_t app;
-static char utils_buffer[MAX_BUFFER];
+static char utils_buffer[MAX_STRING];
 
 void utils_parse_args(int argc, char** argv)
 {
@@ -59,7 +59,7 @@ int utils_read_int_value(const char name[], int def_value)
     return def_value;
 }
 
-int utils_fill_buffer(const char *path, char *buffer, int buffer_size, size_t *read)
+int utils_fill_buffer(const char *path, uint8_t *buffer, int buffer_size, size_t *read)
 {
     FILE *fstream = fopen(path, "r");
 
