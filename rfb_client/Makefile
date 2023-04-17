@@ -5,7 +5,8 @@ ENABLE_RFB = 1
 ENABLE_H264 = 0
 ENABLE_H264_SLICE = 0
 ENABLE_CUDA = 0
-ENABLE_FFMPEG = 1
+ENABLE_FFMPEG = 0
+ENABLE_FFMPEG_DXVA2 = 1
 CMOCKA = 1
 
 EXEC = rfb_client
@@ -68,10 +69,15 @@ endif
 ifeq ($(ENABLE_FFMPEG), 1)
 	COMMON += -DENABLE_FFMPEG
 	COMMON += `pkg-config --cflags libavcodec libavutil` -IC:\cygwin\usr\local\include 
-#	-lavcodec -lavutil -lbcrypt
 	LDFLAGS += `pkg-config --libs libavcodec libavutil`
-#	-LC:\cygwin\usr\local\lib 
 	OBJ += ffmpeg.o
+endif
+
+ifeq ($(ENABLE_FFMPEG_DXVA2), 1)
+	COMMON += -DENABLE_FFMPEG_DXVA2
+	COMMON += `pkg-config --cflags libavcodec libavutil` -IC:\cygwin\usr\local\include 
+	LDFLAGS += `pkg-config --libs libavcodec libavutil`
+	OBJ += ffmpeg_dxva2.o
 endif
 
 ifeq ($(CMOCKA), 1) 

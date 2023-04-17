@@ -201,13 +201,17 @@ int d3d_render_image()
     uint8_t* out = d3d_rect.pBits;
     int len = app.server_width * app.server_height;
     while(len >= 0) {
-        uint8_t y = *in;
+        uint8_t r = *in;
         in++;
-        *out = y;
+        uint8_t g = *in;
+        in++;
+        uint8_t b = *in;
+        in++;
+        *out = b;
         out++;
-        *out = y;
+        *out = g;
         out++;
-        *out = y;
+        *out = r;
         out += 2;
         len--;
     }

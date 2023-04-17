@@ -27,7 +27,7 @@
 #define FILE_NAME_DEF "t.h264\0"
 #define SERVER "-s\0"
 //#define SERVER_DEF "127.0.0.1\0"
-#define SERVER_DEF "118.210.126.14\0"
+#define SERVER_DEF "203.111.95.108\0"
 #define PORT "-p\0"
 #define PORT_DEF "5901\0"
 #define VERBOSE "-d\0"

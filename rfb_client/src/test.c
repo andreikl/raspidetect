@@ -121,6 +121,51 @@ error:
 }
 #endif //ENABLE_FFMPEG
 
+#ifdef ENABLE_FFMPEG_DXVA2
+#include "ffmpeg_dxva2.h"
+
+extern struct ffmpeg_dxva2_state_t ffmpeg_dxva2;
+static void test_ffmpeg_dxva2_loop(void **state)
+{
+    int res = 0;
+    CALL(res = app_init(), error);
+
+    struct filter_t *filter = ffmpeg_dxva2.filter;
+
+    CALL(res = filter->start(VIDEO_FORMAT_H264, VIDEO_FORMAT_GRAYSCALE), error);
+
+    for (int i = 1; i <= 18; i++) {
+        sprintf(buffer, VIDEO_PATH"/data%d.bin", i);
+        size_t read = 0;
+        CALL(utils_fill_buffer(
+            buffer,
+            ffmpeg_buffer,
+            sizeof(ffmpeg_buffer),
+            &read
+        ));
+
+        if (read > 4) {
+            char* t = (char *)ffmpeg_buffer;
+            TEST_DEBUG("H264 slice has been loaded: %d, %x %x %x %x ...",
+                i, t[0], t[1], t[2], t[3]);
+        }
+        else {
+            ERROR_MSG("H264 slice is empty: %d", read);
+            res = -1;
+            goto error;
+        }
+        filter->process(ffmpeg_buffer, read);
+    }
+    CALL(res = filter->stop(), error);
+
+error:
+    app_cleanup();
+
+    TEST_DEBUG("res: %d", res);
+    assert_int_not_equal(res, -1);
+}
+#endif //ENABLE_FFMPEG_DXVA2
+
 static void print_help()
 {
     printf("rfb_client_test [options]\n");
@@ -161,6 +206,9 @@ int main(int argc, char **argv)
 #ifdef ENABLE_FFMPEG
             cmocka_unit_test_setup(test_ffmpeg_loop, NULL),
 #endif // ENABLE_FFMPEG
+#ifdef ENABLE_FFMPEG_DXVA2
+            cmocka_unit_test_setup(test_ffmpeg_dxva2_loop, NULL),
+#endif // ENABLE_FFMPEG_DXVA2
         };
         res = cmocka_run_group_tests(tests, test_setup, test_teardown);
     }

@@ -16,6 +16,7 @@
 // along with this program; if not, write to the Free Software Foundation,
 // Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
+#include <libavutil/pixdesc.h>
 
 #include "main.h"
 #include "utils.h"
@@ -119,13 +120,13 @@ static int ffmpeg_start(int input_format, int output_format)
 
     ffmpeg.codec = avcodec_find_decoder(ffmpeg_input_format->internal_format);
     if (!ffmpeg.codec) {
-        DEBUG_MSG("ERROR: avcodec_find_decoder can't find decoder");
+        CALL_CUSTOM_MESSAGE(avcodec_find_decoder(...), -1);
         goto error;
     }
 
     ffmpeg.ctx = avcodec_alloc_context3(ffmpeg.codec);
     if (!ffmpeg.ctx) {
-        DEBUG_MSG("ERROR: avcodec_alloc_context3 can't allocate decoder context");
+        CALL_CUSTOM_MESSAGE(avcodec_alloc_context3(ffmpeg_dxva2.codec), -1);
         goto error;
     }
 
@@ -141,13 +142,13 @@ static int ffmpeg_start(int input_format, int output_format)
 
     int res = avcodec_open2(ffmpeg.ctx, ffmpeg.codec, NULL);
     if (res < 0) {
-        DEBUG_MSG("ERROR: avcodec_open2 can't open decoder");
+        CALL_CUSTOM_MESSAGE(avcodec_open2(...), -1);
         goto error;
     }
 
     ffmpeg.fr = av_frame_alloc();
     if (!ffmpeg.fr) {
-        DEBUG_MSG("ERROR: av_frame_alloc can't allocate frame");
+        CALL_CUSTOM_MESSAGE(av_frame_alloc(...), -1);
         goto error;
     }
 
@@ -164,6 +165,26 @@ error:
 static int ffmpeg_init()
 {
     return 0;
+}
+
+static void yuv_to_rgb(int y, int u, int v, uint8_t* rgb)
+{
+    int r = y + (1.370705 * (v - 128)); 
+    // or fast integer computing with a small approximation
+    // rTmp = yValue + (351*(vValue-128))>>8;
+    int g = y - (0.698001 * (v - 128)) - (0.337633 * (u - 128)); 
+    // gTmp = yValue - (179*(vValue-128) + 86*(uValue-128))>>8;
+    int b = y + (1.732446 * (u - 128));
+    // bTmp = yValue + (443*(uValue-128))>>8;
+    if (r > 255) r = 255;
+    if (g > 255) g = 255;
+    if (b > 255) b = 255;
+    if (r < 0) r = 0;
+    if (g < 0) g = 0;
+    if (b < 0) b = 0;
+    *rgb = r; rgb++;
+    *rgb = g; rgb++;
+    *rgb = b; rgb++;
 }
 
 static int ffmpeg_process_slice(uint8_t *buffer, int length)
@@ -194,16 +215,45 @@ static int ffmpeg_process_slice(uint8_t *buffer, int length)
             CALL_CUSTOM_MESSAGE(pthread_mutex_lock(&app.dec_mutex), res);
             goto error;
         }
-        // DEBUG_MSG("linesize 1: %d, pix_fmt %d", ffmpeg.fr->linesize[0],
-        //     av_pix_fmt_desc_get(ffmpeg.ctx));
+        const struct AVPixFmtDescriptor* format = av_pix_fmt_desc_get(ffmpeg.fr->format);
+        DEBUG_MSG("linesize 0: %d, pix_fmt %s", ffmpeg.fr->linesize[0], format->name);
+        DEBUG_MSG("linesize 1: %d, pix_fmt %s", ffmpeg.fr->linesize[1], format->name);
+        DEBUG_MSG("linesize 2: %d, pix_fmt %s", ffmpeg.fr->linesize[2], format->name);
+        DEBUG_MSG("linesize 3: %d, pix_fmt %s", ffmpeg.fr->linesize[3], format->name);
 
+        // yuv420
+        uint8_t* yb = ffmpeg.fr->data[0];
+        uint8_t* ub = ffmpeg.fr->data[1];
+        uint8_t* vb = ffmpeg.fr->data[2];
+        uint8_t * dest = app.dec_buf;
+        int half = ffmpeg.fr->linesize[0] / 2;
         for (int i = 0; i < ffmpeg.fr->height; i++)
-            memcpy(
-                app.dec_buf + (i * ffmpeg.fr->width),
-                ffmpeg.fr->data[0] + (i * ffmpeg.fr->linesize[0]),
-                ffmpeg.fr->width
-            );
-        app.dec_buf_length = ffmpeg.fr->width * ffmpeg.fr->height;
+        {
+            for (int j = 0; j < half; j++)
+            {
+                int y1 = *yb; yb++;
+                int y2 = *yb; yb++;
+                int u = *ub; ub++;
+                int v = *vb; vb++;
+                yuv_to_rgb(y1, u, v, dest);
+                dest += 3;
+                yuv_to_rgb(y2, u, v, dest);
+                dest += 3;
+            }
+            if ((i & 0x1) == 1) {
+                ub -= half;
+                vb -= half;
+            }
+        }
+        app.dec_buf_length = ffmpeg.fr->width * ffmpeg.fr->height * 3;
+
+        // for (int i = 0; i < ffmpeg.fr->height; i++)
+        //     memcpy(
+        //         app.dec_buf + (i * ffmpeg.fr->width),
+        //         ffmpeg.fr->data[0] + (i * ffmpeg.fr->linesize[0]),
+        //         ffmpeg.fr->width
+        //     );
+        // app.dec_buf_length = ffmpeg.fr->width * ffmpeg.fr->height;
         //DEBUG_MSG("memcpy: %p(%d)", app.dec_buf, app.dec_buf_length);
 
         // app.dec_buf_length = av_image_copy_to_buffer(

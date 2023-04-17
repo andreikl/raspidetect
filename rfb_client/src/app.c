@@ -20,7 +20,14 @@
 
 #include "main.h"
 #include "utils.h"
+
+#ifdef ENABLE_FFMPEG
 #include "ffmpeg.h"
+#endif //ENABLE_FFMPEG
+
+#ifdef ENABLE_FFMPEG_DXVA2
+#include "ffmpeg_dxva2.h"
+#endif //ENABLE_FFMPEG_DXVA2
 
 extern struct app_state_t app;
 extern struct filter_t filters[MAX_FILTERS];
@@ -48,6 +55,9 @@ void app_construct()
 #ifdef ENABLE_FFMPEG
     ffmpeg_decoder_construct();
 #endif //ENABLE_FFMPEG
+#ifdef ENABLE_FFMPEG_DXVA2
+    ffmpeg_dxva2_decoder_construct();
+#endif //ENABLE_FFMPEG_DXVA2
 }
 
 void app_cleanup()
