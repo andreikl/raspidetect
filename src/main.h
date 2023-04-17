@@ -43,7 +43,6 @@
 
 #define APP_NAME "raspidetect\0"
 #define VERBOSE "-d"
-#define VERBOSE_DEF 0
 #define OUTPUT_PATH "-f"
 #define OUTPUT_PATH_DEF OUTPUT_PATH_NULL
 #define OUTPUT_PATH_STDOUT "stdout"
@@ -322,7 +321,6 @@ struct filter_t {
     int (*is_started)();
     int (*stop)();
     int (*process_frame)(uint8_t *buffer);
-
 
     uint8_t *(*get_buffer)(int *out_format, int *length);
     int (*get_in_formats)(const struct format_mapping_t *formats[]);

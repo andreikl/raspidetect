@@ -137,7 +137,7 @@ extern struct app_state_t app;
 extern struct input_t input;
 extern struct filter_t filters[MAX_FILTERS];
 extern struct output_t outputs[MAX_OUTPUTS];
-extern int is_abort;
+extern int is_aborted;
 
 static struct rfb_buffer_update_message_t update_message;
 
@@ -151,7 +151,7 @@ static void *rfb_function(void *data)
     int res;
     const int one = 1;
 
-    while (!is_abort && rfb_is_started()) {
+    while (!is_aborted && rfb_is_started()) {
         struct sockaddr_in client_addr;
         int addres_len = sizeof(client_addr);
 
@@ -307,7 +307,7 @@ static void *rfb_function(void *data)
             } else {
                 fprintf(stderr, "WARNING: Unknown message %d.\n", type.message_type);
             }
-        } while (!is_abort && rfb_is_started());
+        } while (!is_aborted && rfb_is_started());
 
 rfb_error:
         if (errno == 104) {

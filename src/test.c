@@ -33,7 +33,7 @@
 KHASH_MAP_INIT_STR(argvs_hash_t, char*);
 KHASH_T(argvs_hash_t) *h;
 
-int is_abort = 0;
+int is_aborted = 0;
 int wrap_verbose = 0;
 int test_verbose = 0;
 
@@ -161,8 +161,8 @@ static void print_help()
     printf("options:\n");
     printf("%s: print help\n", HELP);
     printf("%s: rfb test, default: %s\n", TEST_RFB, TEST_RFB_DEF);
-    printf("%s: verbose, default: %d\n", VERBOSE, VERBOSE_DEF);
-    printf("%s: wrap verbose, default: %d\n", WRAP_VERBOSE, WRAP_VERBOSE_DEF);
+    printf("%s: verbose\n", VERBOSE);
+    printf("%s: wrap verbose\n", WRAP_VERBOSE);
     exit(0);
 }
 
