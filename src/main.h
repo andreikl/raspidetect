@@ -18,8 +18,10 @@
 #define VIDEO_OUTPUT_SDL_STR    "sdl"
 #define VIDEO_OUTPUT_RFB_STR    "rfb"
 
-#define MAX_OUTPUTS   3
-#define MAX_FILTERS   4
+#define MAX_OUTPUTS    3
+#define MAX_FILTERS    4
+#define MAX_EXTENSIONS 3
+
 #define VIDEO_OUTPUT_NULL   0
 #define VIDEO_OUTPUT_FILE   1
 #define VIDEO_OUTPUT_SDL    2
@@ -279,12 +281,6 @@ struct openvg_state_t {
 };
 #endif //OPENVG
 
-#ifdef CONTROL
-struct control_state_t {
-    volatile unsigned *gpio;
-};
-#endif //CONTROL
-
 struct format_mapping_t {
     int format;
     int internal_format;
@@ -343,6 +339,17 @@ struct output_t {
     void (*cleanup)();
 };
 
+struct extension_t {
+    char* name;
+    void *context;
+
+    int (*init)();
+    int (*start)();
+    int (*is_started)();
+    int (*stop)();
+    void (*cleanup)();
+};
+
 struct app_state_t {
     // camera properties
     int camera_num;               // Camera number
@@ -387,10 +394,6 @@ struct app_state_t {
     float *worker_scores;
 
     struct input_t input;
-
-#ifdef CONTROL
-    struct control_state_t control;
-#endif
 
 #ifdef TENSORFLOW
     struct tensorflow_state_t tf;

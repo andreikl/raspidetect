@@ -43,6 +43,7 @@ struct app_state_t app;
 struct input_t input;
 struct filter_t filters[MAX_FILTERS];
 struct output_t outputs[MAX_OUTPUTS];
+struct extension_t extensions[MAX_EXTENSIONS];
 
 void *worker_function(void *data)
 {
@@ -126,13 +127,6 @@ static int main_function()
     DEBUG("video output: %s", app_get_video_output_str(app.video_output));
     DEBUG("window resolution: %d, %d", app.window_width, app.window_height);
     DEBUG("worker resolution: %d, %d", app.worker_width, app.worker_height);
-
-#ifdef CONTROL
-    if (control_init()) {
-        fprintf(stderr, "ERROR: Failed to initialise control gpio\n");
-        goto error;
-    }
-#endif // CONTROL
 
 #ifdef OPENVG
     if (dispmanx_init()) {
@@ -326,10 +320,6 @@ static int main_function()
         //      fprintf(stderr, "ERROR: failed to clear screan: 0x%x\n", egl_res);
         // }
 #endif //OPENVG
-
-#ifdef CONTROL
-        control_ssh_key();
-#endif // CONTROL
     }
     fprintf(stdout, "\n");
 
@@ -337,10 +327,6 @@ static int main_function()
 
 error:
     is_aborted = 1;
-
-#ifdef CONTROL
-    control_destroy();
-#endif //CONTROL
 
     //TODO: move to something like camara start
     // if (app.video_output == VIDEO_OUTPUT_STDOUT) {

@@ -42,6 +42,7 @@ struct app_state_t app;
 struct input_t input;
 struct filter_t filters[MAX_FILTERS];
 struct output_t outputs[MAX_OUTPUTS];
+struct extension_t extensions[MAX_EXTENSIONS];
 
 #include "test_wraps.c"
 

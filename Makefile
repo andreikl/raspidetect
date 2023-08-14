@@ -10,7 +10,7 @@ H264_ENCODER_JETSON = 0
 # It allows to run test on platform where h264 Jetson encoder isn't available
 # the test code generates static h264 buffers which were recorder on Jetson platform
 H264_ENCODER_JETSON_WRAP = 0
-CONTROL = 0
+CONTROL = 1
 RFB = 1
 SDL = 0
 CMOCKA = 1
