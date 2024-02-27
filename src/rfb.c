@@ -137,7 +137,7 @@ extern struct app_state_t app;
 extern struct input_t input;
 extern struct filter_t filters[MAX_FILTERS];
 extern struct output_t outputs[MAX_OUTPUTS];
-extern int is_abort;
+extern int is_aborted;
 
 static struct rfb_buffer_update_message_t update_message;
 
@@ -151,7 +151,7 @@ static void *rfb_function(void *data)
     int res;
     const int one = 1;
 
-    while (!is_abort && rfb_is_started()) {
+    while (!is_aborted && rfb_is_started()) {
         struct sockaddr_in client_addr;
         int addres_len = sizeof(client_addr);
 
@@ -231,11 +231,6 @@ static void *rfb_function(void *data)
         // DEBUG("il: %d, nl: %d", sizeof(init_message.name), sizeof(init_message));
         RFB_FUNC_CALL(send(rfb.client_socket, (char *)&init_message, sizeof(init_message), 0), rfb_error);
 
-        // if (camera_create_h264_encoder(app)) {
-        //     fprintf(stderr, "ERROR: camera_create_h264_encoder failed\n");
-        //     goto rfb_error;
-        // }
-
         struct rfb_buffer_update_request_message_t buffer_update;
         do {
             struct rfb_type_request_message_t type;
@@ -277,7 +272,6 @@ static void *rfb_function(void *data)
                 DEBUG("Server received message: RFBFramebufferUpdateRequest, waiting for frame");
                 CALL(sem_post(&rfb.client_semaphore), rfb_error);
             } else if (type.message_type == RFBKeyEvent) {
-                DEBUG("RFBKeyEvent message.");
                 uint8_t downFlag;
                 uint16_t padding;
                 uint32_t key;
@@ -286,6 +280,8 @@ static void *rfb_function(void *data)
                 RFB_FUNC_CALL(recv(rfb.client_socket, (char *)&padding, sizeof(padding), 0),
                     rfb_error);
                 RFB_FUNC_CALL(recv(rfb.client_socket, (char *)&key, sizeof(key), 0), rfb_error);
+                DEBUG("RFBKeyEvent message: down(%X), padding(%X), key(%X)",
+                    downFlag, padding, key);
             } else if (type.message_type == RFBPointerEvent) {
                 DEBUG("RFBPointerEvent message.");
                 uint8_t buttonMask;
@@ -307,7 +303,7 @@ static void *rfb_function(void *data)
             } else {
                 fprintf(stderr, "WARNING: Unknown message %d.\n", type.message_type);
             }
-        } while (!is_abort && rfb_is_started());
+        } while (!is_aborted && rfb_is_started());
 
 rfb_error:
         if (errno == 104) {

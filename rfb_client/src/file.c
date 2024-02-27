@@ -16,15 +16,20 @@
 // along with this program; if not, write to the Free Software Foundation,
 // Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
+#include <unistd.h>
+
 #include "main.h"
 #include "utils.h"
+#include "ffmpeg.h"
+#include "d3d.h"
 
-extern int is_terminated;
 extern struct app_state_t app;
+extern struct filter_t filters[MAX_FILTERS];
+extern int is_aborted;
 
 static void *file_function(void* data)
 {
-    DEBUG("INFO: File thread has been started\n");
+    DEBUG_MSG("INFO: File thread has been started\n");
 
     //wait frame from network
     if (sem_wait(&app.file.semaphore)) {
@@ -32,7 +37,7 @@ static void *file_function(void* data)
         goto error;
     }
 
-    while (!is_terminated) {
+    while (!is_aborted) {
         if (usleep(400000)) {
             ERROR_MSG("usleep failed with error: %s\n", strerror(errno));
             goto error;
@@ -52,11 +57,11 @@ static void *file_function(void* data)
             app.enc_buf[buf_length] = 0;
             app.enc_buf_length = buf_length;
         }
-        //DEBUG("INFO: read %lld\n", read_length);
+        //DEBUG_MSG("INFO: read %lld\n", read_length);
 
         int start = 0, end = 0;
         CALL(find_nal(app.enc_buf, app.enc_buf_length, &start, &end), error);
-        //DEBUG("INFO: start %d, end: %d\n", start, end);
+        //DEBUG_MSG("INFO: start %d, end: %d\n", start, end);
         if (end < app.enc_buf_length) {
             app.enc_buf[end] = 0;
             app.enc_buf_length = end;
@@ -68,20 +73,38 @@ static void *file_function(void* data)
             }
         }
 
+        uint8_t *buffer = app.enc_buf;
+        int len = app.enc_buf_length;
+        for (int i = 0; i < MAX_FILTERS && filters[i].context != NULL; i++) {
+            struct filter_t *filter = filters + i;
+            if (!filter->is_started())
+                CALL(filter->start(VIDEO_FORMAT_H264, VIDEO_FORMAT_GRAYSCALE), error);
+            CALL(filter->process(buffer, len), error);
+            buffer = filter->get_buffer(NULL, &len);
+            if (len == 0) {
+                DEBUG_MSG("The filter[%s] doesn't have buffer yet", filter->name);
+                break;
+            }
+            else {
+                DEBUG_MSG("buffer has been received from filter[%s], length: %d!!!", filter->name, len);
+            }
+            break;
+        }
+
 #ifdef ENABLE_H264
         CALL(h264_decode(), error);
 #endif //ENABLE_H264
 
-#ifdef ENABLE_FFMPEG
-        CALL(ffmpeg_decode(start, end), error);
-#endif //ENABLE_FFMPEG
+#ifdef ENABLE_D3D
+        CALL(d3d_render_image(), error);
+#endif //ENABLE_D3D
     }
 
-    DEBUG("INFO: file_function is_terminated: %d\n", is_terminated);
+    DEBUG_MSG("INFO: file_function is_aborted: %d\n", is_aborted);
     return NULL;
 
 error:
-    is_terminated = 1;
+    is_aborted = 1;
     return NULL;
 }
 
@@ -128,7 +151,7 @@ int file_init()
     return 0;
 
 error:
-    file_destroy(app);
+    file_destroy();
     return -1;
 }
 

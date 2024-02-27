@@ -1,6 +1,6 @@
 #define D3D_MESSAGE(call, hres__) \
 { \
-    fprintf(stderr, "ERROR: "#call" returned error: %s(%ld)\n%s:%d - %s\n", \
+    fprintf(stderr, "\033[1;31m"#call" returned error: %s(%ld)\n%s:%d - %s\033[0m\n", \
         d3d_get_hresult_message(hres__), hres__, __FILE__, __LINE__, __FUNCTION__); \
 }
 
@@ -30,6 +30,6 @@ int d3d_init();
 int d3d_render_frame();
 int d3d_render_image();
 
-char* d3d_get_hresult_message();
+char* d3d_get_hresult_message(HRESULT result);
 
 int d3d_start();

@@ -264,7 +264,6 @@ static int mmal_start(int input_format, int output_format)
         goto cleanup;
     }
 
-
     mmal.input_port = mmal.encoder->input[0];
     mmal.input_port->format->encoding = mmal_input_format->internal_format;
     mmal.input_port->format->es->video.width = app.video_width;
@@ -697,13 +696,12 @@ void mmal_encoder_construct()
         mmal.filter = filters + i;
         filters[i].name = "mmal_encoder";
         filters[i].context = &mmal;
-        filters[i].stop = mmal_stop;
-        filters[i].cleanup = mmal_cleanup;
         filters[i].init = mmal_init;
+        filters[i].cleanup = mmal_cleanup;
         filters[i].start = mmal_start;
+        filters[i].stop = mmal_stop;
         filters[i].is_started = mmal_is_started;
         filters[i].process_frame = mmal_process_frame;
-
         filters[i].get_buffer = mmal_get_buffer;
         filters[i].get_in_formats = mmal_get_in_formats;
         filters[i].get_out_formats = mmal_get_out_formats;

@@ -21,11 +21,11 @@
 #include "main.h"
 #include "utils.h"
 
-KHASH_MAP_INIT_STR(map_str, char *)
-extern KHASH_T(map_str) *h;
+KHASH_MAP_INIT_STR(argvs_hash_t, char *)
+extern KHASH_T(argvs_hash_t) *h;
 
 extern struct app_state_t app;
-static char utils_buffer[MAX_BUFFER];
+static char utils_buffer[MAX_STRING];
 
 void utils_parse_args(int argc, char** argv)
 {
@@ -34,7 +34,7 @@ void utils_parse_args(int argc, char** argv)
 
     for (int i = 0; i < argc; i++) {
         if (argv[i][0] == '-') {
-            k = KH_PUT(map_str, h, argv[i], &ret);
+            k = KH_PUT(argvs_hash_t, h, argv[i], &ret);
             KH_VAL(h, k) = (i + 1 < argc) ? argv[i + 1] : NULL;
         }
     }
@@ -42,7 +42,7 @@ void utils_parse_args(int argc, char** argv)
 
 char *utils_read_str_value(const char *name, char *def_value)
 {
-    unsigned k = KH_GET(map_str, h, name);
+    unsigned k = KH_GET(argvs_hash_t, h, name);
     if (k != KH_END(h)) {
         return KH_VAL(h, k);
     }
@@ -51,7 +51,7 @@ char *utils_read_str_value(const char *name, char *def_value)
 
 int utils_read_int_value(const char name[], int def_value)
 {
-    unsigned k = KH_GET(map_str, h, name);
+    unsigned k = KH_GET(argvs_hash_t, h, name);
     if (k != KH_END(h)) {
         const char* value = KH_VAL(h, k);
         return atoi(value);
@@ -59,12 +59,12 @@ int utils_read_int_value(const char name[], int def_value)
     return def_value;
 }
 
-int utils_fill_buffer(const char *path, char *buffer, int buffer_size, size_t *read)
+int utils_fill_buffer(const char *path, uint8_t *buffer, int buffer_size, size_t *read)
 {
     FILE *fstream = fopen(path, "r");
 
     if (fstream == NULL) {
-        DEBUG("ERROR: opening the file. (filename: %s)\n", path);
+        DEBUG_MSG("ERROR: opening the file. (filename: %s)\n", path);
         return EXIT_FAILURE;
     }
 

@@ -16,45 +16,44 @@
 // along with this program; if not, write to the Free Software Foundation,
 // Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
+#include <unistd.h>
+
 #include "main.h"
 #include "utils.h"
 #include "d3d.h"
 
 extern struct app_state_t app;
-extern int is_terminated;
+extern int is_aborted;
 
 static void *d3d_function(void* data)
 {
-    DEBUG("Direct3d thread has been started");
+    DEBUG_MSG("Direct3d thread has been started");
 
     if (sem_wait(&app.d3d.semaphore)) {
-        DEBUG("ERROR: sem_wait failed with error: %s", strerror(errno));
+        DEBUG_MSG("ERROR: sem_wait failed with error: %s", strerror(errno));
         goto error;
     }
 
-    while (!is_terminated) {
+    while (!is_aborted) {
         if (usleep(40000)) {
-            DEBUG("ERROR: usleep failed with error: %s", strerror(errno));
+            DEBUG_MSG("ERROR: usleep failed with error: %s", strerror(errno));
             goto error;
         }
-
-        DEBUG("render");
-
         d3d_render_frame();
     }
 
-    DEBUG("d3d_function is_terminated: %d", is_terminated);
+    DEBUG_MSG("d3d_function is_aborted: %d", is_aborted);
     return NULL;
 
 error:
-    is_terminated = 1;
+    is_aborted = 1;
     return NULL;
 }
 
 void d3d_destroy()
 {
     if (sem_destroy(&app.d3d.semaphore)) {
-        DEBUG("ERROR: sem_destroy failed with code: %s", strerror(errno));
+        DEBUG_MSG("ERROR: sem_destroy failed with code: %s", strerror(errno));
     }
 
     if (app.d3d.is_thread) {
@@ -88,7 +87,7 @@ int d3d_init()
 
     app.d3d.d3d = Direct3DCreate9(D3D_SDK_VERSION);
     if (!app.d3d.d3d) {
-        DEBUG("ERROR: Can't create d3d interface");
+        DEBUG_MSG("ERROR: Can't create d3d interface");
         goto close;
     }
 
@@ -185,15 +184,14 @@ error:
 int d3d_render_image()
 {
     int res = 0;
-    // RECT rect;
-    // rect.left = 0; rect.top = 0;
-    // rect.right = 640; rect.bottom = 480;
-
-    CALL(pthread_mutex_lock(&app.dec_mutex), exit);
+    CALL(res = pthread_mutex_lock(&app.dec_mutex), error);
+    if (res) {
+        CALL_CUSTOM_MESSAGE(pthread_mutex_lock(&mmal.mutex), res);
+        goto error;
+    }
 
     D3DLOCKED_RECT d3d_rect;
-    HRESULT hres;
-    D3D_CALL(hres = IDirect3DSurface9_LockRect(
+    D3D_CALL(IDirect3DSurface9_LockRect(
         app.d3d.surfaces[0], &d3d_rect, NULL, D3DLOCK_NOSYSLOCK
     ), unlocdec);
 
@@ -203,35 +201,44 @@ int d3d_render_image()
     uint8_t* out = d3d_rect.pBits;
     int len = app.server_width * app.server_height;
     while(len >= 0) {
-        uint8_t y = *in;
+        uint8_t r = *in;
         in++;
-        *out = y;
+        uint8_t g = *in;
+        in++;
+        uint8_t b = *in;
+        in++;
+        *out = b;
         out++;
-        *out = y;
+        *out = g;
         out++;
-        *out = y;
+        *out = r;
         out += 2;
         len--;
     }
-    // //DEBUG("memcpy: %p(%d)", app.dec_buf, app.dec_buf_length);
-    // //DEBUG("INFO:%X%X%X%X", app.dec_buf[0], app.dec_buf[1], app.dec_buf[2], app.dec_buf[3]);
+    //DEBUG_MSG("memcpy: %p(%d)", app.dec_buf, app.dec_buf_length);
+    // //DEBUG_MSG("INFO:%X%X%X%X", app.dec_buf[0], app.dec_buf[1], app.dec_buf[2], app.dec_buf[3]);
 
-    D3D_CALL(hres = IDirect3DSurface9_UnlockRect(app.d3d.surfaces[0]));
-    if (FAILED(hres)) {
-        res = -1;
+    D3D_CALL(IDirect3DSurface9_UnlockRect(app.d3d.surfaces[0]), unlocdec);
+
+    CALL(res = pthread_mutex_unlock(&app.dec_mutex));
+    if (res) {
+        CALL_CUSTOM_MESSAGE(pthread_mutex_unlock(&app.dec_mutex), res);
+        goto error;
     }
+    return 0;
 
 unlocdec:
-    int ret = 0;
-    CALL(ret = pthread_mutex_unlock(&app.dec_mutex));
-    if (ret)
-        res = -1;
+    CALL(res = pthread_mutex_unlock(&app.dec_mutex));
+    if (res) {
+        CALL_CUSTOM_MESSAGE(pthread_mutex_unlock(&app.dec_mutex), res);
+        goto error;
+    }
 
-exit:
-    if (res == -1 && !errno)
+error:
+    if (!errno)
         errno = EAGAIN;
 
-    return res;
+    return -1;
 }
 
 char* d3d_get_hresult_message(HRESULT result)

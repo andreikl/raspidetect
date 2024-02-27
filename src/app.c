@@ -25,6 +25,7 @@ extern struct app_state_t app;
 extern struct input_t input;
 extern struct filter_t filters[MAX_FILTERS];
 extern struct output_t outputs[MAX_OUTPUTS];
+extern struct extension_t extensions[MAX_EXTENSIONS];
 
 const char *video_formats[] = {
     VIDEO_FORMAT_UNKNOWN_STR,
@@ -146,10 +147,17 @@ void app_construct()
     if ((app.video_output & VIDEO_OUTPUT_RFB) == VIDEO_OUTPUT_RFB)
         rfb_construct();
 #endif //RFB
+
+#ifdef CONTROL
+    control_construct();
+#endif //CONTROL
 }
 
 void app_cleanup()
 {
+    for (int i = 0; i < MAX_EXTENSIONS && extensions[i].context != NULL; i++) {
+        extensions[i].cleanup();
+    }
     for (int i = 0; i < MAX_OUTPUTS && outputs[i].context != NULL; i++) {
         outputs[i].cleanup();
     }
@@ -362,6 +370,11 @@ int app_init()
     for (int i = 0; i < MAX_FILTERS && filters[i].context != NULL; i++) {
         //DEBUG("filters[%s].init...", filters[i].name);
         CALL(filters[i].init(), error);
+    }
+
+    for (int i = 0; i < MAX_EXTENSIONS && extensions[i].context != NULL; i++) {
+        //DEBUG("filters[%s].init...", filters[i].name);
+        CALL(extensions[i].init(), error);
     }
 
     const struct format_mapping_t* in_fs = NULL;

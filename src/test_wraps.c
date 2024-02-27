@@ -20,6 +20,10 @@
 extern struct v4l_state_t v4l;
 #endif
 
+#if defined(CONTROL_WRAP) || defined(CONTROL)
+extern struct control_state_t control;
+#endif
+
 static uint8_t *image = NULL;
 static int image_width = 0;
 static int image_height = 0;
@@ -47,6 +51,16 @@ int __wrap_open(const char * file, int oflag, ...)
 {
 #if !defined(V4L_WRAP) && defined(V4L) 
     if (strcmp(file, v4l.dev_name) == 0) {
+        WRAP_DEBUG("real open, file: %s", file);
+        va_list args;
+        va_start(args, oflag);        
+        int res = __real_open(file, oflag, args);
+        va_end(args);
+        return res;
+    }
+#endif
+#if !defined(CONTROL_WRAP) && defined(CONTROL) 
+    if (strcmp(file, control.dev_name) == 0) {
         WRAP_DEBUG("real open, file: %s", file);
         va_list args;
         va_start(args, oflag);        

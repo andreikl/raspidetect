@@ -50,7 +50,7 @@ static int h264_cabac_init_decoder()
     app.h264.cabac.codIOffset = RBSP_READ_UN(&app.h264.rbsp, 9);
     app.h264.cabac.codIRange = 510;
 
-    DEBUG("INFO: h264_cabac_init_decoder codIOffset (%d)\n", app.h264.cabac.codIOffset);
+    DEBUG_MSG("INFO: h264_cabac_init_decoder codIOffset (%d)\n", app.h264.cabac.codIOffset);
 
     return 0;
 }
@@ -162,27 +162,27 @@ int h264_get_MbAddr_type(int* MbAddrN, int xN, int yN, int maxW, int maxH)
     //Table 6-3 – Specification of mbAddrN
     if (xN < 0 && yN < 0) {
         *MbAddrN = h264_MbAddrD();
-        //DEBUG("INFO: MbAddrD (%d)\n", *MbAddrN);
+        //DEBUG_MSG("INFO: MbAddrD (%d)\n", *MbAddrN);
     } else if (xN < 0 && yN >= 0 && yN < maxH) {
         *MbAddrN = h264_MbAddrA();
-        //DEBUG("INFO: MbAddrA (%d)\n", *MbAddrN);
+        //DEBUG_MSG("INFO: MbAddrA (%d)\n", *MbAddrN);
     } else if (xN >= 0 && xN < maxW && yN < 0) {
         *MbAddrN = h264_MbAddrB();
-        //DEBUG("INFO: MbAddrB (%d)\n", *MbAddrN);
+        //DEBUG_MSG("INFO: MbAddrB (%d)\n", *MbAddrN);
     } else if (xN >= 0 && xN < maxW && yN >= 0 && yN < maxH) {
         *MbAddrN = app.h264.data.CurrMbAddr;
-        //DEBUG("INFO: CurrMbAddr (%d)\n", *MbAddrN);
+        //DEBUG_MSG("INFO: CurrMbAddr (%d)\n", *MbAddrN);
     } else if (xN >= maxW && yN < 0) {
         *MbAddrN = h264_MbAddrC();
-        //DEBUG("INFO: MbAddrC (%d)\n", *MbAddrN);
+        //DEBUG_MSG("INFO: MbAddrC (%d)\n", *MbAddrN);
     } else if (xN >= maxW  && yN >= 0 && yN < maxH) {
         *MbAddrN = -1;
-        //DEBUG("INFO: MbAddr: not available\n");
+        //DEBUG_MSG("INFO: MbAddr: not available\n");
     } else if (yN >= maxH) {
         *MbAddrN = -1;
     } else {
         return -1;
-        DEBUG("ERROR: uncovered case xN(%d) yN(%d)\n%s:%d - %s\n",
+        DEBUG_MSG("ERROR: uncovered case xN(%d) yN(%d)\n%s:%d - %s\n",
             xN, yN, __FILE__, __LINE__, __FUNCTION__);
     }
     return 0;
@@ -327,19 +327,19 @@ int h264_cabac_read_mb_type(struct app_state_t* app)
         error
     );
     int ctxIdxInc = condTermFlagA + condTermFlagB;
-    //DEBUG("INFO: h264_cabac_read_mb_type ctxIdxInc(%d)\n", ctxIdxInc);
+    //DEBUG_MSG("INFO: h264_cabac_read_mb_type ctxIdxInc(%d)\n", ctxIdxInc);
 
     //Table 9-36 – Binarization for macroblock types in I slices
     int bin = h264_DecodeDecision(ctxIdxOffset + ctxIdxInc); //ctxIdxOffset(3): 0 - 0, 1, 2
     if (bin == 0) {
-        //DEBUG("INFO: h264_cabac_read_mb_type H264_I_NxN\n");
+        //DEBUG_MSG("INFO: h264_cabac_read_mb_type H264_I_NxN\n");
         app.h264.data.curr_mb->mb_type_origin = H264_I_NxN;
         return 0;
     }
     else { // 16x16 Intra
         int bin = h264_DecodeTerminate(); //ctxIdxOffset(3): 1 - 276
         if(bin == 1) {
-            //DEBUG("INFO: h264_cabac_read_mb_type H264_I_PCM\n");
+            //DEBUG_MSG("INFO: h264_cabac_read_mb_type H264_I_PCM\n");
             app.h264.data.curr_mb->mb_type_origin = H264_I_PCM;
             return 0;
         }
@@ -423,7 +423,7 @@ int h264_cabac_read_transform_size_8x8_flag(struct app_state_t* app)
         error
     );
     int ctxIdxInc = condTermFlagA + condTermFlagB;
-    //DEBUG("INFO: h264_cabac_read_transform_size_8x8_flag ctxIdxInc(%d)\n", ctxIdxInc);    
+    //DEBUG_MSG("INFO: h264_cabac_read_transform_size_8x8_flag ctxIdxInc(%d)\n", ctxIdxInc);    
 
     app.h264.data.curr_mb->transform_size_8x8_flag =
         h264_DecodeDecision(ctxIdxOffset + ctxIdxInc);
@@ -507,7 +507,7 @@ int h264_cabac_read_intra_chroma_pred_mode(struct app_state_t* app)
         error
     );
     int ctxIdxInc = condTermFlagA + condTermFlagB;
-    // DEBUG("INFO: h264_cabac_read_intra_chroma_pred_mode ctxIdxInc(%d)\n", ctxIdxInc);    
+    // DEBUG_MSG("INFO: h264_cabac_read_intra_chroma_pred_mode ctxIdxInc(%d)\n", ctxIdxInc);    
 
     // 64: 0 - 0,1,2 (clause 9.3.3.1.1.8)
     if (!h264_DecodeDecision(ctxIdxOffset + ctxIdxInc)) {
@@ -1304,7 +1304,7 @@ int h264_cabac_read_coeff_abs_level_minus1(struct app_state_t* app,
         coeffLevel->coeff[levelListIdx].coeff_abs_level_minus1 = prefix;
         return 0;
     }
-    DEBUG("ERROR: TO IMPLEMENT ctxBlockCat %d, type %d, %s - %s:%d\n",
+    DEBUG_MSG("ERROR: TO IMPLEMENT ctxBlockCat %d, type %d, %s - %s:%d\n",
         ctxBlockCat, type, __FILE__, __FUNCTION__, __LINE__);
     return -1;
 

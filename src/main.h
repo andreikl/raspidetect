@@ -18,8 +18,10 @@
 #define VIDEO_OUTPUT_SDL_STR    "sdl"
 #define VIDEO_OUTPUT_RFB_STR    "rfb"
 
-#define MAX_OUTPUTS   3
-#define MAX_FILTERS   4
+#define MAX_OUTPUTS    3
+#define MAX_FILTERS    4
+#define MAX_EXTENSIONS 3
+
 #define VIDEO_OUTPUT_NULL   0
 #define VIDEO_OUTPUT_FILE   1
 #define VIDEO_OUTPUT_SDL    2
@@ -43,7 +45,6 @@
 
 #define APP_NAME "raspidetect\0"
 #define VERBOSE "-d"
-#define VERBOSE_DEF 0
 #define OUTPUT_PATH "-f"
 #define OUTPUT_PATH_DEF OUTPUT_PATH_NULL
 #define OUTPUT_PATH_STDOUT "stdout"
@@ -280,12 +281,6 @@ struct openvg_state_t {
 };
 #endif //OPENVG
 
-#ifdef CONTROL
-struct control_state_t {
-    volatile unsigned *gpio;
-};
-#endif //CONTROL
-
 struct format_mapping_t {
     int format;
     int internal_format;
@@ -323,7 +318,6 @@ struct filter_t {
     int (*stop)();
     int (*process_frame)(uint8_t *buffer);
 
-
     uint8_t *(*get_buffer)(int *out_format, int *length);
     int (*get_in_formats)(const struct format_mapping_t *formats[]);
     int (*get_out_formats)(const struct format_mapping_t *formats[]);
@@ -343,6 +337,30 @@ struct output_t {
     int (*stop)();
     int (*get_formats)(const struct format_mapping_t *formats[]);
     void (*cleanup)();
+};
+
+enum extension_command_e {
+    EXTENSION_MOVE_FORWARD_START = 1,
+    EXTENSION_MOVE_FORWARD_STOP,
+    EXTENSION_MOVE_RIGHT_START,
+    EXTENSION_MOVE_RIGHT_STOP,
+    EXTENSION_MOVE_BACKWARD_START,
+    EXTENSION_MOVE_BACKWARD_STOP,
+    EXTENSION_MOVE_LEFT_START,
+    EXTENSION_MOVE_LEFT_STOP
+};
+
+struct extension_t {
+    char* name;
+    void *context;
+
+    int (*init)();
+    int (*start)();
+    int (*is_started)();
+    int (*stop)();
+    void (*cleanup)();
+
+    int (*process)(enum extension_command_e);
 };
 
 struct app_state_t {
@@ -389,10 +407,6 @@ struct app_state_t {
     float *worker_scores;
 
     struct input_t input;
-
-#ifdef CONTROL
-    struct control_state_t control;
-#endif
 
 #ifdef TENSORFLOW
     struct tensorflow_state_t tf;

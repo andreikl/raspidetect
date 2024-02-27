@@ -38,7 +38,7 @@ extern struct app_state_t app;
 extern struct input_t input;
 extern struct filter_t filters[MAX_FILTERS];
 extern struct output_t outputs[MAX_OUTPUTS];
-extern int is_abort;
+extern int is_aborted;
 
 static int file_stop()
 {

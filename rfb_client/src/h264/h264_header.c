@@ -37,12 +37,12 @@ static int h264_read_ref_pic_list_modification()
             }
 
             if (i >= header->ref_count[list]) {
-                DEBUG("ERROR: reference count overflow.\n");
+                DEBUG_MSG("ERROR: reference count overflow.\n");
                 return -1;
             }
 
             if (reordering_of_pic_nums_idc > 3) {
-                DEBUG("ERROR: invalid reordering_of_pic_nums_idc %d.\n",
+                DEBUG_MSG("ERROR: invalid reordering_of_pic_nums_idc %d.\n",
                     reordering_of_pic_nums_idc);
                 return -1;
             }
@@ -74,7 +74,7 @@ static int h264_read_pred_weight_table()
     header->luma_log2_weight_denom = RBSP_READ_UE(rbsp);
     //H264_RBSP_DEBUG(header->luma_log2_weight_denom);
     if (header->luma_log2_weight_denom > 7) {
-        DEBUG("ERROR: luma_log2_weight_denom %d is out of range.\n",
+        DEBUG_MSG("ERROR: luma_log2_weight_denom %d is out of range.\n",
             header->luma_log2_weight_denom);
         return -1;
     }
@@ -87,7 +87,7 @@ static int h264_read_pred_weight_table()
         header->chroma_log2_weight_denom = RBSP_READ_UE(rbsp);
         //H264_RBSP_DEBUG(header->chroma_log2_weight_denom);
         if (header->chroma_log2_weight_denom > 7) {
-            DEBUG("ERROR: chroma_log2_weight_denom %d is out of range\n",
+            DEBUG_MSG("ERROR: chroma_log2_weight_denom %d is out of range\n",
                 header->chroma_log2_weight_denom);
             return -1;
         }
@@ -149,7 +149,7 @@ static int h264_read_dec_ref_pic_marking()
         //H264_RBSP_DEBUG(header->long_term_reference_flag);
         if (header->long_term_reference_flag) {
             // ffmpeg: set mmco[0].opcode = MMCO_LONG, mmco[0].long_arg = 0; nb_mmco = 1;
-            DEBUG("Slice is marked as 'used for reference' (long-term reference) %d",
+            DEBUG_MSG("Slice is marked as 'used for reference' (long-term reference) %d",
                 header->long_term_reference_flag);
 
             header->LongTermFrameIdx = 0;
@@ -158,7 +158,7 @@ static int h264_read_dec_ref_pic_marking()
             header->LongTermFrameIdx = -1;
             header->MaxLongTermFrameIdx = -1;
 
-            DEBUG("Slice is marked as 'used for reference' (short-term reference) %d",
+            DEBUG_MSG("Slice is marked as 'used for reference' (short-term reference) %d",
                 header->long_term_reference_flag);
         }
         //ffmpeg: set adaptive_ref_pic_marking_mode_flag -> sl->explicit_ref_marking = 1
@@ -254,7 +254,7 @@ static int h264_read_slice_header()
 
     // ffmpeg: copy check
     if (header->IdrPicFlag && header->slice_type != SliceTypeI) {
-        DEBUG("ERROR: A non-intra slice in an IDR NAL unit.\n");
+        DEBUG_MSG("ERROR: A non-intra slice in an IDR NAL unit.\n");
         return -1;
     }
 
@@ -416,7 +416,7 @@ static int h264_read_slice_header()
     ) {
         header->cabac_init_idc = RBSP_READ_UE(rbsp);
         if (header->cabac_init_idc > 2) {
-            DEBUG("ERROR: cabac_init_idc (%d) overflow.\n",
+            DEBUG_MSG("ERROR: cabac_init_idc (%d) overflow.\n",
                 header->cabac_init_idc);
             return -1;
         }
@@ -484,9 +484,9 @@ static int h264_read_slice_header()
     // }
 
     if (header->list_count > 0) {
-        DEBUG("list_count: %d", header->list_count);
+        DEBUG_MSG("list_count: %d", header->list_count);
         for (int i = 0; i < header->list_count; i++) {
-            DEBUG("ref_count[i]: %d", header->ref_count[i]);
+            DEBUG_MSG("ref_count[i]: %d", header->ref_count[i]);
         }
 
     }

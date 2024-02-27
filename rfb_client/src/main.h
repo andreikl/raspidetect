@@ -1,8 +1,14 @@
 #ifndef MAIN_H
 #define MAIN_H
 
-#define MAX_BUFFER 255
-#define MAX_NAME_SIZE 16
+#define VIDEO_FORMAT_UNKNOWN    0
+#define VIDEO_FORMAT_GRAYSCALE  1
+#define VIDEO_FORMAT_H264       2
+
+#define MAX_STRING 256
+#define MAX_DATA 1024
+#define MAX_NAME_SIZE   16
+#define MAX_FILTERS     4
 
 // number of processing surfaces
 #define SCREEN_BUFFERS 2
@@ -21,11 +27,10 @@
 #define FILE_NAME_DEF "t.h264\0"
 #define SERVER "-s\0"
 //#define SERVER_DEF "127.0.0.1\0"
-#define SERVER_DEF "118.210.126.14\0"
+#define SERVER_DEF "203.111.95.108\0"
 #define PORT "-p\0"
 #define PORT_DEF "5901\0"
 #define VERBOSE "-d\0"
-#define VERBOSE_DEF 0
 
 // Check windows
 #if _WIN32 || _WIN64
@@ -60,7 +65,43 @@
 #include <windows.h>
 #include <fcntl.h> // O_BINARY
 
-#define DEBUG(format, ...) \
+#define ASSERT_INT(value, expr, expect, error) \
+{ \
+    if (!(value expr expect)) { \
+        fprintf(stderr, "\033[1;31m"#value"(%d) "#expr" "#expect"(%d)\n%s:%d - %s\033[0m\n", \
+            value, expect, __FILE__, __LINE__, __FUNCTION__); \
+        goto error; \
+    } \
+}
+
+#define ASSERT_LNG(value, expr, expect, error) \
+{ \
+    if (!(value expr expect)) { \
+        fprintf(stderr, "\033[1;31m"#value"(%ld) "#expr" "#expect"(%ld)\n%s:%d - %s\033[0m\n", \
+            value, (long int)expect, __FILE__, __LINE__, __FUNCTION__); \
+        goto error; \
+    } \
+}
+
+#define ASSERT_PTR(value, expr, expect, error) \
+{ \
+    if (!(value expr expect)) { \
+        fprintf(stderr, "\033[1;31m"#value"(%p) "#expr" "#expect"(%p)\n%s:%d - %s\033[0m\n", \
+            value, expect, __FILE__, __LINE__, __FUNCTION__); \
+        goto error; \
+    } \
+}
+
+#define UNCOVERED_CASE(value, condition, expectation) \
+{ \
+    if (value condition expectation) { \
+        fprintf(stderr, "\033[1;31muncovered case "#value"(%d) "#condition" "#expectation"(%d)\n%s:%d - %s\033[0m\n", \
+            value, expectation, __FILE__, __LINE__, __FUNCTION__); \
+        return -1; \
+    } \
+}
+
+#define DEBUG_MSG(format, ...) \
 { \
     if (app.verbose) \
         fprintf(stderr, "\033[1;32m%s:%d - %s, "#format"\033[0m\n", \
@@ -75,25 +116,16 @@
 
 #define GET_3RD_ARG(arg1, arg2, arg3, ...) arg3
 
-#define UNCOVERED_CASE(value, condition, expectation) \
-{ \
-    if (value condition expectation) { \
-        fprintf(stderr, "\033[1;31muncovered case "#value"(%d) "#condition" "#expectation"(%d)\n%s:%d - %s\033[0m\n", \
-            value, expectation, __FILE__, __LINE__, __FUNCTION__); \
-        return -1; \
-    } \
-}
-
-#define CALL_MESSAGE_STR(call, res) \
-{ \
-    fprintf(stderr, "\033[1;31m"#call" returned error: %s\n%s:%d - %s\033[0m\n", \
-        res, __FILE__, __LINE__, __FUNCTION__); \
-}
-
 #define CALL_MESSAGE(call) \
 { \
     fprintf(stderr, "\033[1;31m"#call" returned error: %s\n%s:%d - %s\033[0m\n", \
         strerror(errno), __FILE__, __LINE__, __FUNCTION__); \
+}
+
+#define CALL_CUSTOM_MESSAGE(call, res) \
+{ \
+    fprintf(stderr, "\033[1;31m"#call" returned error: %s (%d)\n%s:%d - %s\033[0m\n", \
+        strerror(res), res, __FILE__, __LINE__, __FUNCTION__); \
 }
 
 #define CALL_2(call, error) \
@@ -526,16 +558,6 @@
     };
 #endif //ENABLE_H264
 
-#ifdef ENABLE_FFMPEG
-#include <libavcodec/avcodec.h>
-    struct ffmpeg_state_t {
-        const AVCodec* codec;
-        AVCodecContext* ctx;
-        AVFrame* fr;
-        AVPacket pkt;
-    };
-#endif //ENABLE_FFMPEG
-
 #ifdef ENABLE_CUDA
     #include <cuviddec.h>
 
@@ -555,6 +577,28 @@ struct file_state_t {
 
     pthread_t thread;
     int is_thread;
+};
+
+struct format_mapping_t {
+    int format;
+    int internal_format;
+    int is_supported;
+};
+
+struct filter_t {
+    char* name;
+    void *context;
+    int (*init)();
+    void (*cleanup)();
+
+    int (*start)(int input_format, int output_format);
+    int (*is_started)();
+    int (*stop)();
+    int (*process)(uint8_t *buffer, int length);
+
+    uint8_t *(*get_buffer)(int *out_format, int *length);
+    int (*get_in_formats)(const struct format_mapping_t *formats[]);
+    int (*get_out_formats)(const struct format_mapping_t *formats[]);
 };
 
 struct app_state_t {
@@ -593,10 +637,6 @@ struct app_state_t {
 #ifdef ENABLE_H264
     struct h264_state_t h264;
 #endif //ENABLE_H264
-
-#ifdef ENABLE_FFMPEG
-    struct ffmpeg_state_t ffmpeg;
-#endif //ENABLE_FFMPEG
 
 #ifdef ENABLE_CUDA
     struct cuda_state_t cuda;

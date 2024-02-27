@@ -22,10 +22,15 @@
 #include <sys/time.h> // timeval 
 
 #include "main.h"
+#include "control.h"
 
-//#define BCM2837_PERI_BASE        0x3F000000
+// Pi 1 Models A, A+, B, B+, the Raspberry Pi Zero, the Raspberry Pi Zero W
 #define BCM2835_PERI_BASE        0x20000000
-#define GPIO_BASE                (BCM2835_PERI_BASE + 0x200000)  // GPIO controller
+// Raspberry Pi 2 Model B, and the Raspberry Pi Compute Module 3
+#define BCM2837_PERI_BASE        0x3F000000
+// Raspberry Pi 4 Model B, the Raspberry Pi 400, and the Raspberry Pi Compute Module 4
+#define BCM2711_PERI_BASE        0xFE000000
+#define GPIO_BASE                (BCM2837_PERI_BASE + 0x200000)  // GPIO controller
 
 #define PAGE_SIZE (4 * 1024)
 #define BLOCK_SIZE (4 * 1024)
@@ -48,8 +53,175 @@
 #define GPIO_PULL(gpio) *(gpio + 37) // Pull up/pull down
 #define GPIO_PULLCLK0(gpio) *(gpio + 38) // Pull up/pull down cloc
 
-static int kb_left = 0, kb_up = 0, kb_right = 0, kb_down = 0;
+//static int kb_left = 0, kb_up = 0, kb_right = 0, kb_down = 0;
+struct control_state_t control = {
+    .extension = NULL,
+    .is_started = 0
+};
+
 extern struct app_state_t app;
+extern struct extension_t extensions[MAX_EXTENSIONS];
+extern int is_aborted;
+
+static void move_forward_start()
+{
+    DEBUG("move_forward_start: %p", control.gpio);
+    GPIO_SET(control.gpio) = (1 << GPIO_A1) | (1 << GPIO_B1);
+}
+
+static void move_forward_stop()
+{
+    DEBUG("move_forward_stop");
+    GPIO_CLR(control.gpio) = (1 << GPIO_A1) | (1 << GPIO_B1);
+}
+
+static void move_backward_start()
+{
+    DEBUG("move_backward_start");
+    GPIO_SET(control.gpio) = (1 << GPIO_A2) | (1 << GPIO_B2);
+}
+
+static void move_backward_stop()
+{
+    DEBUG("move_backward_stop");
+    GPIO_CLR(control.gpio) = (1 << GPIO_A2) | (1 << GPIO_B2);
+}
+
+static void move_left_start()
+{
+    DEBUG("move_left_start");
+    GPIO_SET(control.gpio) = (1 << GPIO_A2) | (1 << GPIO_B1);
+}
+
+static void move_left_stop()
+{
+    DEBUG("move_left_stop");
+    GPIO_CLR(control.gpio) = (1 << GPIO_A2) | (1 << GPIO_B1);
+}
+
+static void move_right_start()
+{
+    DEBUG("move_right_start");
+    GPIO_SET(control.gpio) = (1 << GPIO_A1) | (1 << GPIO_B2);
+}
+
+static void move_right_stop()
+{
+    DEBUG("move_right_stop");
+    GPIO_CLR(control.gpio) = (1 << GPIO_A1) | (1 << GPIO_B2);
+}
+
+static void control_stop_all()
+{
+    move_left_stop();
+    move_forward_stop();
+    move_right_stop();
+    move_backward_stop();
+}
+
+static int control_stop()
+{
+    ASSERT_INT(control.is_started, ==, 1, cleanup);
+
+    // stop all commands if they started
+    control_stop_all();
+
+    control.is_started = 0;
+    DEBUG("extension[%s] has been stopped", control.extension->name);
+    return 0;
+
+cleanup:
+    if (!errno) errno = EAGAIN;
+    return -1;
+}
+
+static void control_cleanup()
+{
+    if (control.is_started) {
+        control_stop();
+    }
+}
+
+static int control_is_started()
+{
+    return control.is_started;
+}
+
+static int control_init()
+{
+    sprintf(control.dev_name, GPIO_DEVICE);
+
+    //set_mode(1);
+
+    int mem_fd;
+    // to be changed to "/dev/mem"
+    CALL(mem_fd = open(control.dev_name, O_RDWR | O_SYNC), error);
+    // /dev/gpiomem - doesn't need root access in comparison with "/dev/mem"
+    //CALL(mem_fd = open(control.dev_name, O_RDWR | O_SYNC), error);
+
+    // mmap GPIO
+    void *gpio_map = mmap(
+        NULL,             // Any adddress in our space will do
+        BLOCK_SIZE,       // Map length
+        PROT_READ | PROT_WRITE, // Enable reading & writting to mapped memory
+        MAP_SHARED,       // Shared with other processes
+        mem_fd,           // File to map
+        GPIO_BASE         // Offset to GPIO peripheral
+    );
+    // mmap can't find device if /dev/gpiomem is used
+    // void *gpio_map = mmap(
+    //     NULL,             // Any adddress in our space will do
+    //     BLOCK_SIZE,       // Map length
+    //     PROT_READ | PROT_WRITE, // Enable reading & writting to mapped memory
+    //     MAP_SHARED,       // Shared with other processes
+    //     mem_fd,           // File to map
+    //     0                 // Offset to GPIO peripheral
+    // );
+    if (gpio_map == MAP_FAILED) {
+        CALL_MESSAGE(gpio_map);
+        goto error;
+    }
+
+    CALL(close(mem_fd), error);    
+
+    // Always use volatile pointer!
+    control.gpio = (volatile unsigned *)gpio_map;
+
+    DEBUG("control_init: %p", control.gpio);
+
+    INP_GPIO(control.gpio, GPIO_A1); // must use INP_GPIO before we can use OUT_GPIO
+    OUT_GPIO(control.gpio, GPIO_A1);
+
+    INP_GPIO(control.gpio, GPIO_A2);
+    OUT_GPIO(control.gpio, GPIO_A2);
+
+    INP_GPIO(control.gpio, GPIO_B1);
+    OUT_GPIO(control.gpio, GPIO_B1);
+
+    INP_GPIO(control.gpio, GPIO_B2);
+    OUT_GPIO(control.gpio, GPIO_B2);
+
+    return 0;
+
+error:
+    if (mem_fd >= 0) {
+        CALL(close(mem_fd));
+    }
+    if (!errno) errno = EAGAIN;
+    return -1;
+}
+
+static int control_start()
+{
+    ASSERT_INT(control.is_started, ==, 0, cleanup);
+    control.is_started = 1;
+    DEBUG("extension[%s] has been started", control.extension->name);
+    return 0;
+
+cleanup:
+    if (!errno) errno = EAGAIN;
+    return -1;
+}
 
 // static void set_mode(int want_key)
 // {
@@ -72,11 +244,11 @@ extern struct app_state_t app;
 // 	struct timeval tv;
 // 	fd_set fs;
 // 	tv.tv_usec = tv.tv_sec = 0;
- 
+
 // 	FD_ZERO(&fs);
 // 	FD_SET(STDIN_FILENO, &fs);
 // 	select(STDIN_FILENO + 1, &fs, 0, 0, &tv);
- 
+
 // 	if (FD_ISSET(STDIN_FILENO, &fs)) {
 // 		c = getchar();
 // 		set_mode(0);
@@ -84,257 +256,207 @@ extern struct app_state_t app;
 // 	return c;
 // }
 
-static int utils_kbhit(int *x, int *y, int *z)
+// TODO: move to control client
+// static int utils_kbhit(int *x, int *y, int *z)
+// {
+//     struct termios original;
+//     tcgetattr(STDIN_FILENO, &original);
+
+//     struct termios term;
+//     memcpy(&term, &original, sizeof(term));
+
+//     term.c_lflag &= ~ICANON;
+//     tcsetattr(STDIN_FILENO, TCSANOW, &term);
+
+//     int characters_buffered = 0;
+//     ioctl(STDIN_FILENO, FIONREAD, &characters_buffered);
+
+//     *x = (characters_buffered > 0)? getchar(): 0;
+//     *y = (characters_buffered > 1)? getchar(): 0;
+//     *z = (characters_buffered > 2)? getchar(): 0;
+//     int s = characters_buffered - 3;
+//     while (s > 0) {
+//         getchar(); s--;
+//     }
+
+//     tcsetattr(STDIN_FILENO, TCSANOW, &original);
+
+//     return characters_buffered;
+// }
+
+// int control_ssh_key()
+// {
+//     int x;
+//     int y;
+//     int z;
+//     int size = utils_kbhit(&x, &y, &z);
+//     int is_left = 0, is_up = 0, is_right = 0, is_down = 0;    
+//     if (size > 0) {
+//         DEBUG("Key %d, %d, %d, %d", x, y, z, size);
+
+//         if (x == 97) {
+//             is_left = 1;
+//         }
+//         else if (x == 119) {
+//             is_up = 1;
+//         }
+//         else if (x == 100) {
+//             is_right = 1;
+//         }
+//         else if (x == 115) {
+//             is_down = 1;
+//         } else {
+//         }
+
+//         if (!kb_left && is_left) {
+//             control_stop_all(app);
+//             kb_left = is_left;
+//             move_left_start(app);
+//         }
+//         else if (!kb_up && is_up) {
+//             control_stop_all(app);
+//             kb_up = is_up;
+//             move_forward_start(app);
+//         }
+//         else if (!kb_right && is_right) {
+//             control_stop_all(app);
+//             kb_right = is_right;
+//             move_right_start(app);
+//         }
+//         else if (!kb_down && is_down) {
+//             control_stop_all(app);
+//             kb_down = is_down;
+//             move_backwards_start(app);
+//         }
+//     } else {
+//         if (kb_left) {
+//             kb_left = 0;
+//             move_left_stop(app);
+//         }
+//         if (kb_up) {
+//             kb_up = 0;
+//             move_forward_stop(app);
+//         }
+//         if (kb_right) {
+//             kb_right = 0;
+//             move_right_stop(app);
+//         }
+//         if (kb_down) {
+//             kb_down = 0;
+//             move_backwards_stop(app);
+//         }
+//     }
+//     return 0;
+// }
+
+static int control_process(enum extension_command_e command)
 {
-    struct termios original;
-    tcgetattr(STDIN_FILENO, &original);
+    ASSERT_INT(control.is_started, ==, 1, cleanup);
+    DEBUG("extension[%s] command has been receved %d", control.extension->name, command);
+    switch (command) {
+        case EXTENSION_MOVE_FORWARD_START:
+            move_forward_start();
+            break;
 
-    struct termios term;
-    memcpy(&term, &original, sizeof(term));
+        case EXTENSION_MOVE_FORWARD_STOP:
+            move_forward_stop();
+            break;
 
-    term.c_lflag &= ~ICANON;
-    tcsetattr(STDIN_FILENO, TCSANOW, &term);
+        case EXTENSION_MOVE_RIGHT_START:
+            move_right_start();
+            break;
 
-    int characters_buffered = 0;
-    ioctl(STDIN_FILENO, FIONREAD, &characters_buffered);
+        case EXTENSION_MOVE_RIGHT_STOP:
+            move_right_stop();
+            break;
 
-    *x = (characters_buffered > 0)? getchar(): 0;
-    *y = (characters_buffered > 1)? getchar(): 0;
-    *z = (characters_buffered > 2)? getchar(): 0;
-    int s = characters_buffered - 3;
-    while (s > 0) {
-        getchar(); s--;
+        case EXTENSION_MOVE_BACKWARD_START:
+            move_backward_start();
+            break;
+
+        case EXTENSION_MOVE_BACKWARD_STOP:
+            move_backward_stop();
+            break;
+
+        case EXTENSION_MOVE_LEFT_START:
+            move_left_start();
+            break;
+
+        case EXTENSION_MOVE_LEFT_STOP:
+            move_left_stop();
+            break;
+
+        default:
+            ERROR("extension[%s]: unknown command has been receved %d", control.extension->name,
+                command);
     }
 
-    tcsetattr(STDIN_FILENO, TCSANOW, &original);
-
-    return characters_buffered;
-}
-
-int control_init()
-{
-    //set_mode(1);
-
-    int mem_fd = open("/dev/mem", O_RDWR | O_SYNC);
-    if (mem_fd < 0) {
-        fprintf(stderr, "ERROR: Can't open /dev/mem\n");
-        return -1;
-    }
-
-    // mmap GPIO
-    void *gpio_map = mmap(
-        NULL,             // Any adddress in our space will do
-        BLOCK_SIZE,       // Map length
-        PROT_READ | PROT_WRITE, // Enable reading & writting to mapped memory
-        MAP_SHARED,       // Shared with other processes
-        mem_fd,           // File to map
-        GPIO_BASE         // Offset to GPIO peripheral
-    );
-
-    close(mem_fd); //No need to keep mem_fd open after mmap
-
-    if (gpio_map == MAP_FAILED) {
-        fprintf(stderr, "ERROR: control mmap error %d\n", errno);
-        return -1;
-    }
-
-    // Always use volatile pointer!
-    app.control.gpio = (volatile unsigned *)gpio_map;
-
-    INP_GPIO(app.control.gpio, GPIO_A1); // must use INP_GPIO before we can use OUT_GPIO
-    OUT_GPIO(app.control.gpio, GPIO_A1);
-
-    INP_GPIO(app.control.gpio, GPIO_A2);
-    OUT_GPIO(app.control.gpio, GPIO_A2);
-
-    INP_GPIO(app.control.gpio, GPIO_B1);
-    OUT_GPIO(app.control.gpio, GPIO_B1);
-
-    INP_GPIO(app.control.gpio, GPIO_B2);
-    OUT_GPIO(app.control.gpio, GPIO_B2);
-
+    
     return 0;
+
+cleanup:
+    if (!errno) errno = EAGAIN;
+    return -1;
 }
 
-static void move_forward_start()
-{
-    DEBUG("move_forward_start");
-    GPIO_SET(app.control.gpio) = (1 << GPIO_A1) | (1 << GPIO_B1);
-}
+// int control_vnc_key(int down, int key)
+// {
+//     int is_left = 0, is_up = 0, is_right = 0, is_down = 0;
+//     if (key == 65361) {
+//         is_left = 1;
+//     } else if (key == 65362) {
+//         is_up = 1;
+//     } else if (key == 65363) {
+//         is_right = 1;
+//     } else if (key == 65363) {
+//         is_down = 1;
+//     }
+//     if (!kb_left && is_left) {
+//         kb_left = is_left;
+//         move_left_start(app);
+//     } else if (kb_left && !is_left) {
+//         kb_left = is_left;
+//         move_left_stop(app);
+//     }
+//     if (!kb_up && is_up) {
+//         kb_up = is_up;
+//         move_forward_start(app);
+//     } else if (kb_up && !is_up) {
+//         kb_up = is_up;
+//         move_forward_stop(app);
+//     }
+//     if (!kb_right && is_right) {
+//         kb_right = is_right;
+//         move_right_start(app);
+//     } else if (kb_right && !is_right) {
+//         kb_right = is_right;
+//         move_right_stop(app);
+//     }
+//     if (!kb_down && is_down) {
+//         kb_down = is_down;
+//         move_backwards_start(app);
+//     } else if (kb_down && !is_down) {
+//         kb_down = is_down;
+//         move_backwards_stop(app);
+//     }
+//     return 0;
+// }
 
-static void move_forward_stop()
+void control_construct()
 {
-    DEBUG("move_forward_stop");
-    GPIO_CLR(app.control.gpio) = (1 << GPIO_A1) | (1 << GPIO_B1);
-}
+    int i = 0;
+    while (i < MAX_EXTENSIONS && extensions[i].context != NULL)
+        i++;
 
-static void move_backwards_start()
-{
-    DEBUG("move_backwards_start");
-    GPIO_SET(app.control.gpio) = (1 << GPIO_A2) | (1 << GPIO_B2);
-}
-
-static void move_backwards_stop()
-{
-    DEBUG("move_backwards_stop");
-    GPIO_CLR(app.control.gpio) = (1 << GPIO_A2) | (1 << GPIO_B2);
-}
-
-static void move_left_start()
-{
-    DEBUG("move_left_start");
-    GPIO_SET(app.control.gpio) = (1 << GPIO_A2) | (1 << GPIO_B1);
-}
-
-static void move_left_stop()
-{
-    DEBUG("move_left_stop");
-    GPIO_CLR(app.control.gpio) = (1 << GPIO_A2) | (1 << GPIO_B1);
-}
-
-static void move_right_start()
-{
-    DEBUG("move_right_start");
-    GPIO_SET(app.control.gpio) = (1 << GPIO_A1) | (1 << GPIO_B2);
-}
-
-static void move_right_stop()
-{
-    DEBUG("move_right_stop");
-    GPIO_CLR(app.control.gpio) = (1 << GPIO_A1) | (1 << GPIO_B2);
-}
-
-static int control_stop_all()
-{
-    if (kb_left) {
-        kb_left = 0;
-        move_left_stop(app);
+    if (i != MAX_EXTENSIONS) {
+        control.extension = extensions + i;
+        extensions[i].name = "control";
+        extensions[i].context = &control;
+        extensions[i].init = control_init;
+        extensions[i].cleanup = control_cleanup;
+        extensions[i].is_started = control_is_started;
+        extensions[i].start = control_start;
+        extensions[i].stop = control_stop;
+        extensions[i].process = control_process;
     }
-    if (kb_up) {
-        kb_up = 0;
-        move_forward_stop(app);
-    }
-    if (kb_right) {
-        kb_right = 0;
-        move_right_stop(app);
-    }
-    if (kb_down) {
-        kb_down = 0;
-        move_backwards_stop(app);
-    }
-    return 0;
-}
-
-int control_ssh_key()
-{
-    int x;
-    int y;
-    int z;
-    int size = utils_kbhit(&x, &y, &z);
-    int is_left = 0, is_up = 0, is_right = 0, is_down = 0;    
-    if (size > 0) {
-        DEBUG("Key %d, %d, %d, %d", x, y, z, size);
-
-        if (x == 97) {
-            is_left = 1;
-        }
-        else if (x == 119) {
-            is_up = 1;
-        }
-        else if (x == 100) {
-            is_right = 1;
-        }
-        else if (x == 115) {
-            is_down = 1;
-        } else {
-        }
-
-        if (!kb_left && is_left) {
-            control_stop_all(app);
-            kb_left = is_left;
-            move_left_start(app);
-        }
-        else if (!kb_up && is_up) {
-            control_stop_all(app);
-            kb_up = is_up;
-            move_forward_start(app);
-        }
-        else if (!kb_right && is_right) {
-            control_stop_all(app);
-            kb_right = is_right;
-            move_right_start(app);
-        }
-        else if (!kb_down && is_down) {
-            control_stop_all(app);
-            kb_down = is_down;
-            move_backwards_start(app);
-        }
-    } else {
-        if (kb_left) {
-            kb_left = 0;
-            move_left_stop(app);
-        }
-        if (kb_up) {
-            kb_up = 0;
-            move_forward_stop(app);
-        }
-        if (kb_right) {
-            kb_right = 0;
-            move_right_stop(app);
-        }
-        if (kb_down) {
-            kb_down = 0;
-            move_backwards_stop(app);
-        }
-    }
-    return 0;
-}
-
-int control_vnc_key(int down, int key)
-{
-    int is_left = 0, is_up = 0, is_right = 0, is_down = 0;
-    if (key == 65361) {
-        is_left = 1;
-    } else if (key == 65362) {
-        is_up = 1;
-    } else if (key == 65363) {
-        is_right = 1;
-    } else if (key == 65363) {
-        is_down = 1;
-    }
-    if (!kb_left && is_left) {
-        kb_left = is_left;
-        move_left_start(app);
-    } else if (kb_left && !is_left) {
-        kb_left = is_left;
-        move_left_stop(app);
-    }
-    if (!kb_up && is_up) {
-        kb_up = is_up;
-        move_forward_start(app);
-    } else if (kb_up && !is_up) {
-        kb_up = is_up;
-        move_forward_stop(app);
-    }
-    if (!kb_right && is_right) {
-        kb_right = is_right;
-        move_right_start(app);
-    } else if (kb_right && !is_right) {
-        kb_right = is_right;
-        move_right_stop(app);
-    }
-    if (!kb_down && is_down) {
-        kb_down = is_down;
-        move_backwards_start(app);
-    } else if (kb_down && !is_down) {
-        kb_down = is_down;
-        move_backwards_stop(app);
-    }
-    return 0;
-}
-
-int control_destroy()
-{
-    int res = control_stop_all(app);
-    return res;
 }

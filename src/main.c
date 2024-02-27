@@ -36,18 +36,19 @@
 KHASH_MAP_INIT_STR(argvs_hash_t, char*);
 KHASH_T(argvs_hash_t) *h;
 
-int is_abort;
+int is_aborted;
 static int exit_code = EX_SOFTWARE;
 
 struct app_state_t app;
 struct input_t input;
 struct filter_t filters[MAX_FILTERS];
 struct output_t outputs[MAX_OUTPUTS];
+struct extension_t extensions[MAX_EXTENSIONS];
 
 void *worker_function(void *data)
 {
     DEBUG("Worker thread has been started");
-    while (!is_abort) {
+    while (!is_aborted) {
         // ----- fps
         static int frame_count = 0;
         static struct timespec t1;
@@ -85,7 +86,7 @@ static void signal_handler(int signal_number)
     } else {
         DEBUG("Other signal %d", signal_number);
     }
-    is_abort = 1;
+    is_aborted = 1;
 }
 
 static void print_help()
@@ -107,7 +108,7 @@ static void print_help()
     printf("%s: TFL model path, default: %s\n", TFL_MODEL_PATH, TFL_MODEL_PATH_DEF);
     printf("%s: DN model path, default: %s\n", DN_MODEL_PATH, DN_MODEL_PATH_DEF);
     printf("%s: DN config path, default: %s\n", DN_CONFIG_PATH, DN_CONFIG_PATH_DEF);
-    printf("%s: verbose, verbose: %d\n", VERBOSE, VERBOSE_DEF);
+    printf("%s: verbose\n", VERBOSE);
     exit(0);
 }
 
@@ -126,13 +127,6 @@ static int main_function()
     DEBUG("video output: %s", app_get_video_output_str(app.video_output));
     DEBUG("window resolution: %d, %d", app.window_width, app.window_height);
     DEBUG("worker resolution: %d, %d", app.worker_width, app.worker_height);
-
-#ifdef CONTROL
-    if (control_init()) {
-        fprintf(stderr, "ERROR: Failed to initialise control gpio\n");
-        goto error;
-    }
-#endif // CONTROL
 
 #ifdef OPENVG
     if (dispmanx_init()) {
@@ -202,7 +196,7 @@ static int main_function()
         goto error;
     }
 
-    while (!is_abort) {
+    while (!is_aborted) {
         for (int i = 0; outputs[i].context != NULL && i < MAX_OUTPUTS; i++) {
             //DEBUG("process: %s", outputs[i].name);
             CALL(res = outputs[i].process_frame());
@@ -257,19 +251,19 @@ static int main_function()
         // res = sem_getvalue(&app.worker_semaphore, &value);
         // if (res) {
         //     fprintf(stderr, "ERROR: Unable to read value from worker semaphore: %d\n", errno);
-        //     is_abort = 1;
+        //     is_aborted = 1;
         // }
         // if (!value) {
         //     res = utils_get_worker_buffer(&app);
         //     if (res) {
         //         fprintf(stderr, "ERROR: cannot get worker buffer, res: %d\n", res);
-        //         is_abort = 1;
+        //         is_aborted = 1;
         //     }
 
         //     res = sem_post(&app.worker_semaphore);
         //     if (res) {
         //         fprintf(stderr, "ERROR: Unable to increase worker semaphore\n");
-        //         is_abort = 1;
+        //         is_aborted = 1;
         //     }
         // }
 
@@ -326,21 +320,13 @@ static int main_function()
         //      fprintf(stderr, "ERROR: failed to clear screan: 0x%x\n", egl_res);
         // }
 #endif //OPENVG
-
-#ifdef CONTROL
-        control_ssh_key();
-#endif // CONTROL
     }
     fprintf(stdout, "\n");
 
     exit_code = EX_OK;
 
 error:
-    is_abort = 1;
-
-#ifdef CONTROL
-    control_destroy();
-#endif //CONTROL
+    is_aborted = 1;
 
     //TODO: move to something like camara start
     // if (app.video_output == VIDEO_OUTPUT_STDOUT) {
