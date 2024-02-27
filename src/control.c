@@ -24,9 +24,13 @@
 #include "main.h"
 #include "control.h"
 
-//#define BCM2837_PERI_BASE        0x3F000000
+// Pi 1 Models A, A+, B, B+, the Raspberry Pi Zero, the Raspberry Pi Zero W
 #define BCM2835_PERI_BASE        0x20000000
-#define GPIO_BASE                (BCM2835_PERI_BASE + 0x200000)  // GPIO controller
+// Raspberry Pi 2 Model B, and the Raspberry Pi Compute Module 3
+#define BCM2837_PERI_BASE        0x3F000000
+// Raspberry Pi 4 Model B, the Raspberry Pi 400, and the Raspberry Pi Compute Module 4
+#define BCM2711_PERI_BASE        0xFE000000
+#define GPIO_BASE                (BCM2837_PERI_BASE + 0x200000)  // GPIO controller
 
 #define PAGE_SIZE (4 * 1024)
 #define BLOCK_SIZE (4 * 1024)
@@ -49,7 +53,7 @@
 #define GPIO_PULL(gpio) *(gpio + 37) // Pull up/pull down
 #define GPIO_PULLCLK0(gpio) *(gpio + 38) // Pull up/pull down cloc
 
-static int kb_left = 0, kb_up = 0, kb_right = 0, kb_down = 0;
+//static int kb_left = 0, kb_up = 0, kb_right = 0, kb_down = 0;
 struct control_state_t control = {
     .extension = NULL,
     .is_started = 0
@@ -61,7 +65,7 @@ extern int is_aborted;
 
 static void move_forward_start()
 {
-    DEBUG("move_forward_start");
+    DEBUG("move_forward_start: %p", control.gpio);
     GPIO_SET(control.gpio) = (1 << GPIO_A1) | (1 << GPIO_B1);
 }
 
@@ -71,15 +75,15 @@ static void move_forward_stop()
     GPIO_CLR(control.gpio) = (1 << GPIO_A1) | (1 << GPIO_B1);
 }
 
-static void move_backwards_start()
+static void move_backward_start()
 {
-    DEBUG("move_backwards_start");
+    DEBUG("move_backward_start");
     GPIO_SET(control.gpio) = (1 << GPIO_A2) | (1 << GPIO_B2);
 }
 
-static void move_backwards_stop()
+static void move_backward_stop()
 {
-    DEBUG("move_backwards_stop");
+    DEBUG("move_backward_stop");
     GPIO_CLR(control.gpio) = (1 << GPIO_A2) | (1 << GPIO_B2);
 }
 
@@ -109,32 +113,19 @@ static void move_right_stop()
 
 static void control_stop_all()
 {
-    if (kb_left) {
-        kb_left = 0;
-        move_left_stop(app);
-    }
-    if (kb_up) {
-        kb_up = 0;
-        move_forward_stop(app);
-    }
-    if (kb_right) {
-        kb_right = 0;
-        move_right_stop(app);
-    }
-    if (kb_down) {
-        kb_down = 0;
-        move_backwards_stop(app);
-    }
-}
-
-static void control_cleanup()
-{
-    control_stop_all(app);
+    move_left_stop();
+    move_forward_stop();
+    move_right_stop();
+    move_backward_stop();
 }
 
 static int control_stop()
 {
     ASSERT_INT(control.is_started, ==, 1, cleanup);
+
+    // stop all commands if they started
+    control_stop_all();
+
     control.is_started = 0;
     DEBUG("extension[%s] has been stopped", control.extension->name);
     return 0;
@@ -144,6 +135,13 @@ cleanup:
     return -1;
 }
 
+static void control_cleanup()
+{
+    if (control.is_started) {
+        control_stop();
+    }
+}
+
 static int control_is_started()
 {
     return control.is_started;
@@ -151,13 +149,15 @@ static int control_is_started()
 
 static int control_init()
 {
+    sprintf(control.dev_name, GPIO_DEVICE);
+
     //set_mode(1);
 
-    int mem_fd = open("/dev/mem", O_RDWR | O_SYNC);
-    if (mem_fd < 0) {
-        fprintf(stderr, "ERROR: Can't open /dev/mem\n");
-        return -1;
-    }
+    int mem_fd;
+    // to be changed to "/dev/mem"
+    CALL(mem_fd = open(control.dev_name, O_RDWR | O_SYNC), error);
+    // /dev/gpiomem - doesn't need root access in comparison with "/dev/mem"
+    //CALL(mem_fd = open(control.dev_name, O_RDWR | O_SYNC), error);
 
     // mmap GPIO
     void *gpio_map = mmap(
@@ -168,16 +168,26 @@ static int control_init()
         mem_fd,           // File to map
         GPIO_BASE         // Offset to GPIO peripheral
     );
-
-    close(mem_fd); //No need to keep mem_fd open after mmap
-
+    // mmap can't find device if /dev/gpiomem is used
+    // void *gpio_map = mmap(
+    //     NULL,             // Any adddress in our space will do
+    //     BLOCK_SIZE,       // Map length
+    //     PROT_READ | PROT_WRITE, // Enable reading & writting to mapped memory
+    //     MAP_SHARED,       // Shared with other processes
+    //     mem_fd,           // File to map
+    //     0                 // Offset to GPIO peripheral
+    // );
     if (gpio_map == MAP_FAILED) {
-        fprintf(stderr, "ERROR: control mmap error %d\n", errno);
-        return -1;
+        CALL_MESSAGE(gpio_map);
+        goto error;
     }
+
+    CALL(close(mem_fd), error);    
 
     // Always use volatile pointer!
     control.gpio = (volatile unsigned *)gpio_map;
+
+    DEBUG("control_init: %p", control.gpio);
 
     INP_GPIO(control.gpio, GPIO_A1); // must use INP_GPIO before we can use OUT_GPIO
     OUT_GPIO(control.gpio, GPIO_A1);
@@ -192,6 +202,13 @@ static int control_init()
     OUT_GPIO(control.gpio, GPIO_B2);
 
     return 0;
+
+error:
+    if (mem_fd >= 0) {
+        CALL(close(mem_fd));
+    }
+    if (!errno) errno = EAGAIN;
+    return -1;
 }
 
 static int control_start()
@@ -332,48 +349,98 @@ cleanup:
 //     return 0;
 // }
 
-int control_vnc_key(int down, int key)
+static int control_process(enum extension_command_e command)
 {
-    int is_left = 0, is_up = 0, is_right = 0, is_down = 0;
-    if (key == 65361) {
-        is_left = 1;
-    } else if (key == 65362) {
-        is_up = 1;
-    } else if (key == 65363) {
-        is_right = 1;
-    } else if (key == 65363) {
-        is_down = 1;
+    ASSERT_INT(control.is_started, ==, 1, cleanup);
+    DEBUG("extension[%s] command has been receved %d", control.extension->name, command);
+    switch (command) {
+        case EXTENSION_MOVE_FORWARD_START:
+            move_forward_start();
+            break;
+
+        case EXTENSION_MOVE_FORWARD_STOP:
+            move_forward_stop();
+            break;
+
+        case EXTENSION_MOVE_RIGHT_START:
+            move_right_start();
+            break;
+
+        case EXTENSION_MOVE_RIGHT_STOP:
+            move_right_stop();
+            break;
+
+        case EXTENSION_MOVE_BACKWARD_START:
+            move_backward_start();
+            break;
+
+        case EXTENSION_MOVE_BACKWARD_STOP:
+            move_backward_stop();
+            break;
+
+        case EXTENSION_MOVE_LEFT_START:
+            move_left_start();
+            break;
+
+        case EXTENSION_MOVE_LEFT_STOP:
+            move_left_stop();
+            break;
+
+        default:
+            ERROR("extension[%s]: unknown command has been receved %d", control.extension->name,
+                command);
     }
-    if (!kb_left && is_left) {
-        kb_left = is_left;
-        move_left_start(app);
-    } else if (kb_left && !is_left) {
-        kb_left = is_left;
-        move_left_stop(app);
-    }
-    if (!kb_up && is_up) {
-        kb_up = is_up;
-        move_forward_start(app);
-    } else if (kb_up && !is_up) {
-        kb_up = is_up;
-        move_forward_stop(app);
-    }
-    if (!kb_right && is_right) {
-        kb_right = is_right;
-        move_right_start(app);
-    } else if (kb_right && !is_right) {
-        kb_right = is_right;
-        move_right_stop(app);
-    }
-    if (!kb_down && is_down) {
-        kb_down = is_down;
-        move_backwards_start(app);
-    } else if (kb_down && !is_down) {
-        kb_down = is_down;
-        move_backwards_stop(app);
-    }
+
+    
     return 0;
+
+cleanup:
+    if (!errno) errno = EAGAIN;
+    return -1;
 }
+
+// int control_vnc_key(int down, int key)
+// {
+//     int is_left = 0, is_up = 0, is_right = 0, is_down = 0;
+//     if (key == 65361) {
+//         is_left = 1;
+//     } else if (key == 65362) {
+//         is_up = 1;
+//     } else if (key == 65363) {
+//         is_right = 1;
+//     } else if (key == 65363) {
+//         is_down = 1;
+//     }
+//     if (!kb_left && is_left) {
+//         kb_left = is_left;
+//         move_left_start(app);
+//     } else if (kb_left && !is_left) {
+//         kb_left = is_left;
+//         move_left_stop(app);
+//     }
+//     if (!kb_up && is_up) {
+//         kb_up = is_up;
+//         move_forward_start(app);
+//     } else if (kb_up && !is_up) {
+//         kb_up = is_up;
+//         move_forward_stop(app);
+//     }
+//     if (!kb_right && is_right) {
+//         kb_right = is_right;
+//         move_right_start(app);
+//     } else if (kb_right && !is_right) {
+//         kb_right = is_right;
+//         move_right_stop(app);
+//     }
+//     if (!kb_down && is_down) {
+//         kb_down = is_down;
+//         move_backwards_start(app);
+//     } else if (kb_down && !is_down) {
+//         kb_down = is_down;
+//         move_backwards_stop(app);
+//     }
+//     return 0;
+// }
 
 void control_construct()
 {
@@ -390,5 +457,6 @@ void control_construct()
         extensions[i].is_started = control_is_started;
         extensions[i].start = control_start;
         extensions[i].stop = control_stop;
+        extensions[i].process = control_process;
     }
 }

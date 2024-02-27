@@ -339,6 +339,17 @@ struct output_t {
     void (*cleanup)();
 };
 
+enum extension_command_e {
+    EXTENSION_MOVE_FORWARD_START = 1,
+    EXTENSION_MOVE_FORWARD_STOP,
+    EXTENSION_MOVE_RIGHT_START,
+    EXTENSION_MOVE_RIGHT_STOP,
+    EXTENSION_MOVE_BACKWARD_START,
+    EXTENSION_MOVE_BACKWARD_STOP,
+    EXTENSION_MOVE_LEFT_START,
+    EXTENSION_MOVE_LEFT_STOP
+};
+
 struct extension_t {
     char* name;
     void *context;
@@ -348,6 +359,8 @@ struct extension_t {
     int (*is_started)();
     int (*stop)();
     void (*cleanup)();
+
+    int (*process)(enum extension_command_e);
 };
 
 struct app_state_t {

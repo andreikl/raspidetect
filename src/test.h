@@ -1,6 +1,8 @@
 
 #define TEST_RFB "--rfb"
 #define TEST_RFB_DEF "false"
+#define TEST_CONTROL "--control"
+#define TEST_CONTROL_DEF "false"
 #define WRAP_VERBOSE "-wv"
 
 #define TEST_DEBUG(format, ...) \

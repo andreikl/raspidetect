@@ -44,8 +44,6 @@ struct filter_t filters[MAX_FILTERS];
 struct output_t outputs[MAX_OUTPUTS];
 struct extension_t extensions[MAX_EXTENSIONS];
 
-#include "test_wraps.c"
-
 static int test_setup(void **state)
 {
     *state = &app;
@@ -156,16 +154,58 @@ error:
 }
 #endif //RFB
 
+#ifdef CONTROL
+#include "control.h"
+extern struct control_state_t control;
+static void test_control(void **state)
+{
+    int res = 0;
+    struct extension_t *extension = control.extension;
+    struct timespec timeouthi = {0};
+    struct timespec timeoutlo = {
+        .tv_sec = 0,
+        .tv_nsec = 900000000, // 900 msec
+    };
+
+    CALL(res = app_init(), error);
+    CALL(res = extension->start(), error);
+
+    for (int i = 0; i < 4; i++) {
+        DEBUG("extension->process %p", extension->process)
+        CALL(res = extension->process(EXTENSION_MOVE_FORWARD_START), error);
+        CALL(nanosleep(&timeoutlo, &timeouthi), error);
+        CALL(res = extension->process(EXTENSION_MOVE_FORWARD_STOP), error);
+        CALL(res = extension->process(EXTENSION_MOVE_RIGHT_START), error);
+        CALL(nanosleep(&timeoutlo, &timeouthi), error);
+        CALL(res = extension->process(EXTENSION_MOVE_RIGHT_STOP), error);
+        CALL(res = extension->process(EXTENSION_MOVE_BACKWARD_START), error);
+        CALL(nanosleep(&timeoutlo, &timeouthi), error);
+        CALL(res = extension->process(EXTENSION_MOVE_BACKWARD_STOP), error);
+        CALL(res = extension->process(EXTENSION_MOVE_LEFT_START), error);
+        CALL(nanosleep(&timeoutlo, &timeouthi), error);
+        CALL(res = extension->process(EXTENSION_MOVE_LEFT_STOP), error);
+    }
+
+error:
+    assert_int_not_equal(res, -1);
+
+    app_cleanup();
+}
+#endif //CONTROL
+
 static void print_help()
 {
     printf("raspidetect_test [options]\n");
     printf("options:\n");
     printf("%s: print help\n", HELP);
     printf("%s: rfb test, default: %s\n", TEST_RFB, TEST_RFB_DEF);
+    printf("%s: control test, default: %s\n", TEST_CONTROL, TEST_CONTROL_DEF);
     printf("%s: verbose\n", VERBOSE);
     printf("%s: wrap verbose\n", WRAP_VERBOSE);
     exit(0);
 }
+
+#include "test_wraps.c"
 
 int main(int argc, char **argv)
 {
@@ -177,6 +217,7 @@ int main(int argc, char **argv)
 
     unsigned help = KH_GET(argvs_hash_t, h, HELP);
     unsigned rfb = KH_GET(argvs_hash_t, h, TEST_RFB);
+    unsigned control = KH_GET(argvs_hash_t, h, TEST_CONTROL);
     unsigned verbose = KH_GET(argvs_hash_t, h, VERBOSE);
     unsigned w_verbose = KH_GET(argvs_hash_t, h, WRAP_VERBOSE);
     if (verbose != KH_END(h)) {
@@ -193,11 +234,18 @@ int main(int argc, char **argv)
         print_help();
     }
     else if (rfb != KH_END(h)) {
-
         const struct CMUnitTest tests[] = {
             #ifdef RFB
                 cmocka_unit_test_setup(test_rfb, NULL)
             #endif //RFB
+        };
+        res = cmocka_run_group_tests(tests, test_setup, test_teardown);
+    }
+    else if (control != KH_END(h)) {
+        const struct CMUnitTest tests[] = {
+            #ifdef CONTROL
+                cmocka_unit_test_setup(test_control, NULL),
+            #endif //CONTROL
         };
         res = cmocka_run_group_tests(tests, test_setup, test_teardown);
     }
