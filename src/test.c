@@ -44,6 +44,11 @@ struct filter_t filters[MAX_FILTERS];
 struct output_t outputs[MAX_OUTPUTS];
 struct extension_t extensions[MAX_EXTENSIONS];
 
+#ifdef RFB
+#include "rfb.h"
+extern struct rfb_state_t rfb;
+#endif //RFB
+
 static int test_setup(void **state)
 {
     *state = &app;
@@ -126,8 +131,7 @@ error:
 #endif //SDL
 
 #ifdef RFB
-#include "rfb.h"
-extern struct rfb_state_t rfb;
+// requires RFB to be enable
 static void test_rfb(void **state)
 {
     int res = 0;
@@ -193,6 +197,43 @@ error:
 }
 #endif //CONTROL
 
+#ifdef RFB
+// requires RFB to be enable
+// start server in emulated environment, translates static image for client and receive commands
+static void test_server(void **state)
+{
+    int res = 0;
+    struct output_t *output = rfb.output;
+    struct timespec timeouthi = {0};
+    struct timespec timeoutlo = {
+        .tv_sec = 0,
+        .tv_nsec = 200000000, // 200 msec
+    };
+
+
+    expect_value(__wrap_ioctl, fmt->fmt.pix.pixelformat, V4L2_PIX_FMT_YUYV);
+    expect_value(__wrap_ioctl, fmt->fmt.pix.width, app.video_width);
+    expect_value(__wrap_ioctl, fmt->fmt.pix.height, app.video_height);
+    //will_return(__wrap_ioctl, 3);
+
+    CALL(res = app_init(), error);
+    for (int i = 0; 1; i++) {
+        CALL(res = output->process_frame());
+        if (res == -1 && errno != ETIME)
+            break;            
+        else
+            res = 0;
+
+        
+    }
+
+error:
+    assert_int_not_equal(res, -1);
+
+    app_cleanup();
+}
+#endif //RFB
+
 static void print_help()
 {
     printf("raspidetect_test [options]\n");
@@ -200,6 +241,9 @@ static void print_help()
     printf("%s: print help\n", HELP);
     printf("%s: rfb test, default: %s\n", TEST_RFB, TEST_RFB_DEF);
     printf("%s: control test, default: %s\n", TEST_CONTROL, TEST_CONTROL_DEF);
+    printf("%s: server test, default: %s\n", TEST_SERVER, TEST_SERVER_DEF);
+    printf("\tstart server in emulated environment, broadcast static image for clients"
+        "and receive commands\n");
     printf("%s: verbose\n", VERBOSE);
     printf("%s: wrap verbose\n", WRAP_VERBOSE);
     exit(0);
@@ -218,6 +262,7 @@ int main(int argc, char **argv)
     unsigned help = KH_GET(argvs_hash_t, h, HELP);
     unsigned rfb = KH_GET(argvs_hash_t, h, TEST_RFB);
     unsigned control = KH_GET(argvs_hash_t, h, TEST_CONTROL);
+    unsigned server = KH_GET(argvs_hash_t, h, TEST_SERVER);
     unsigned verbose = KH_GET(argvs_hash_t, h, VERBOSE);
     unsigned w_verbose = KH_GET(argvs_hash_t, h, WRAP_VERBOSE);
     if (verbose != KH_END(h)) {
@@ -249,6 +294,13 @@ int main(int argc, char **argv)
         };
         res = cmocka_run_group_tests(tests, test_setup, test_teardown);
     }
+    else if (server != KH_END(h)) {
+        const struct CMUnitTest tests[] = {
+            cmocka_unit_test_setup(test_server, NULL)
+        };
+        res = cmocka_run_group_tests(tests, test_setup, test_teardown);
+    }
+
     else {
         const struct CMUnitTest tests[] = {
             cmocka_unit_test_setup(test_utils_init, NULL),

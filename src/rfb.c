@@ -130,13 +130,16 @@ struct rfb_state_t rfb = {
     .server_socket = -1,
     .client_socket = -1,
     .thread_res = -1,
-    .client_semaphore_res = -1
+    .client_semaphore_res = -1,
+    .control_extension = NULL
 };
 
 extern struct app_state_t app;
 extern struct input_t input;
 extern struct filter_t filters[MAX_FILTERS];
 extern struct output_t outputs[MAX_OUTPUTS];
+extern struct extension_t extensions[MAX_EXTENSIONS];
+
 extern int is_aborted;
 
 static struct rfb_buffer_update_message_t update_message;
@@ -282,6 +285,32 @@ static void *rfb_function(void *data)
                 RFB_FUNC_CALL(recv(rfb.client_socket, (char *)&key, sizeof(key), 0), rfb_error);
                 DEBUG("RFBKeyEvent message: down(%X), padding(%X), key(%X)",
                     downFlag, padding, key);
+                if (rfb.control_extension != NULL) {
+                    if (key == 97 && downFlag) {
+                        rfb.control_extension->process(EXTENSION_MOVE_LEFT_START);
+                    }
+                    else {
+                        rfb.control_extension->process(EXTENSION_MOVE_LEFT_STOP);
+                    }
+                    if (key == 119 && downFlag) {
+                        rfb.control_extension->process(EXTENSION_MOVE_FORWARD_START);
+                    }
+                    else {
+                        rfb.control_extension->process(EXTENSION_MOVE_FORWARD_STOP);
+                    }
+                    if (key == 100 && downFlag) {
+                        rfb.control_extension->process(EXTENSION_MOVE_RIGHT_START);
+                    }
+                    else {
+                        rfb.control_extension->process(EXTENSION_MOVE_RIGHT_STOP);
+                    }
+                    if (key == 115 && downFlag) {
+                        rfb.control_extension->process(EXTENSION_MOVE_BACKWARD_START);
+                    }
+                    else {
+                        rfb.control_extension->process(EXTENSION_MOVE_BACKWARD_STOP);
+                    }
+                }
             } else if (type.message_type == RFBPointerEvent) {
                 DEBUG("RFBPointerEvent message.");
                 uint8_t buttonMask;
@@ -347,6 +376,15 @@ static int rfb_init()
     update_message.width = htons(app.video_width);
     update_message.height = htons(app.video_height);
     update_message.encoding_type = htonl(RFBEncodingH264);
+
+    int i = 0;
+    while (i < MAX_EXTENSIONS && extensions[i].context != NULL) {
+        if (strcmp(extensions[i].name, "control") == 0) {
+            rfb.control_extension = &extensions[i];
+        }
+        i++;
+    }
+
     return 0;
 }
 
@@ -521,6 +559,8 @@ static int rfb_stop()
         else
             rfb.client_semaphore_res = -1;
     }
+
+    rfb.control_extension = NULL;
     return 0;
 
 stop_error:

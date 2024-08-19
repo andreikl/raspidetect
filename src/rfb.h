@@ -24,6 +24,9 @@ struct rfb_state_t {
     int client_socket;
     sem_t client_semaphore;
     int client_semaphore_res;
+
+    // extension to handle remote commands 
+    struct extension_t *control_extension;
 };
 
 void rfb_construct();
